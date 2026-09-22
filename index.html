@@ -674,6 +674,9 @@
       <div class="exp-attachments" id="efAttachList"></div>
       <button type="button" class="tool-btn" id="btnAttachFile" style="margin-top:2px;">📎 צירוף קובץ</button>
       <input type="file" id="efFileInput" accept="image/*,application/pdf" multiple>
+      <div id="efDriveWarning" style="display:none;margin-top:8px;padding:8px 10px;background:var(--amber-tint);border-radius:var(--radius-sm);font-size:12px;color:#8a6417;cursor:pointer;">
+        ⚠️ החיבור ל-Drive פג בסשן הזה — הקובץ יישמר רק מקומית. לחצו כאן לחיבור מחדש
+      </div>
     </div>
 
     <div class="sheet-actions">
@@ -1948,6 +1951,18 @@ document.getElementById('efPaymentSeg').querySelectorAll('button').forEach(btn =
   });
 });
 
+function updateDriveWarning(){
+  const el = document.getElementById('efDriveWarning');
+  // Only worth flagging when they're actually signed in but this session's Drive
+  // token isn't live — if they're not signed in at all, that's communicated
+  // elsewhere (the sync status line), not here.
+  el.style.display = (cloudUser && !driveAccessToken) ? "block" : "none";
+}
+document.getElementById('efDriveWarning').addEventListener('click', () => {
+  closeOverlay('overlayExpense');
+  requestDriveReauth();
+});
+
 function openNewExpense(){
   const trip = activeTrip();
   if (!trip){ toast("יש ליצור טיול קודם"); return; }
@@ -1969,6 +1984,7 @@ function openNewExpense(){
   document.getElementById('deleteExpenseDivider').style.display = "none";
   renderAttachChips();
   updateRateFieldVisibility();
+  updateDriveWarning();
   showOverlay('overlayExpense');
   setTimeout(()=> document.getElementById('efItem').focus(), 250);
 }
@@ -1990,6 +2006,7 @@ function openEditExpense(id){
   document.getElementById('efNotes').value = exp.notes || "";
   document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
   document.getElementById('efPaidPill').classList.toggle('on', !!exp.paid);
+  updateDriveWarning();
   pendingPaidDate = exp.paidDate || "";
   const paidDateField = document.getElementById('efPaidDateField');
   if (exp.paid){
