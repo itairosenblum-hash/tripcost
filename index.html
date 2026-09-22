@@ -297,14 +297,14 @@
 
   /* ---- Trip info strip (flight/booking details) ---- */
   .trip-info{
-    display:flex;gap:10px;overflow-x:auto;padding:2px 2px 4px;margin-bottom:2px;scrollbar-width:none;
+    display:flex;flex-direction:column;gap:5px;padding:2px 2px 4px;margin-bottom:2px;
   }
-  .trip-info::-webkit-scrollbar{display:none;}
-  .trip-info-item{
-    flex:none;background:var(--card-2);border-radius:var(--radius-sm);padding:7px 12px;
-    font-size:12px;color:var(--ink-soft);white-space:nowrap;
+  .trip-info-row{
+    background:var(--card-2);border-radius:var(--radius-sm);padding:7px 12px;
+    font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;
   }
-  .trip-info-item b{color:var(--ink);font-weight:700;}
+  .trip-info-row b{color:var(--ink);font-weight:700;}
+  .trip-info-booking{color:var(--ink-soft);font-size:11.5px;margin-inline-start:auto;}
 
   /* ---- Sheet / modal ---- */
   .overlay{
@@ -469,13 +469,6 @@
     </div>
 
     <div id="mainCol">
-      <section id="toolsSection">
-        <div class="section-title">כלים</div>
-        <div class="toolbar">
-          <button class="tool-btn" id="btnExportXlsx">📤 ייצוא לאקסל</button>
-        </div>
-      </section>
-
       <section id="expensesSection">
         <div class="row" style="margin-bottom:10px;">
           <div class="section-title" style="margin:0;">הוצאות</div>
@@ -612,6 +605,8 @@
       <button class="btn-primary" id="btnSaveTrip">שמירה</button>
       <button class="btn-ghost" id="btnCancelTripForm">ביטול</button>
     </div>
+    <div class="divider" id="exportTripDivider" style="display:none;"></div>
+    <button class="btn-ghost" style="width:100%;display:none;" id="btnExportXlsx">📤 ייצוא הטיול לאקסל</button>
     <div class="divider" id="deleteTripDivider" style="display:none;"></div>
     <button class="btn-ghost btn-danger-outline" style="width:100%;display:none;" id="btnDeleteTrip">מחיקת הטיול הזה</button>
   </div>
@@ -1909,15 +1904,27 @@ function renderTripInfoStrip(){
   const trip = activeTrip();
   const wrap = document.getElementById('tripInfoStrip');
   if (!trip){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
-  const items = [];
-  if (trip.flightOut) items.push(`✈️ הלוך <b>${escapeHtml(trip.flightOut)}</b>`);
-  if (trip.flightReturn) items.push(`✈️ חזור <b>${escapeHtml(trip.flightReturn)}</b>`);
-  if (trip.bookingRef) items.push(`🔖 הזמנה <b>${escapeHtml(trip.bookingRef)}</b>`);
-  if (trip.departDateTime) items.push(`🛫 יציאה <b>${fmtDateTime(trip.departDateTime)}</b>`);
-  if (trip.returnDateTime) items.push(`🛬 חזרה <b>${fmtDateTime(trip.returnDateTime)}</b>`);
-  if (items.length === 0){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+
+  function legLine(icon, label, flightNum, dateTime){
+    const parts = [];
+    if (flightNum) parts.push(`<b>${escapeHtml(flightNum)}</b>`);
+    if (dateTime) parts.push(fmtDateTime(dateTime));
+    return parts.length ? `${icon} ${label}: ${parts.join(" · ")}` : null;
+  }
+
+  const outLine = legLine("🛫", "הלוך", trip.flightOut, trip.departDateTime);
+  const returnLine = legLine("🛬", "חזור", trip.flightReturn, trip.returnDateTime);
+  if (!outLine && !returnLine && !trip.bookingRef){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+
+  const rows = [];
+  if (outLine || trip.bookingRef){
+    const booking = trip.bookingRef ? `<span class="trip-info-booking">🔖 ${escapeHtml(trip.bookingRef)}</span>` : "";
+    rows.push(`<div class="trip-info-row">${outLine || "🛫 הלוך"} ${booking}</div>`);
+  }
+  if (returnLine) rows.push(`<div class="trip-info-row">${returnLine}</div>`);
+
   wrap.style.display = "flex";
-  wrap.innerHTML = items.map(i => `<span class="trip-info-item">${i}</span>`).join("");
+  wrap.innerHTML = rows.join("");
 }
 
 function renderAll(){
@@ -1969,6 +1976,8 @@ function openNewTripForm(){
   document.getElementById('tfReturnDate').value = "";
   document.getElementById('tfReturnTime').value = "";
   document.getElementById('tfFinished').checked = false;
+  document.getElementById('btnExportXlsx').style.display = "none";
+  document.getElementById('exportTripDivider').style.display = "none";
   document.getElementById('btnDeleteTrip').style.display = "none";
   document.getElementById('deleteTripDivider').style.display = "none";
   showOverlay('overlayTripForm');
@@ -1996,6 +2005,9 @@ function openEditTripForm(id){
   document.getElementById('tfReturnDate').value = ret.date;
   document.getElementById('tfReturnTime').value = ret.time;
   document.getElementById('tfFinished').checked = !!t.finished;
+  const hasExpenses = t.expenses.length > 0;
+  document.getElementById('btnExportXlsx').style.display = hasExpenses ? "block" : "none";
+  document.getElementById('exportTripDivider').style.display = hasExpenses ? "block" : "none";
   document.getElementById('btnDeleteTrip').style.display = "block";
   document.getElementById('deleteTripDivider').style.display = "block";
   showOverlay('overlayTripForm');
@@ -2460,7 +2472,11 @@ function closeOverlay(id){ document.getElementById(id).classList.remove('show');
 /* ========================= Import from Excel ========================= */
 /* ========================= Export to Excel ========================= */
 document.getElementById('btnExportXlsx').addEventListener('click', () => {
-  const trip = activeTrip();
+  // Export the trip currently open in this form, not necessarily the active trip —
+  // this button now lives inside trip editing, so it should export whichever trip
+  // you're editing even if you got here from the full trip list rather than the
+  // trip you happen to have selected up top.
+  const trip = state.trips.find(t => t.id === editingTripId) || activeTrip();
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
   const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","הוזמן","שולם","הערות","קבצים מצורפים"];
   const data = [header, ...trip.expenses.map(e => [
