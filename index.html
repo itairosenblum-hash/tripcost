@@ -18,6 +18,7 @@
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --bg:#FAF6EF;
@@ -747,6 +748,13 @@
         <div id="syncStatusDetail" class="hint" style="margin-bottom:6px;"></div>
 
         <div class="divider"></div>
+        <div class="field">
+          <label>Google OAuth Client ID (לצורך רענון הרשאת Drive)</label>
+          <input type="text" id="googleClientIdInput" placeholder="לדוגמה: 123...apps.googleusercontent.com">
+          <div class="hint" style="margin-top:6px;">מ-Google Cloud Console → APIs & Services → Credentials → "Web client (auto created by Google Service)". דרוש פעם אחת בלבד.</div>
+        </div>
+
+        <div class="divider"></div>
         <div class="toggle-row">
           <div>
             <div style="font-weight:700;font-size:13.5px;">שימוש בתיקייה קיימת ב-Drive</div>
@@ -932,9 +940,9 @@ const DRIVE_SETTINGS_KEY = "tripcost.driveSettings";
 function loadDriveSettings(){
   try{
     const raw = localStorage.getItem(DRIVE_SETTINGS_KEY);
-    if (raw) return Object.assign({ useExistingDriveFolder:false, driveFolderId:"" }, JSON.parse(raw));
+    if (raw) return Object.assign({ useExistingDriveFolder:false, driveFolderId:"", googleClientId:"" }, JSON.parse(raw));
   }catch(e){ /* fall through to default */ }
-  return { useExistingDriveFolder:false, driveFolderId:"" };
+  return { useExistingDriveFolder:false, driveFolderId:"", googleClientId:"" };
 }
 function saveDriveSettings(s){
   try{ localStorage.setItem(DRIVE_SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
@@ -1060,25 +1068,11 @@ function initFirebaseIfConfigured(){
     fbDb = firebase.firestore();
     setSyncStatus('', 'מתחבר...');
     // Picks up the result when the page reloads after coming back from Google's
-    // sign-in/consent page (the redirect flow used instead of a popup, since popups
-    // are unreliable on mobile browsers). onAuthStateChanged below handles the
-    // Firebase user side; this specifically grabs the Google OAuth token Drive needs.
-    const wasPending = sessionStorage.getItem('tripcost.pendingDriveAuth') === '1';
-    sessionStorage.removeItem('tripcost.pendingDriveAuth');
+    // sign-in page (this redirect is only for basic Firebase sign-in now — Drive
+    // access is handled separately via requestDriveReauth, which doesn't reload
+    // the page at all, so it isn't affected by whatever this resolves to).
     fbAuth.getRedirectResult().then(result => {
-      if (result && result.credential){
-        const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-        driveAccessToken = credential && credential.accessToken;
-        if (driveAccessToken) toast("ההתחברות הושלמה ✓");
-      } else if (wasPending){
-        // We know for certain a redirect to Google was just attempted (we set the
-        // marker ourselves right before navigating away), yet nothing came back —
-        // this is the "silent failure" case, most often caused by the browser
-        // blocking the storage Firebase needs to correlate the return trip (common
-        // in Safari's cross-site tracking protection, or inside an installed
-        // home-screen PWA that isolates storage from the regular browser).
-        toast("ההתחברות לא הושלמה — ייתכן שהדפדפן חוסם את זה. נסו מ-Safari/Chrome רגיל (לא מהאפליקציה שהותקנה למסך הבית)");
-      }
+      if (result && result.user) toast("ההתחברות הושלמה ✓");
     }).catch(e => {
       console.error("tripcost: redirect result error", e);
       if (e && e.code && e.code !== 'auth/no-auth-event'){
@@ -1153,15 +1147,13 @@ function signInWithGoogle(){
   if (!fbAuth){ toast("יש לשמור קודם את הגדרות Firebase"); return; }
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
-    const wantsExisting = document.getElementById('toggleExistingFolder').checked;
-    provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+    // No Drive scope requested here — Drive access is handled entirely separately via
+    // Google Identity Services (see requestDriveReauth), decoupled from this sign-in.
     // Popups are unreliable on mobile browsers (Safari/Chrome on phones block or kill
     // them far more aggressively than desktop) — a full-page redirect is what Google
-    // itself recommends for mobile, and it works everywhere popups do too.
+    // itself recommends for mobile sign-in, and it works everywhere popups do too.
     toast("מעביר להתחברות עם Google...");
-    sessionStorage.setItem('tripcost.pendingDriveAuth', '1');
     Promise.resolve(fbAuth.signInWithRedirect(provider)).catch(e => {
-      sessionStorage.removeItem('tripcost.pendingDriveAuth');
       console.error(e);
       toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
     });
@@ -1172,18 +1164,44 @@ function signInWithGoogle(){
 }
 
 function requestDriveReauth(){
-  if (!fbAuth || !fbAuth.currentUser){ toast("יש להתחבר קודם"); return; }
+  // Uses Google Identity Services (a lightweight popup Google maintains specifically
+  // for API access tokens) instead of Firebase's redirect-based reauthentication.
+  // The redirect approach requires a full page reload to complete, which depends on
+  // browser storage surviving the round trip to Google and back — something Safari's
+  // privacy protections (and installed home-screen PWAs) frequently break, silently:
+  // the redirect "completes" but no credential ever comes back. This sidesteps that
+  // entirely — no page reload, no storage correlation, just a direct popup response.
+  if (!cloudUser){ toast("יש להתחבר קודם"); return; }
+  const clientId = (driveSettings.googleClientId || "").trim();
+  if (!clientId){
+    toast("יש להזין קודם Google OAuth Client ID בהגדרות הסנכרון (למטה בתפריט)");
+    return;
+  }
+  if (!window.google || !google.accounts || !google.accounts.oauth2){
+    toast("ספריית ההתחברות של Google עוד לא נטענה — נסו שוב בעוד רגע");
+    return;
+  }
   try{
-    const provider = new firebase.auth.GoogleAuthProvider();
     const wantsExisting = document.getElementById('toggleExistingFolder').checked;
-    provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
-    toast("מעביר לאישור הרשאת Drive...");
-    sessionStorage.setItem('tripcost.pendingDriveAuth', '1');
-    Promise.resolve(fbAuth.currentUser.reauthenticateWithRedirect(provider)).catch(e => {
-      sessionStorage.removeItem('tripcost.pendingDriveAuth');
-      console.error(e);
-      toast("הפעולה נכשלה: " + (e.message || e.code || ""));
+    const scope = wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE;
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: scope,
+      callback: (resp) => {
+        if (resp && resp.access_token){
+          driveAccessToken = resp.access_token;
+          toast("ההרשאה ל-Drive עודכנה ✓");
+          if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
+        } else {
+          toast("ההרשאה לא התקבלה — נסו שוב");
+        }
+      },
+      error_callback: (err) => {
+        console.error("tripcost: GIS token error", err);
+        toast("ההתחברות נכשלה: " + ((err && err.type) || "שגיאה לא ידועה"));
+      }
     });
+    client.requestAccessToken();
   }catch(e){
     console.error(e);
     toast("הפעולה נכשלה: " + (e.message || e.code || ""));
@@ -1279,6 +1297,7 @@ function renderSyncOverlay(){
   document.getElementById('toggleExistingFolder').checked = !!driveSettings.useExistingDriveFolder;
   document.getElementById('folderIdField').style.display = driveSettings.useExistingDriveFolder ? "block" : "none";
   document.getElementById('driveFolderIdInput').value = driveSettings.driveFolderId || "";
+  document.getElementById('googleClientIdInput').value = driveSettings.googleClientId || "";
 }
 
 document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
@@ -1317,6 +1336,10 @@ document.getElementById('toggleExistingFolder').addEventListener('change', (e) =
 });
 document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
   driveSettings.driveFolderId = e.target.value.trim();
+  saveDriveSettings(driveSettings);
+});
+document.getElementById('googleClientIdInput').addEventListener('change', (e) => {
+  driveSettings.googleClientId = e.target.value.trim();
   saveDriveSettings(driveSettings);
 });
 document.getElementById('overlaySync').addEventListener('click', (e) => { if (e.target.id === 'overlaySync') closeOverlay('overlaySync'); });
@@ -1408,7 +1431,7 @@ function renderTripTabs(){
     chip.textContent = t.name || "טיול ללא שם";
     chip.addEventListener('click', () => {
       state.activeTripId = t.id;
-      expenseFilter = 'all';
+      expenseFilter = { type: 'all' };
       saveState();
       renderAll();
     });
@@ -1475,7 +1498,7 @@ function renderSummary(){
   `;
   const filterFromPassBtn = document.getElementById('btnFilterFromPass');
   if (filterFromPassBtn) filterFromPassBtn.addEventListener('click', () => {
-    expenseFilter = 'pending';
+    expenseFilter = { type: 'pending' };
     renderFilterBar();
     renderExpenses();
     document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
@@ -1544,9 +1567,10 @@ function renderCash(){
 }
 
 /* ========================= Rendering: Category donut chart ========================= */
-function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color){
+function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color, cat){
+  const dataAttr = `data-cat="${escapeHtml(cat)}" class="donut-slice"`;
   if (endDeg - startDeg >= 359.99){
-    return `<circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="${color}" />`;
+    return `<circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="${color}" ${dataAttr} />`;
   }
   const toRad = d => (d - 90) * Math.PI / 180;
   const p = (r, deg) => ({ x: cx + r*Math.cos(toRad(deg)), y: cy + r*Math.sin(toRad(deg)) });
@@ -1560,7 +1584,7 @@ function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color){
     `A ${rInner} ${rInner} 0 ${large} 0 ${p4.x} ${p4.y}`,
     "Z"
   ].join(" ");
-  return `<path d="${d}" fill="${color}" />`;
+  return `<path d="${d}" fill="${color}" ${dataAttr} />`;
 }
 
 function renderCategoryChart(){
@@ -1582,12 +1606,12 @@ function renderCategoryChart(){
     const startAngle = (cumulative / total) * 360;
     cumulative += val;
     const endAngle = (cumulative / total) * 360;
-    return donutSlicePath(cx, cy, rOuter, rInner, startAngle, endAngle, CATEGORY_COLOR[cat]);
+    return donutSlicePath(cx, cy, rOuter, rInner, startAngle, endAngle, CATEGORY_COLOR[cat], cat);
   }).join("");
 
   const legend = entries.map(([cat, val]) => {
     const pct = Math.round((val/total) * 100);
-    return `<div class="donut-legend-row">
+    return `<div class="donut-legend-row" data-cat="${escapeHtml(cat)}" style="cursor:pointer;">
       <span class="donut-legend-dot" style="background:${CATEGORY_COLOR[cat]};"></span>
       <span class="donut-legend-label">${CATEGORY_ICON[cat]} ${escapeHtml(cat)}</span>
       <span class="donut-legend-val tnum">₪${fmtMoney(val)} · ${pct}%</span>
@@ -1595,10 +1619,10 @@ function renderCategoryChart(){
   }).join("");
 
   section.innerHTML = `
-    <div class="section-title">פילוח הוצאות</div>
+    <div class="section-title">פילוח הוצאות <span style="font-weight:400;color:var(--ink-soft);">— לחצו לסינון</span></div>
     <div class="card">
       <div class="donut-wrap">
-        <svg viewBox="0 0 200 200" width="170" height="170">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
+        <svg viewBox="0 0 200 200" width="170" height="170" style="cursor:pointer;">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
         <div class="donut-center">
           <div class="donut-center-total tnum">₪${fmtMoney(total)}</div>
           <div class="donut-center-label">סה״כ</div>
@@ -1607,6 +1631,14 @@ function renderCategoryChart(){
       <div class="donut-legend">${legend}</div>
     </div>
   `;
+  const onCatClick = (cat) => {
+    expenseFilter = { type: 'category', value: cat };
+    renderFilterBar();
+    renderExpenses();
+    document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
+  };
+  section.querySelectorAll('.donut-slice').forEach(el => el.addEventListener('click', () => onCatClick(el.dataset.cat)));
+  section.querySelectorAll('.donut-legend-row').forEach(el => el.addEventListener('click', () => onCatClick(el.dataset.cat)));
 }
 
 /* ========================= Rendering: Rates ========================= */
@@ -1773,16 +1805,21 @@ function renderFilterBar(){
   const bar = document.getElementById('filterBar');
   if (!trip){ bar.style.display = "none"; return; }
   const pendingCount = trip.expenses.filter(e => !e.paid).length;
-  if (expenseFilter === 'all' && pendingCount === 0){ bar.style.display = "none"; return; }
+  if (expenseFilter.type === 'all' && pendingCount === 0){ bar.style.display = "none"; return; }
   bar.style.display = "flex";
   bar.style.gap = "8px";
-  bar.innerHTML = expenseFilter === 'pending'
-    ? `<span class="tag on" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterClear">✕ מציג רק טרם שולם (${pendingCount}) — לניקוי הסינון</span>`
-    : (pendingCount > 0 ? `<span class="tag" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterSetPending">הצג רק טרם שולם (${pendingCount})</span>` : "");
+  if (expenseFilter.type === 'category'){
+    const count = trip.expenses.filter(e => expCategory(e) === expenseFilter.value).length;
+    bar.innerHTML = `<span class="tag on" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterClear">✕ מציג רק ${CATEGORY_ICON[expenseFilter.value]} ${escapeHtml(expenseFilter.value)} (${count}) — לניקוי הסינון</span>`;
+  } else if (expenseFilter.type === 'pending'){
+    bar.innerHTML = `<span class="tag on" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterClear">✕ מציג רק טרם שולם (${pendingCount}) — לניקוי הסינון</span>`;
+  } else {
+    bar.innerHTML = pendingCount > 0 ? `<span class="tag" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterSetPending">הצג רק טרם שולם (${pendingCount})</span>` : "";
+  }
   const clearBtn = document.getElementById('filterClear');
-  if (clearBtn) clearBtn.addEventListener('click', () => { expenseFilter = 'all'; renderFilterBar(); renderExpenses(); });
+  if (clearBtn) clearBtn.addEventListener('click', () => { expenseFilter = { type:'all' }; renderFilterBar(); renderExpenses(); });
   const setBtn = document.getElementById('filterSetPending');
-  if (setBtn) setBtn.addEventListener('click', () => { expenseFilter = 'pending'; renderFilterBar(); renderExpenses(); });
+  if (setBtn) setBtn.addEventListener('click', () => { expenseFilter = { type:'pending' }; renderFilterBar(); renderExpenses(); });
 }
 
 function renderExpenses(){
@@ -1801,7 +1838,8 @@ function renderExpenses(){
 
   const sortMode = document.getElementById('sortSelect').value;
   let items = [...trip.expenses];
-  if (expenseFilter === 'pending') items = items.filter(e => !e.paid);
+  if (expenseFilter.type === 'pending') items = items.filter(e => !e.paid);
+  if (expenseFilter.type === 'category') items = items.filter(e => expCategory(e) === expenseFilter.value);
   items.sort((a,b) => {
     if (sortMode === 'date_asc') return (a.date||"").localeCompare(b.date||"");
     if (sortMode === 'amount_desc') return expenseTotalILS(b) - expenseTotalILS(a);
@@ -2034,7 +2072,7 @@ document.getElementById('btnMenu').addEventListener('click', openTripsList);
 
 /* ========================= Expense form ========================= */
 let editingExpenseId = null;
-let expenseFilter = 'all'; // 'all' | 'pending' — toggled by tapping the "צפוי / טרם שולם" stat
+let expenseFilter = { type: 'all' }; // {type:'all'} | {type:'pending'} | {type:'category', value:'טיסה'}
 let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
 let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
 
@@ -2249,7 +2287,8 @@ function updateDriveWarning(){
   el.style.display = (cloudUser && !driveAccessToken) ? "block" : "none";
 }
 document.getElementById('efDriveWarning').addEventListener('click', () => {
-  closeOverlay('overlayExpense');
+  // GIS opens a popup rather than navigating away, so the in-progress form survives —
+  // no need to close the sheet first the way the old redirect-based flow required.
   requestDriveReauth();
 });
 
