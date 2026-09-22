@@ -245,17 +245,42 @@
 
   /* ---- FAB ---- */
   .fab{
-    position:fixed;left:50%;transform:translateX(-50%);
+    position:fixed;left:calc(20px + var(--safe-b, 0px));
     bottom:calc(22px + var(--safe-b));
-    max-width:560px;width:calc(100% - 36px);
     z-index:30;
   }
   .fab button{
-    width:100%;background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
-    padding:16px;font-size:15.5px;font-weight:800;box-shadow:0 10px 30px rgba(30,74,71,.35);
-    display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+    width:60px;height:60px;border-radius:50%;
+    background:var(--teal);color:#fff;border:none;
+    box-shadow:0 10px 26px rgba(30,74,71,.4);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
   }
-  .fab button:active{transform:translateX(-50%) scale(.98);}
+  .fab button:active{transform:scale(.94);}
+
+  /* ---- Decorative background: a faint plane drifting across the screen ---- */
+  #bgPlane{
+    position:fixed;top:14%;right:-12%;width:120px;height:120px;
+    z-index:0;pointer-events:none;opacity:.05;color:var(--ink);
+    animation:planeDrift 46s linear infinite;
+  }
+  #bgPlane svg{width:100%;height:100%;transform:rotate(-35deg);}
+  @keyframes planeDrift{
+    0%{transform:translate(0,0) rotate(0deg);}
+    100%{transform:translate(-130vw,60vh) rotate(0deg);}
+  }
+  @media (prefers-reduced-motion: reduce){ #bgPlane{animation:none;display:none;} }
+  #app{position:relative;z-index:1;}
+
+  /* ---- Trip info strip (flight/booking details) ---- */
+  .trip-info{
+    display:flex;gap:10px;overflow-x:auto;padding:2px 2px 4px;margin-bottom:2px;scrollbar-width:none;
+  }
+  .trip-info::-webkit-scrollbar{display:none;}
+  .trip-info-item{
+    flex:none;background:var(--card-2);border-radius:var(--radius-sm);padding:7px 12px;
+    font-size:12px;color:var(--ink-soft);white-space:nowrap;
+  }
+  .trip-info-item b{color:var(--ink);font-weight:700;}
 
   /* ---- Sheet / modal ---- */
   .overlay{
@@ -315,15 +340,73 @@
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
   input[type=file]{display:none;}
+  #btnAddExpenseDesktop{display:none;}
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
   a{color:inherit;}
   :focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.001ms !important;transition-duration:.001ms !important;}
   }
+
+  /* ==========================================================================
+     Wide screens (desktop, or a phone opened flat / unfolded, or landscape
+     tablet): switch from the single-column mobile app feel to a dashboard-style
+     website layout. Below this width, everything above still applies as-is —
+     this block only adds/overrides for the wide case. */
+  @media (min-width: 860px){
+    body{ background: var(--card-2); }
+    #app{
+      max-width:1180px;margin:28px auto;background:var(--bg);
+      border-radius:26px;box-shadow:var(--shadow);overflow:hidden;
+      min-height:calc(100vh - 56px);
+    }
+    header.topbar{ padding:26px 36px 14px; }
+    .brand .mark{ font-size:26px; }
+    .trip-tabs{ padding:16px 2px 6px; }
+
+    main{
+      padding:8px 36px 48px;
+      display:grid;
+      grid-template-columns:360px 1fr;
+      gap:22px;
+      align-items:start;
+    }
+    #sidebarCol section:first-child, #mainCol section:first-child{ margin-top:0; }
+
+    .toolbar{ justify-content:flex-end; }
+
+    /* The floating round FAB makes sense reachable by thumb on a phone; on a
+       wide screen it just floats oddly over content, so swap it for a normal
+       inline button next to the section header instead. */
+    .fab{ display:none; }
+    #btnAddExpenseDesktop{
+      display:flex; align-items:center; gap:8px; background:var(--teal); color:#fff;
+      border:none;border-radius:var(--radius-pill);padding:10px 18px;font-weight:800;
+      font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(30,74,71,.3);
+    }
+    #btnAddExpenseDesktop:active{ transform:scale(.97); }
+
+    /* Sheets read as centered dialogs on a website, not phone bottom-sheets. */
+    .overlay{ align-items:center; padding:24px; }
+    .sheet{
+      border-radius:22px; max-width:480px; max-height:86vh;
+      transform:translateY(8px);
+    }
+    .overlay.show .sheet{ transform:translateY(0); }
+
+    #bgPlane{ opacity:.045; }
+  }
+  @media (min-width: 860px) and (max-width: 1023px){
+    main{ grid-template-columns:300px 1fr; }
+  }
 </style>
 </head>
 <body>
+<div id="bgPlane" aria-hidden="true">
+  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M50 6 L55 40 L92 55 L92 62 L55 52 L55 74 L68 84 L68 90 L50 84 L32 90 L32 84 L45 74 L45 52 L8 62 L8 55 L45 40 Z" fill="currentColor"/>
+  </svg>
+</div>
 <div id="app">
 
   <header class="topbar" id="topbar">
@@ -333,59 +416,67 @@
         <span class="sub">מעקב הוצאות טיולים</span>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="icon-btn" id="btnSync" aria-label="סנכרון וגיבוי בענן" title="סנכרון וגיבוי בענן">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M7 17a4 4 0 01-1-7.87A5.5 5.5 0 0116.9 8.2 4.5 4.5 0 0117 17H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        </button>
         <button class="icon-btn" id="btnMenu" aria-label="ניהול טיולים" title="ניהול טיולים">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </div>
     </div>
-    <div id="syncStatusLine" style="display:none;"></div>
+    <div id="syncStatusLine"></div>
     <div class="trip-tabs" id="tripTabs"></div>
+    <div class="trip-info" id="tripInfoStrip"></div>
   </header>
 
   <main id="main">
 
-    <section id="summarySection"></section>
+    <div id="sidebarCol">
+      <section id="summarySection"></section>
 
-    <section id="cashSection"></section>
+      <section id="cashSection"></section>
 
-    <section id="ratesSection">
-      <div class="section-title">שערי מטבע</div>
-      <div class="card" id="ratesCard"></div>
-    </section>
+      <section id="ratesSection">
+        <div class="section-title">שערי מטבע</div>
+        <div class="card" id="ratesCard"></div>
+      </section>
+    </div>
 
-    <section id="toolsSection">
-      <div class="section-title">כלים</div>
-      <div class="toolbar">
-        <button class="tool-btn" id="btnImport">📥 ייבוא מאקסל</button>
-        <button class="tool-btn" id="btnExportXlsx">📤 ייצוא לאקסל</button>
-        <button class="tool-btn" id="btnBackup">💾 גיבוי</button>
-        <button class="tool-btn" id="btnRestore">♻️ שחזור</button>
-      </div>
-      <input type="file" id="fileImport" accept=".xlsx,.xls,.csv">
-      <input type="file" id="fileRestore" accept="application/json">
-    </section>
+    <div id="mainCol">
+      <section id="toolsSection">
+        <div class="section-title">כלים</div>
+        <div class="toolbar">
+          <button class="tool-btn" id="btnImport">📥 ייבוא מאקסל</button>
+          <button class="tool-btn" id="btnExportXlsx">📤 ייצוא לאקסל</button>
+          <button class="tool-btn" id="btnBackup">💾 גיבוי</button>
+          <button class="tool-btn" id="btnRestore">♻️ שחזור</button>
+        </div>
+        <input type="file" id="fileImport" accept=".xlsx,.xls,.csv">
+        <input type="file" id="fileRestore" accept="application/json">
+      </section>
 
-    <section id="expensesSection">
-      <div class="row" style="margin-bottom:10px;">
-        <div class="section-title" style="margin:0;">הוצאות</div>
-        <select id="sortSelect" style="border:1px solid var(--border);background:var(--card);border-radius:var(--radius-sm);padding:6px 10px;font-size:12.5px;color:var(--ink-soft);font-weight:700;">
-          <option value="date_desc">תאריך: חדש→ישן</option>
-          <option value="date_asc">תאריך: ישן→חדש</option>
-          <option value="amount_desc">סכום: גבוה→נמוך</option>
-        </select>
-      </div>
-      <div id="expensesList"></div>
-    </section>
+      <section id="expensesSection">
+        <div class="row" style="margin-bottom:10px;">
+          <div class="section-title" style="margin:0;">הוצאות</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="sortSelect" style="border:1px solid var(--border);background:var(--card);border-radius:var(--radius-sm);padding:6px 10px;font-size:12.5px;color:var(--ink-soft);font-weight:700;">
+              <option value="date_desc">תאריך: חדש→ישן</option>
+              <option value="date_asc">תאריך: ישן→חדש</option>
+              <option value="amount_desc">סכום: גבוה→נמוך</option>
+            </select>
+            <button id="btnAddExpenseDesktop" aria-label="הוצאה חדשה">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              הוצאה חדשה
+            </button>
+          </div>
+        </div>
+        <div id="filterBar" style="display:none;margin-bottom:10px;"></div>
+        <div id="expensesList"></div>
+      </section>
+    </div>
 
   </main>
 
   <div class="fab">
-    <button id="btnAddExpense">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-      הוצאה חדשה
+    <button id="btnAddExpense" aria-label="הוצאה חדשה" title="הוצאה חדשה">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
     </button>
   </div>
 
@@ -439,6 +530,39 @@
         </div>
       </div>
       <div class="hint" style="margin-top:8px;">נחשב לכם כמה מזומן אמור להישאר, לפי ההוצאות שסומנו כ״מזומן״.</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="grid2">
+      <div class="field">
+        <label>מספר טיסה</label>
+        <input type="text" id="tfFlight" placeholder="לדוגמה: LY321">
+      </div>
+      <div class="field">
+        <label>מספר הזמנה</label>
+        <input type="text" id="tfBooking" placeholder="לדוגמה: ABC123">
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>יציאה — תאריך ושעה</label>
+        <input type="datetime-local" id="tfDepart">
+      </div>
+      <div class="field">
+        <label>חזרה — תאריך ושעה</label>
+        <input type="datetime-local" id="tfReturn">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toggle-row">
+      <div>
+        <div style="font-weight:700;font-size:13.5px;">הטיול הסתיים</div>
+        <div class="hint" style="margin:2px 0 0;">טיולים שהסתיימו לא יופיעו בכרטיסיות למעלה</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="tfFinished"><span class="track"></span></label>
     </div>
 
     <div class="sheet-actions">
@@ -507,6 +631,16 @@
         <div class="check-pill" id="efBookedPill">✓ הוזמן</div>
         <div class="check-pill" id="efPaidPill">✓ שולם</div>
       </div>
+    </div>
+
+    <div class="field" id="efPaidDateField" style="display:none;">
+      <label>באיזה יום שולם?</label>
+      <div class="seg" id="efPaidDateSeg">
+        <button type="button" data-val="today">היום</button>
+        <button type="button" data-val="other">תאריך אחר</button>
+      </div>
+      <input type="date" id="efPaidDateInput" style="margin-top:8px;display:none;">
+      <div class="hint" id="efPaidRateHint" style="margin-top:8px;display:none;"></div>
     </div>
 
     <div class="field">
@@ -708,6 +842,11 @@ function defaultState(){
     startDate: "",
     endDate: "",
     cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
+    finished: false,
+    flightNumber: "",
+    bookingRef: "",
+    departDateTime: "",
+    returnDateTime: "",
     expenses: []
   };
   return {
@@ -717,12 +856,20 @@ function defaultState(){
   };
 }
 
+function migrateTrip(t){
+  if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
+  if (typeof t.finished !== "boolean") t.finished = false;
+  if (typeof t.flightNumber !== "string") t.flightNumber = "";
+  if (typeof t.bookingRef !== "string") t.bookingRef = "";
+  if (typeof t.departDateTime !== "string") t.departDateTime = "";
+  if (typeof t.returnDateTime !== "string") t.returnDateTime = "";
+  return t;
+}
+
 let state = loadState();
 
-// Migrate trips saved before cash-tracking existed.
-state.trips.forEach(t => {
-  if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
-});
+// Migrate trips saved before cash-tracking / finished-flag / flight-info existed.
+state.trips.forEach(migrateTrip);
 
 function saveState(){
   try{
@@ -750,6 +897,20 @@ const DRIVE_SCOPE_FILE = "https://www.googleapis.com/auth/drive.file";
 const DRIVE_SCOPE_FULL = "https://www.googleapis.com/auth/drive";
 const DEFAULT_DRIVE_FOLDER_NAME = "TripCost - קבצים מצורפים";
 
+// Shipped with the app so every device works out of the box with one tap to sign in —
+// no need to re-paste the config per device. Firebase web API keys are meant to be
+// public (this is Google's own documented practice); real protection comes from the
+// Firestore security rules (per-uid isolation) and the Google OAuth consent screen,
+// not from hiding this value.
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAWpLBrDq0fTTFhU1gZM6R5faEK6iNizFk",
+  authDomain: "trip-cost-ba9de.firebaseapp.com",
+  projectId: "trip-cost-ba9de",
+  storageBucket: "trip-cost-ba9de.firebasestorage.app",
+  messagingSenderId: "1003952566118",
+  appId: "1:1003952566118:web:28b69795a6252b4556a2a7"
+};
+
 let fbApp = null, fbAuth = null, fbDb = null;
 let cloudUser = null;              // firebase user object once signed in
 let driveAccessToken = null;       // short-lived OAuth token for Drive REST calls
@@ -760,8 +921,9 @@ let pushTimer = null;
 function loadFirebaseConfig(){
   try{
     const raw = localStorage.getItem(FB_CONFIG_KEY);
-    return raw ? JSON.parse(raw) : null;
-  }catch(e){ return null; }
+    if (raw) return JSON.parse(raw);
+  }catch(e){ /* fall through to default */ }
+  return DEFAULT_FIREBASE_CONFIG;
 }
 function saveFirebaseConfig(cfg){
   localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(cfg));
@@ -787,11 +949,12 @@ function parseFirebaseConfigInput(raw){
 
 function setSyncStatus(mode, text){
   // mode: 'off' | 'on' | 'syncing' | 'err'
+  // The status line is the only entry point to sync settings now (no separate icon button),
+  // so it always stays visible/clickable — never hide it, even with no status text yet.
   const line = document.getElementById('syncStatusLine');
   line.className = mode === 'on' ? 'on' : mode === 'syncing' ? 'syncing' : mode === 'err' ? 'err' : '';
-  if (!text){ line.style.display = 'none'; return; }
   line.style.display = 'flex';
-  line.innerHTML = `<span class="dot"></span><span>${escapeHtml(text)}</span>`;
+  line.innerHTML = `<span class="dot"></span><span>${escapeHtml(text || 'סנכרון בענן')}</span>`;
 }
 
 function initFirebaseIfConfigured(){
@@ -840,7 +1003,7 @@ function startCloudListener(uid){
     isApplyingRemote = true;
     try{
       state = JSON.parse(remote.payload);
-      state.trips.forEach(t => { if (!t.cashInitial) t.cashInitial = { "שקל":0, "דולר":0, "יורו":0 }; });
+      state.trips.forEach(migrateTrip);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
       setSyncStatus('on', 'מעודכן מהענן ✓');
@@ -926,12 +1089,12 @@ async function ensureDriveFolderId(){
 }
 
 async function uploadFileToDrive(file){
-  if (!cloudUser) return null; // sync not connected — attachment stays local-only (IndexedDB)
+  if (!cloudUser) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
   const useExisting = document.getElementById('toggleExistingFolder').checked;
   const explicitFolder = document.getElementById('driveFolderIdInput').value.trim();
   try{
     if (!driveAccessToken) await refreshDriveToken();
-    if (!driveAccessToken) return null;
+    if (!driveAccessToken) return { ok:false, reason:"לא התקבלה הרשאה ל-Drive" };
     const folderId = (useExisting && explicitFolder) ? explicitFolder : await ensureDriveFolderId();
     const metadata = { name: file.name, mimeType: file.type || "application/octet-stream", parents: [folderId] };
     const form = new FormData();
@@ -944,19 +1107,23 @@ async function uploadFileToDrive(file){
     });
     if (res.status === 401){
       await refreshDriveToken();
-      if (!driveAccessToken) return null;
+      if (!driveAccessToken) return { ok:false, reason:"ההרשאה פגה ולא חודשה" };
       res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
         method: "POST",
         headers: { Authorization: "Bearer " + driveAccessToken },
         body: form
       });
     }
-    if (!res.ok) throw new Error("drive upload http " + res.status);
+    if (!res.ok){
+      let detail = "שגיאת שרת " + res.status;
+      try{ const errJson = await res.json(); if (errJson.error && errJson.error.message) detail = errJson.error.message; }catch(_e){}
+      return { ok:false, reason: detail };
+    }
     const json = await res.json();
-    return { driveId: json.id, driveUrl: json.webViewLink };
+    return { ok:true, driveId: json.id, driveUrl: json.webViewLink };
   }catch(e){
     console.error("tripcost: drive upload failed", e);
-    return null;
+    return { ok:false, reason: (e && e.message) || "שגיאת רשת" };
   }
 }
 
@@ -983,9 +1150,8 @@ function renderSyncOverlay(){
   document.getElementById('driveFolderIdInput').value = state.driveFolderId || "";
 }
 
-document.getElementById('btnSync').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
-document.getElementById('btnCloseSync').addEventListener('click', () => closeOverlay('overlaySync'));
 document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+document.getElementById('btnCloseSync').addEventListener('click', () => closeOverlay('overlaySync'));
 
 document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () => {
   const raw = document.getElementById('syncConfigInput').value.trim();
@@ -1008,6 +1174,15 @@ document.getElementById('btnSignOut').addEventListener('click', () => {
 });
 document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
   document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
+  // Drive scope is chosen at sign-in time — flipping this after already being signed in
+  // means the cached token still only has the old (narrower) scope. Force a fresh
+  // consent grant right away so uploads to an existing folder don't silently fail.
+  if (e.target.checked && cloudUser){
+    toast("נדרשת הרשאה נוספת לתיקייה קיימת — מתחבר מחדש...");
+    refreshDriveToken().then(token => {
+      toast(token ? "ההרשאה עודכנה ✓" : "ההרשאה לא התקבלה — נסה שוב");
+    });
+  }
 });
 document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
   if (document.getElementById('toggleExistingFolder').checked){
@@ -1060,12 +1235,16 @@ function expenseTotalILS(exp){
 function renderTripTabs(){
   const wrap = document.getElementById('tripTabs');
   wrap.innerHTML = "";
-  state.trips.forEach(t => {
+  // Finished trips stay out of the quick tab strip (still reachable, and editable, via the
+  // full "ניהול טיולים" list) — unless it's the one currently open, so switching to it and
+  // marking it finished doesn't yank the view out from under you.
+  state.trips.filter(t => !t.finished || t.id === state.activeTripId).forEach(t => {
     const chip = document.createElement('button');
     chip.className = 'trip-chip' + (t.id === state.activeTripId ? ' active' : '');
     chip.textContent = t.name || "טיול ללא שם";
     chip.addEventListener('click', () => {
       state.activeTripId = t.id;
+      expenseFilter = 'all';
       saveState();
       renderAll();
     });
@@ -1115,7 +1294,7 @@ function renderSummary(){
       <div class="pass-top">
         <div class="pass-eyebrow">${escapeHtml(trip.name || "טיול")}${trip.startDate ? " · " + fmtDate(trip.startDate) + (trip.endDate ? " – "+fmtDate(trip.endDate) : "") : ""}</div>
         <div class="pass-total tnum">₪${fmtMoney(totalPaid)} <small>שולם עד כה</small></div>
-        ${totalPending > 0 ? `<div class="pass-pending tnum">+ ₪${fmtMoney(totalPending)} <span>צפוי · טרם שולם (${pendingExpenses.length})</span></div>` : ""}
+        ${totalPending > 0 ? `<button type="button" id="btnFilterFromPass" class="pass-pending tnum" style="background:none;border:none;cursor:pointer;padding:0;text-align:inherit;font-family:inherit;">+ ₪${fmtMoney(totalPending)} <span>צפוי · טרם שולם (${pendingExpenses.length}) — לחצו לסינון</span></button>` : ""}
         <div class="pass-meta">
           <div class="m"><b class="tnum">${trip.expenses.length}</b> הוצאות</div>
           ${daysLine}
@@ -1130,6 +1309,13 @@ function renderSummary(){
       </div>
     </div>
   `;
+  const filterFromPassBtn = document.getElementById('btnFilterFromPass');
+  if (filterFromPassBtn) filterFromPassBtn.addEventListener('click', () => {
+    expenseFilter = 'pending';
+    renderFilterBar();
+    renderExpenses();
+    document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
+  });
 }
 
 /* ========================= Rendering: Cash status ========================= */
@@ -1256,9 +1442,27 @@ async function refreshRatesFromWeb(){
 }
 
 /* ========================= Rendering: Expenses list ========================= */
+function renderFilterBar(){
+  const trip = activeTrip();
+  const bar = document.getElementById('filterBar');
+  if (!trip){ bar.style.display = "none"; return; }
+  const pendingCount = trip.expenses.filter(e => !e.paid).length;
+  if (expenseFilter === 'all' && pendingCount === 0){ bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  bar.style.gap = "8px";
+  bar.innerHTML = expenseFilter === 'pending'
+    ? `<span class="tag on" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterClear">✕ מציג רק טרם שולם (${pendingCount}) — לניקוי הסינון</span>`
+    : (pendingCount > 0 ? `<span class="tag" style="cursor:pointer;font-size:12.5px;padding:7px 12px;" id="filterSetPending">הצג רק טרם שולם (${pendingCount})</span>` : "");
+  const clearBtn = document.getElementById('filterClear');
+  if (clearBtn) clearBtn.addEventListener('click', () => { expenseFilter = 'all'; renderFilterBar(); renderExpenses(); });
+  const setBtn = document.getElementById('filterSetPending');
+  if (setBtn) setBtn.addEventListener('click', () => { expenseFilter = 'pending'; renderFilterBar(); renderExpenses(); });
+}
+
 function renderExpenses(){
   const trip = activeTrip();
   const list = document.getElementById('expensesList');
+  renderFilterBar();
   if (!trip || trip.expenses.length === 0){
     list.innerHTML = `
       <div class="empty">
@@ -1270,12 +1474,23 @@ function renderExpenses(){
   }
 
   const sortMode = document.getElementById('sortSelect').value;
-  const items = [...trip.expenses];
+  let items = [...trip.expenses];
+  if (expenseFilter === 'pending') items = items.filter(e => !e.paid);
   items.sort((a,b) => {
     if (sortMode === 'date_asc') return (a.date||"").localeCompare(b.date||"");
     if (sortMode === 'amount_desc') return expenseTotalILS(b) - expenseTotalILS(a);
     return (b.date||"").localeCompare(a.date||"");
   });
+
+  if (items.length === 0){
+    list.innerHTML = `
+      <div class="empty">
+        <div class="big">✅</div>
+        <p><b>הכל שולם!</b></p>
+        <p>אין הוצאות שממתינות לתשלום</p>
+      </div>`;
+    return;
+  }
 
   list.innerHTML = items.map(exp => {
     const totalIls = expenseTotalILS(exp);
@@ -1295,7 +1510,7 @@ function renderExpenses(){
       <div class="exp-tags">
         <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
         <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
-        <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? '✓ שולם' : '✗ לא שולם'}</span>
+        <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
       </div>
       ${exp.notes ? `<div class="exp-note">${escapeHtml(exp.notes)}</div>` : ""}
       ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
@@ -1315,8 +1530,31 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+/* ========================= Rendering: Trip info strip (flight/booking) ========================= */
+function fmtDateTime(dt){
+  if (!dt) return "";
+  try{
+    const d = new Date(dt);
+    return d.toLocaleString('he-IL', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+  }catch(e){ return dt; }
+}
+function renderTripInfoStrip(){
+  const trip = activeTrip();
+  const wrap = document.getElementById('tripInfoStrip');
+  if (!trip){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+  const items = [];
+  if (trip.flightNumber) items.push(`✈️ טיסה <b>${escapeHtml(trip.flightNumber)}</b>`);
+  if (trip.bookingRef) items.push(`🔖 הזמנה <b>${escapeHtml(trip.bookingRef)}</b>`);
+  if (trip.departDateTime) items.push(`🛫 יציאה <b>${fmtDateTime(trip.departDateTime)}</b>`);
+  if (trip.returnDateTime) items.push(`🛬 חזרה <b>${fmtDateTime(trip.returnDateTime)}</b>`);
+  if (items.length === 0){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+  wrap.style.display = "flex";
+  wrap.innerHTML = items.map(i => `<span class="trip-info-item">${i}</span>`).join("");
+}
+
 function renderAll(){
   renderTripTabs();
+  renderTripInfoStrip();
   renderSummary();
   renderCash();
   renderRates();
@@ -1331,7 +1569,7 @@ function openTripsList(){
   wrap.innerHTML = state.trips.map(t => `
     <div class="trip-list-item">
       <div>
-        <div style="font-weight:700;">${escapeHtml(t.name)}</div>
+        <div style="font-weight:700;">${escapeHtml(t.name)}${t.finished ? ' <span class="tag" style="vertical-align:middle;">✓ הסתיים</span>' : ''}</div>
         <div style="font-size:12px;color:var(--ink-soft);">${t.expenses.length} הוצאות${t.startDate ? " · " + fmtDate(t.startDate) : ""}</div>
       </div>
       <button class="mini-btn" data-id="${t.id}">עריכה</button>
@@ -1353,6 +1591,11 @@ function openNewTripForm(){
   document.getElementById('tfCashILS').value = "";
   document.getElementById('tfCashUSD').value = "";
   document.getElementById('tfCashEUR').value = "";
+  document.getElementById('tfFlight').value = "";
+  document.getElementById('tfBooking').value = "";
+  document.getElementById('tfDepart').value = "";
+  document.getElementById('tfReturn').value = "";
+  document.getElementById('tfFinished').checked = false;
   document.getElementById('btnDeleteTrip').style.display = "none";
   document.getElementById('deleteTripDivider').style.display = "none";
   showOverlay('overlayTripForm');
@@ -1370,6 +1613,11 @@ function openEditTripForm(id){
   document.getElementById('tfCashILS').value = cash["שקל"] || "";
   document.getElementById('tfCashUSD').value = cash["דולר"] || "";
   document.getElementById('tfCashEUR').value = cash["יורו"] || "";
+  document.getElementById('tfFlight').value = t.flightNumber || "";
+  document.getElementById('tfBooking').value = t.bookingRef || "";
+  document.getElementById('tfDepart').value = t.departDateTime || "";
+  document.getElementById('tfReturn').value = t.returnDateTime || "";
+  document.getElementById('tfFinished').checked = !!t.finished;
   const canDelete = state.trips.length > 1;
   document.getElementById('btnDeleteTrip').style.display = canDelete ? "block" : "none";
   document.getElementById('deleteTripDivider').style.display = canDelete ? "block" : "none";
@@ -1385,11 +1633,25 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
     "דולר": parseFloat(document.getElementById('tfCashUSD').value) || 0,
     "יורו": parseFloat(document.getElementById('tfCashEUR').value) || 0
   };
+  const flightNumber = document.getElementById('tfFlight').value.trim();
+  const bookingRef = document.getElementById('tfBooking').value.trim();
+  const departDateTime = document.getElementById('tfDepart').value;
+  const returnDateTime = document.getElementById('tfReturn').value;
+  const finished = document.getElementById('tfFinished').checked;
   if (editingTripId){
     const t = state.trips.find(x => x.id === editingTripId);
-    if (t){ t.name = name; t.startDate = start; t.endDate = end; t.cashInitial = cashInitial; }
+    if (t){
+      t.name = name; t.startDate = start; t.endDate = end; t.cashInitial = cashInitial;
+      t.flightNumber = flightNumber; t.bookingRef = bookingRef;
+      t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
+      t.finished = finished;
+    }
   } else {
-    const t = { id: uid(), name, startDate: start, endDate: end, cashInitial: cashInitial, expenses: [] };
+    const t = {
+      id: uid(), name, startDate: start, endDate: end, cashInitial: cashInitial,
+      flightNumber, bookingRef, departDateTime, returnDateTime, finished,
+      expenses: []
+    };
     state.trips.push(t);
     state.activeTripId = t.id;
   }
@@ -1421,6 +1683,7 @@ document.getElementById('btnMenu').addEventListener('click', openTripsList);
 
 /* ========================= Expense form ========================= */
 let editingExpenseId = null;
+let expenseFilter = 'all'; // 'all' | 'pending' — toggled by tapping the "צפוי / טרם שולם" stat
 let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
 let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
 
@@ -1478,7 +1741,74 @@ document.getElementById('efAmount').addEventListener('input', updateTotalHint);
 document.getElementById('efRate').addEventListener('input', updateTotalHint);
 
 document.getElementById('efBookedPill').addEventListener('click', function(){ this.classList.toggle('on'); });
-document.getElementById('efPaidPill').addEventListener('click', function(){ this.classList.toggle('on'); });
+
+/* -- paid-date + historical-rate flow -- */
+let pendingPaidDate = "";
+
+async function fetchHistoricalRate(currency, isoDate){
+  const base = currency === "דולר" ? "USD" : currency === "יורו" ? "EUR" : null;
+  if (!base || !isoDate) return null;
+  try{
+    const res = await fetch(`https://api.frankfurter.dev/v1/${isoDate}?from=${base}&to=ILS`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json && json.rates && json.rates.ILS) ? json.rates.ILS : null;
+  }catch(e){
+    console.warn("tripcost: historical rate lookup failed", e);
+    return null;
+  }
+}
+
+async function applyPaidDate(iso){
+  pendingPaidDate = iso;
+  const hint = document.getElementById('efPaidRateHint');
+  const currency = document.getElementById('efCurrency').value;
+  if (currency === "שקל"){ hint.style.display = "none"; return; }
+  hint.style.display = "block";
+  hint.textContent = "מחפש את שער " + currency + " ליום " + fmtDate(iso) + "...";
+  const rate = await fetchHistoricalRate(currency, iso);
+  if (rate){
+    document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
+    updateTotalHint();
+    hint.textContent = `שער ${currency}→שקל ליום ${fmtDate(iso)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
+  } else {
+    hint.textContent = "לא הצלחתי למצוא שער היסטורי לתאריך הזה — הזן ידנית";
+  }
+}
+
+document.getElementById('efPaidPill').addEventListener('click', function(){
+  const turningOn = !this.classList.contains('on');
+  this.classList.toggle('on');
+  const dateField = document.getElementById('efPaidDateField');
+  if (turningOn){
+    dateField.style.display = "block";
+    document.getElementById('efPaidDateSeg').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    document.getElementById('efPaidDateInput').style.display = "none";
+    document.getElementById('efPaidRateHint').style.display = "none";
+    if (!pendingPaidDate) pendingPaidDate = todayISO();
+  } else {
+    dateField.style.display = "none";
+  }
+});
+
+document.getElementById('efPaidDateSeg').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('efPaidDateSeg').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const dateInput = document.getElementById('efPaidDateInput');
+    if (btn.dataset.val === 'today'){
+      dateInput.style.display = "none";
+      applyPaidDate(todayISO());
+    } else {
+      dateInput.style.display = "block";
+      dateInput.value = pendingPaidDate || todayISO();
+      dateInput.focus();
+    }
+  });
+});
+document.getElementById('efPaidDateInput').addEventListener('change', (e) => {
+  if (e.target.value) applyPaidDate(e.target.value);
+});
 
 /* -- payment method segmented control -- */
 function setPaymentUI(value){
@@ -1525,6 +1855,8 @@ function openNewExpense(){
   document.getElementById('efNotes').value = "";
   document.getElementById('efBookedPill').classList.remove('on');
   document.getElementById('efPaidPill').classList.remove('on');
+  document.getElementById('efPaidDateField').style.display = "none";
+  pendingPaidDate = "";
   document.getElementById('btnDeleteExpense').style.display = "none";
   document.getElementById('deleteExpenseDivider').style.display = "none";
   renderAttachChips();
@@ -1550,6 +1882,19 @@ function openEditExpense(id){
   document.getElementById('efNotes').value = exp.notes || "";
   document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
   document.getElementById('efPaidPill').classList.toggle('on', !!exp.paid);
+  pendingPaidDate = exp.paidDate || "";
+  const paidDateField = document.getElementById('efPaidDateField');
+  if (exp.paid){
+    paidDateField.style.display = "block";
+    const seg = document.getElementById('efPaidDateSeg');
+    const isToday = pendingPaidDate === todayISO();
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', (isToday && b.dataset.val==='today') || (!isToday && b.dataset.val==='other')));
+    document.getElementById('efPaidDateInput').style.display = isToday ? "none" : "block";
+    document.getElementById('efPaidDateInput').value = pendingPaidDate || todayISO();
+    document.getElementById('efPaidRateHint').style.display = "none";
+  } else {
+    paidDateField.style.display = "none";
+  }
   document.getElementById('btnDeleteExpense').style.display = "block";
   document.getElementById('deleteExpenseDivider').style.display = "block";
   renderAttachChips();
@@ -1558,6 +1903,7 @@ function openEditExpense(id){
 }
 
 document.getElementById('btnAddExpense').addEventListener('click', openNewExpense);
+document.getElementById('btnAddExpenseDesktop').addEventListener('click', openNewExpense);
 document.getElementById('btnCancelExpense').addEventListener('click', () => closeOverlay('overlayExpense'));
 
 document.getElementById('btnSaveExpense').addEventListener('click', async () => {
@@ -1570,12 +1916,17 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
 
   const saveBtn = document.getElementById('btnSaveExpense');
   saveBtn.disabled = true;
+  let driveFailures = 0, driveFailReason = "";
   try{
     for (const a of currentAttachments){
       if (a.isNew){
         await idbPut({id: a.id, blob: a.file, name: a.name, type: a.type, size: a.size});
-        const driveResult = await uploadFileToDrive(a.file).catch(()=>null);
-        if (driveResult){ a.driveId = driveResult.driveId; a.driveUrl = driveResult.driveUrl; }
+        const driveResult = await uploadFileToDrive(a.file).catch(e => ({ok:false, reason:(e&&e.message)||"שגיאה"}));
+        if (driveResult && driveResult.ok){
+          a.driveId = driveResult.driveId; a.driveUrl = driveResult.driveUrl;
+        } else if (driveResult && !driveResult.skipped){
+          driveFailures++; driveFailReason = driveResult.reason || "";
+        }
       }
     }
     for (const id of removedAttachmentIds){
@@ -1597,6 +1948,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     rate: currency === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1),
     booked: document.getElementById('efBookedPill').classList.contains('on'),
     paid: document.getElementById('efPaidPill').classList.contains('on'),
+    paidDate: document.getElementById('efPaidPill').classList.contains('on') ? (pendingPaidDate || todayISO()) : null,
     notes: document.getElementById('efNotes').value.trim(),
     attachments: currentAttachments.map(a => ({id:a.id, name:a.name, type:a.type, size:a.size, driveId:a.driveId||null, driveUrl:a.driveUrl||null}))
   };
@@ -1612,7 +1964,11 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
   saveState();
   closeOverlay('overlayExpense');
   renderAll();
-  toast("ההוצאה נשמרה ✓");
+  if (driveFailures > 0){
+    toast(`ההוצאה נשמרה, אך ההעלאה ל-Drive נכשלה${driveFailReason ? " (" + driveFailReason + ")" : ""}`);
+  } else {
+    toast("ההוצאה נשמרה ✓");
+  }
 });
 
 document.getElementById('btnDeleteExpense').addEventListener('click', () => {
@@ -1820,7 +2176,7 @@ document.getElementById('fileRestore').addEventListener('change', async (e) => {
     const attachmentsData = parsed.attachmentsData || {};
     delete parsed.attachmentsData;
     state = parsed;
-    state.trips.forEach(t => { if (!t.cashInitial) t.cashInitial = { "שקל":0, "דולר":0, "יורו":0 }; });
+    state.trips.forEach(migrateTrip);
     saveState();
     for (const [id, info] of Object.entries(attachmentsData)){
       try{
