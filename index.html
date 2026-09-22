@@ -668,6 +668,7 @@
     <div class="field" id="efRateField">
       <label>שער המרה (לרגע ההוצאה)</label>
       <input type="number" id="efRate" inputmode="decimal" step="0.0001" value="1">
+      <div class="hint" id="efRateDateHint" style="display:none;margin-top:6px;margin-bottom:0;"></div>
     </div>
 
     <div class="hint" id="efTotalHint">סה״כ עלות: —</div>
@@ -2072,12 +2073,36 @@ function updateRateFieldVisibility(){
   if (cur === "שקל"){
     rateField.style.display = "none";
     document.getElementById('efRate').value = 1;
+    document.getElementById('efRateDateHint').style.display = "none";
   } else {
     rateField.style.display = "block";
     document.getElementById('efRate').value = rateFor(cur);
+    applyExpenseDateRate();
   }
   updateTotalHint();
 }
+
+async function applyExpenseDateRate(){
+  const currency = document.getElementById('efCurrency').value;
+  if (currency === "שקל") return;
+  const dateVal = document.getElementById('efDate').value;
+  const hint = document.getElementById('efRateDateHint');
+  if (!dateVal){ hint.style.display = "none"; return; }
+  hint.style.display = "block";
+  hint.textContent = "מחפש את שער " + currency + " ליום " + fmtDate(dateVal) + "...";
+  const rate = await fetchHistoricalRate(currency, dateVal);
+  // The date/currency may have changed again while this was in flight — only apply
+  // if the form still matches what we looked up.
+  if (document.getElementById('efCurrency').value !== currency || document.getElementById('efDate').value !== dateVal) return;
+  if (rate){
+    document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
+    updateTotalHint();
+    hint.textContent = `שער ${currency}→שקל ליום ${fmtDate(dateVal)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
+  } else {
+    hint.textContent = "לא נמצא שער היסטורי לתאריך הזה — משתמש בשער הנוכחי, ניתן לערוך ידנית";
+  }
+}
+document.getElementById('efDate').addEventListener('change', applyExpenseDateRate);
 
 function updateTotalHint(){
   const amount = parseFloat(document.getElementById('efAmount').value) || 0;
@@ -2269,6 +2294,8 @@ function openEditExpense(id){
   setCategoryUI(exp.category);
   document.getElementById('efAmount').value = exp.amount || "";
   document.getElementById('efCurrency').value = exp.currency || "שקל";
+  document.getElementById('efRateField').style.display = (exp.currency && exp.currency !== "שקל") ? "block" : "none";
+  document.getElementById('efRateDateHint').style.display = "none";
   document.getElementById('efRate').value = exp.rate || rateFor(exp.currency);
   document.getElementById('efNotes').value = exp.notes || "";
   document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
