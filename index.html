@@ -983,6 +983,22 @@ function initFirebaseIfConfigured(){
     fbAuth = firebase.auth();
     fbDb = firebase.firestore();
     setSyncStatus('', 'מתחבר...');
+    // Picks up the result when the page reloads after coming back from Google's
+    // sign-in/consent page (the redirect flow used instead of a popup, since popups
+    // are unreliable on mobile browsers). onAuthStateChanged below handles the
+    // Firebase user side; this specifically grabs the Google OAuth token Drive needs.
+    fbAuth.getRedirectResult().then(result => {
+      if (result && result.credential){
+        const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+        driveAccessToken = credential && credential.accessToken;
+        if (driveAccessToken) toast("ההתחברות הושלמה ✓");
+      }
+    }).catch(e => {
+      console.error("tripcost: redirect result error", e);
+      if (e && e.code && e.code !== 'auth/no-auth-event'){
+        toast("ההתחברות נכשלה: " + (e.message || e.code));
+      }
+    });
     fbAuth.onAuthStateChanged(user => {
       if (user){
         cloudUser = user;
@@ -1046,35 +1062,40 @@ function pushToCloudNow(){
     .catch(err => { console.error("tripcost: push failed", err); setSyncStatus('err', 'שמירה בענן נכשלה'); });
 }
 
-async function signInWithGoogle(){
+function signInWithGoogle(){
   if (!fbAuth){ toast("יש לשמור קודם את הגדרות Firebase"); return; }
-  const provider = new firebase.auth.GoogleAuthProvider();
-  const wantsExisting = document.getElementById('toggleExistingFolder').checked;
-  provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
   try{
-    const result = await fbAuth.signInWithPopup(provider);
-    const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-    driveAccessToken = credential && credential.accessToken;
-    toast("התחברת בהצלחה ✓");
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const wantsExisting = document.getElementById('toggleExistingFolder').checked;
+    provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+    // Popups are unreliable on mobile browsers (Safari/Chrome on phones block or kill
+    // them far more aggressively than desktop) — a full-page redirect is what Google
+    // itself recommends for mobile, and it works everywhere popups do too.
+    toast("מעביר להתחברות עם Google...");
+    Promise.resolve(fbAuth.signInWithRedirect(provider)).catch(e => {
+      console.error(e);
+      toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
+    });
   }catch(e){
     console.error(e);
     toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
   }
 }
 
-async function refreshDriveToken(){
-  if (!fbAuth || !fbAuth.currentUser) return null;
-  const provider = new firebase.auth.GoogleAuthProvider();
-  const wantsExisting = document.getElementById('toggleExistingFolder').checked;
-  provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+function requestDriveReauth(){
+  if (!fbAuth || !fbAuth.currentUser){ toast("יש להתחבר קודם"); return; }
   try{
-    const result = await fbAuth.currentUser.reauthenticateWithPopup(provider);
-    const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-    driveAccessToken = credential && credential.accessToken;
-    return driveAccessToken;
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const wantsExisting = document.getElementById('toggleExistingFolder').checked;
+    provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+    toast("מעביר לאישור הרשאת Drive...");
+    Promise.resolve(fbAuth.currentUser.reauthenticateWithRedirect(provider)).catch(e => {
+      console.error(e);
+      toast("הפעולה נכשלה: " + (e.message || e.code || ""));
+    });
   }catch(e){
-    console.error("tripcost: drive token refresh failed", e);
-    return null;
+    console.error(e);
+    toast("הפעולה נכשלה: " + (e.message || e.code || ""));
   }
 }
 
@@ -1181,11 +1202,7 @@ document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () =>
 });
 
 document.getElementById('btnGoogleSignIn').addEventListener('click', signInWithGoogle);
-document.getElementById('btnRefreshDriveAuth').addEventListener('click', async () => {
-  toast("פותח חלון הרשאה של Google...");
-  const token = await refreshDriveToken();
-  toast(token ? "ההרשאה ל-Drive עודכנה ✓" : "ההרשאה לא התקבלה — נסו שוב");
-});
+document.getElementById('btnRefreshDriveAuth').addEventListener('click', requestDriveReauth);
 document.getElementById('btnSignOut').addEventListener('click', () => {
   if (!confirm("להתנתק מהסנכרון? הנתונים המקומיים במכשיר הזה יישארו.")) return;
   signOutCloud();
@@ -1193,13 +1210,10 @@ document.getElementById('btnSignOut').addEventListener('click', () => {
 document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
   document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
   // Drive scope is chosen at sign-in time — flipping this after already being signed in
-  // means the cached token still only has the old (narrower) scope. Force a fresh
-  // consent grant right away so uploads to an existing folder don't silently fail.
+  // means the cached token still only has the old (narrower) scope. Send them to grant
+  // the broader one right away so uploads to an existing folder don't silently fail.
   if (e.target.checked && cloudUser){
-    toast("נדרשת הרשאה נוספת לתיקייה קיימת — מתחבר מחדש...");
-    refreshDriveToken().then(token => {
-      toast(token ? "ההרשאה עודכנה ✓" : "ההרשאה לא התקבלה — נסה שוב");
-    });
+    requestDriveReauth();
   }
 });
 document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
