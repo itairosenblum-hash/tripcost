@@ -168,6 +168,17 @@
   .perf::before{right:-11px;}
   .perf::after{left:-11px;}
   .pass-bottom{padding:14px 20px 18px;display:flex;gap:8px;flex-wrap:wrap;}
+
+  /* ---- Category donut chart ---- */
+  .donut-wrap{position:relative;display:flex;justify-content:center;margin-bottom:16px;}
+  .donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;}
+  .donut-center-total{font-weight:800;font-size:16px;color:var(--ink);}
+  .donut-center-label{font-size:10.5px;color:var(--ink-soft);}
+  .donut-legend{display:flex;flex-direction:column;gap:9px;}
+  .donut-legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+  .donut-legend-dot{width:10px;height:10px;border-radius:50%;flex:none;}
+  .donut-legend-label{flex:1;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .donut-legend-val{color:var(--ink-soft);font-weight:700;white-space:nowrap;}
   .chip-stat{
     background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);
     padding:6px 12px;font-size:12.5px;font-weight:700;display:flex;gap:5px;align-items:center;
@@ -317,6 +328,14 @@
   }
   .field textarea{resize:vertical;min-height:52px;}
   .seg{display:flex;background:var(--card-2);border-radius:var(--radius-sm);padding:3px;gap:3px;}
+  .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .cat-chip{
+    display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);
+    cursor:pointer;font-size:11.5px;font-weight:700;color:var(--ink-soft);text-align:center;
+  }
+  .cat-chip .em{font-size:18px;}
+  .cat-chip.active{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
   .seg button{
     flex:1;border:none;background:transparent;padding:9px 4px;border-radius:8px;font-size:13.5px;
     font-weight:700;color:var(--ink-soft);cursor:pointer;
@@ -444,6 +463,8 @@
       <section id="summarySection"></section>
 
       <section id="cashSection"></section>
+
+      <section id="categorySection"></section>
     </div>
 
     <div id="mainCol">
@@ -607,6 +628,11 @@
     </div>
 
     <div class="field">
+      <label>קטגוריה</label>
+      <div class="cat-grid" id="efCategoryGrid"></div>
+    </div>
+
+    <div class="field">
       <label>תאריך</label>
       <input type="date" id="efDate">
     </div>
@@ -756,6 +782,15 @@
 const STORAGE_KEY = "tripcost.v1";
 const CURRENCIES = ["שקל","דולר","יורו"];
 const CUR_SYMBOL = {"שקל":"₪","דולר":"$","יורו":"€"};
+const CATEGORIES = ["טיסה","מלונות","ביטוח","תחבורה","מזון","בגדים","מתנות ומזכרות","אטרקציות","שונות"];
+const CATEGORY_ICON = {
+  "טיסה":"✈️", "מלונות":"🏨", "ביטוח":"🛡️", "תחבורה":"🚕", "מזון":"🍽️",
+  "בגדים":"👕", "מתנות ומזכרות":"🎁", "אטרקציות":"🎡", "שונות":"🧾"
+};
+const CATEGORY_COLOR = {
+  "טיסה":"#2F6F6B", "מלונות":"#D9A441", "ביטוח":"#7A6FB0", "תחבורה":"#3D7A52",
+  "מזון":"#B5533C", "בגדים":"#4C8FA3", "מתנות ומזכרות":"#C77DA0", "אטרקציות":"#C98A2E", "שונות":"#8A8578"
+};
 const CUR_FLAG = {"שקל":"₪","דולר":"$","יורו":"€"};
 
 function uid(){
@@ -1027,11 +1062,21 @@ function initFirebaseIfConfigured(){
     // sign-in/consent page (the redirect flow used instead of a popup, since popups
     // are unreliable on mobile browsers). onAuthStateChanged below handles the
     // Firebase user side; this specifically grabs the Google OAuth token Drive needs.
+    const wasPending = sessionStorage.getItem('tripcost.pendingDriveAuth') === '1';
+    sessionStorage.removeItem('tripcost.pendingDriveAuth');
     fbAuth.getRedirectResult().then(result => {
       if (result && result.credential){
         const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
         driveAccessToken = credential && credential.accessToken;
         if (driveAccessToken) toast("ההתחברות הושלמה ✓");
+      } else if (wasPending){
+        // We know for certain a redirect to Google was just attempted (we set the
+        // marker ourselves right before navigating away), yet nothing came back —
+        // this is the "silent failure" case, most often caused by the browser
+        // blocking the storage Firebase needs to correlate the return trip (common
+        // in Safari's cross-site tracking protection, or inside an installed
+        // home-screen PWA that isolates storage from the regular browser).
+        toast("ההתחברות לא הושלמה — ייתכן שהדפדפן חוסם את זה. נסו מ-Safari/Chrome רגיל (לא מהאפליקציה שהותקנה למסך הבית)");
       }
     }).catch(e => {
       console.error("tripcost: redirect result error", e);
@@ -1113,7 +1158,9 @@ function signInWithGoogle(){
     // them far more aggressively than desktop) — a full-page redirect is what Google
     // itself recommends for mobile, and it works everywhere popups do too.
     toast("מעביר להתחברות עם Google...");
+    sessionStorage.setItem('tripcost.pendingDriveAuth', '1');
     Promise.resolve(fbAuth.signInWithRedirect(provider)).catch(e => {
+      sessionStorage.removeItem('tripcost.pendingDriveAuth');
       console.error(e);
       toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
     });
@@ -1130,7 +1177,9 @@ function requestDriveReauth(){
     const wantsExisting = document.getElementById('toggleExistingFolder').checked;
     provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
     toast("מעביר לאישור הרשאת Drive...");
+    sessionStorage.setItem('tripcost.pendingDriveAuth', '1');
     Promise.resolve(fbAuth.currentUser.reauthenticateWithRedirect(provider)).catch(e => {
+      sessionStorage.removeItem('tripcost.pendingDriveAuth');
       console.error(e);
       toast("הפעולה נכשלה: " + (e.message || e.code || ""));
     });
@@ -1493,6 +1542,72 @@ function renderCash(){
   document.getElementById('btnEditCash').addEventListener('click', () => openEditTripForm(trip.id));
 }
 
+/* ========================= Rendering: Category donut chart ========================= */
+function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color){
+  if (endDeg - startDeg >= 359.99){
+    return `<circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="${color}" />`;
+  }
+  const toRad = d => (d - 90) * Math.PI / 180;
+  const p = (r, deg) => ({ x: cx + r*Math.cos(toRad(deg)), y: cy + r*Math.sin(toRad(deg)) });
+  const large = (endDeg - startDeg) > 180 ? 1 : 0;
+  const p1 = p(rOuter, startDeg), p2 = p(rOuter, endDeg);
+  const p3 = p(rInner, endDeg), p4 = p(rInner, startDeg);
+  const d = [
+    `M ${p1.x} ${p1.y}`,
+    `A ${rOuter} ${rOuter} 0 ${large} 1 ${p2.x} ${p2.y}`,
+    `L ${p3.x} ${p3.y}`,
+    `A ${rInner} ${rInner} 0 ${large} 0 ${p4.x} ${p4.y}`,
+    "Z"
+  ].join(" ");
+  return `<path d="${d}" fill="${color}" />`;
+}
+
+function renderCategoryChart(){
+  const trip = activeTrip();
+  const section = document.getElementById('categorySection');
+  if (!trip || trip.expenses.length === 0){ section.innerHTML = ""; return; }
+
+  const byCat = {};
+  CATEGORIES.forEach(c => byCat[c] = 0);
+  trip.expenses.forEach(e => { byCat[expCategory(e)] += expenseTotalILS(e); });
+  const total = Object.values(byCat).reduce((s,v) => s+v, 0);
+  const entries = CATEGORIES.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+
+  if (total <= 0 || entries.length === 0){ section.innerHTML = ""; return; }
+
+  const cx = 100, cy = 100, rOuter = 90, rInner = 55;
+  let cumulative = 0;
+  const paths = entries.map(([cat, val]) => {
+    const startAngle = (cumulative / total) * 360;
+    cumulative += val;
+    const endAngle = (cumulative / total) * 360;
+    return donutSlicePath(cx, cy, rOuter, rInner, startAngle, endAngle, CATEGORY_COLOR[cat]);
+  }).join("");
+
+  const legend = entries.map(([cat, val]) => {
+    const pct = Math.round((val/total) * 100);
+    return `<div class="donut-legend-row">
+      <span class="donut-legend-dot" style="background:${CATEGORY_COLOR[cat]};"></span>
+      <span class="donut-legend-label">${CATEGORY_ICON[cat]} ${escapeHtml(cat)}</span>
+      <span class="donut-legend-val tnum">₪${fmtMoney(val)} · ${pct}%</span>
+    </div>`;
+  }).join("");
+
+  section.innerHTML = `
+    <div class="section-title">פילוח הוצאות</div>
+    <div class="card">
+      <div class="donut-wrap">
+        <svg viewBox="0 0 200 200" width="170" height="170">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
+        <div class="donut-center">
+          <div class="donut-center-total tnum">₪${fmtMoney(total)}</div>
+          <div class="donut-center-label">סה״כ</div>
+        </div>
+      </div>
+      <div class="donut-legend">${legend}</div>
+    </div>
+  `;
+}
+
 /* ========================= Rendering: Rates ========================= */
 function renderRates(){
   const card = document.getElementById('ratesCard');
@@ -1514,6 +1629,8 @@ function renderRates(){
         עדכן שערים
       </button>
     </div>
+    <button class="mini-btn" id="btnToggleRateHistory" style="width:100%;margin-top:10px;">📈 היסטוריית שנה אחרונה</button>
+    <div id="rateHistoryWrap" style="display:none;"></div>
   `;
   document.getElementById('rateUSD').addEventListener('change', (e)=>{
     state.rates["דולר"] = parseFloat(e.target.value) || 1;
@@ -1524,6 +1641,100 @@ function renderRates(){
     saveState();
   });
   document.getElementById('btnRefreshRates').addEventListener('click', () => refreshRatesFromWeb());
+  document.getElementById('btnToggleRateHistory').addEventListener('click', toggleRateHistory);
+}
+
+/* ---- Rate history (past year), fetched from the ECB-backed Frankfurter API and
+   cached for a day at a time so opening this repeatedly doesn't refetch each time. ---- */
+const RATE_HISTORY_KEY = "tripcost.rateHistory";
+function loadRateHistoryCache(){
+  try{
+    const raw = localStorage.getItem(RATE_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }catch(e){ return {}; }
+}
+function saveRateHistoryCache(obj){
+  try{ localStorage.setItem(RATE_HISTORY_KEY, JSON.stringify(obj)); }catch(e){}
+}
+let rateHistoryCache = loadRateHistoryCache();
+
+async function fetchYearHistory(base){
+  const today = new Date();
+  const start = new Date(today);
+  start.setFullYear(start.getFullYear() - 1);
+  const iso = d => d.toISOString().slice(0,10);
+  const url = `https://api.frankfurter.dev/v1/${iso(start)}..${iso(today)}?from=${base}&to=ILS`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("history fetch failed");
+  const json = await res.json();
+  return Object.entries(json.rates || {})
+    .map(([date, v]) => ({ date, rate: v.ILS }))
+    .filter(p => typeof p.rate === "number")
+    .sort((a,b) => a.date.localeCompare(b.date));
+}
+
+async function ensureRateHistory(currency){
+  const key = currency === "דולר" ? "USD" : "EUR";
+  const cached = rateHistoryCache[key];
+  const oneDay = 24 * 60 * 60 * 1000;
+  if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < oneDay && cached.points && cached.points.length){
+    return cached.points;
+  }
+  const points = await fetchYearHistory(key);
+  rateHistoryCache[key] = { points, fetchedAt: Date.now() };
+  saveRateHistoryCache(rateHistoryCache);
+  return points;
+}
+
+function sparklineSVG(points, color){
+  if (!points || points.length < 2) return "";
+  const w = 280, h = 56, pad = 4;
+  const values = points.map(p => p.rate);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const stepX = (w - pad*2) / (points.length - 1);
+  const coords = points.map((p,i) => {
+    const x = pad + i*stepX;
+    const y = pad + (h - pad*2) * (1 - (p.rate - min)/range);
+    return `${x},${y}`;
+  }).join(" ");
+  const lastIdx = points.length - 1;
+  const lastX = pad + lastIdx*stepX;
+  const lastY = pad + (h - pad*2) * (1 - (values[lastIdx] - min)/range);
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+    <polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+    <circle cx="${lastX}" cy="${lastY}" r="3.5" fill="${color}" />
+  </svg>`;
+}
+
+function renderHistoryBlock(name, symbol, points, color){
+  if (!points || points.length < 2){
+    return `<div class="hint" style="margin-top:10px;">אין נתוני היסטוריה זמינים ל${escapeHtml(name)} כרגע</div>`;
+  }
+  const values = points.map(p => p.rate);
+  const min = Math.min(...values), max = Math.max(...values), cur = values[values.length-1];
+  return `
+    <div style="margin-top:12px;">
+      <div class="row" style="margin-bottom:4px;">
+        <div style="font-weight:700;font-size:12.5px;">${symbol} ${escapeHtml(name)} · שנה אחרונה</div>
+      </div>
+      ${sparklineSVG(points, color)}
+      <div class="tnum" style="font-size:11px;color:var(--ink-soft);margin-top:2px;">שפל ${min.toFixed(3)} · שיא ${max.toFixed(3)} · כעת ${cur.toFixed(3)}</div>
+    </div>`;
+}
+
+async function toggleRateHistory(){
+  const wrap = document.getElementById('rateHistoryWrap');
+  if (wrap.style.display === 'block'){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = '<div class="hint" style="margin-top:10px;">טוען היסטוריה...</div>';
+  try{
+    const [usdPts, eurPts] = await Promise.all([ensureRateHistory('דולר'), ensureRateHistory('יורו')]);
+    wrap.innerHTML = renderHistoryBlock('דולר', '$', usdPts, '#2F6F6B') + renderHistoryBlock('יורו', '€', eurPts, '#D9A441');
+  }catch(e){
+    console.error("tripcost: rate history failed", e);
+    wrap.innerHTML = '<div class="hint" style="margin-top:10px;">לא הצלחתי לטעון היסטוריה כרגע — נסו שוב מאוחר יותר</div>';
+  }
 }
 
 async function refreshRatesFromWeb(silent){
@@ -1609,11 +1820,12 @@ function renderExpenses(){
   list.innerHTML = items.map(exp => {
     const totalIls = expenseTotalILS(exp);
     const showOrig = exp.currency !== "שקל";
+    const cat = expCategory(exp);
     return `
     <div class="exp-card" data-id="${exp.id}">
       <div class="exp-top">
         <div>
-          <div class="exp-item">${escapeHtml(exp.item || "הוצאה")}</div>
+          <div class="exp-item"><span title="${escapeHtml(cat)}">${CATEGORY_ICON[cat]}</span> ${escapeHtml(exp.item || "הוצאה")}</div>
           <div class="exp-date">${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
         </div>
         <div class="exp-amt">
@@ -1622,6 +1834,7 @@ function renderExpenses(){
         </div>
       </div>
       <div class="exp-tags">
+        <span class="tag">${escapeHtml(cat)}</span>
         <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
         <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
         <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
@@ -1673,6 +1886,7 @@ function renderAll(){
   renderTripInfoStrip();
   renderSummary();
   renderCash();
+  renderCategoryChart();
   renderRates();
   renderExpenses();
 }
@@ -1976,6 +2190,32 @@ document.getElementById('efPaymentSeg').querySelectorAll('button').forEach(btn =
   });
 });
 
+/* -- category chip grid -- */
+(function initCategoryGrid(){
+  const grid = document.getElementById('efCategoryGrid');
+  grid.innerHTML = CATEGORIES.map(c =>
+    `<button type="button" class="cat-chip" data-val="${escapeHtml(c)}"><span class="em">${CATEGORY_ICON[c]}</span>${escapeHtml(c)}</button>`
+  ).join("");
+  grid.querySelectorAll('.cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      grid.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+})();
+function setCategoryUI(value){
+  const grid = document.getElementById('efCategoryGrid');
+  const target = CATEGORIES.includes(value) ? value : "שונות";
+  grid.querySelectorAll('.cat-chip').forEach(b => b.classList.toggle('active', b.dataset.val === target));
+}
+function getCategoryValue(){
+  const active = document.getElementById('efCategoryGrid').querySelector('.cat-chip.active');
+  return active ? active.dataset.val : "שונות";
+}
+function expCategory(exp){
+  return (exp && CATEGORIES.includes(exp.category)) ? exp.category : "שונות";
+}
+
 function updateDriveWarning(){
   const el = document.getElementById('efDriveWarning');
   // Only worth flagging when they're actually signed in but this session's Drive
@@ -1998,6 +2238,7 @@ function openNewExpense(){
   document.getElementById('efItem').value = "";
   document.getElementById('efDate').value = todayISO();
   setPaymentUI("אשראי");
+  setCategoryUI("שונות");
   document.getElementById('efAmount').value = "";
   document.getElementById('efCurrency').value = "שקל";
   document.getElementById('efNotes').value = "";
@@ -2025,6 +2266,7 @@ function openEditExpense(id){
   document.getElementById('efItem').value = exp.item || "";
   document.getElementById('efDate').value = exp.date || todayISO();
   setPaymentUI(exp.paymentMethod || "אשראי");
+  setCategoryUI(exp.category);
   document.getElementById('efAmount').value = exp.amount || "";
   document.getElementById('efCurrency').value = exp.currency || "שקל";
   document.getElementById('efRate').value = exp.rate || rateFor(exp.currency);
@@ -2093,6 +2335,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     date: document.getElementById('efDate').value,
     split: (existing && existing.split) || 1,
     paymentMethod: getPaymentValue(),
+    category: getCategoryValue(),
     amount: parseFloat(document.getElementById('efAmount').value) || 0,
     currency: currency,
     rate: currency === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1),
