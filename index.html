@@ -108,10 +108,17 @@
 
   .trip-tabs{display:flex;gap:8px;overflow-x:auto;padding:14px 2px 4px;margin:0 -2px;scrollbar-width:none;}
   .trip-tabs::-webkit-scrollbar{display:none;}
-  #syncStatusLine{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);margin-top:8px;cursor:pointer;}
+  #syncStatusLine{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
+    color:var(--teal-dark);margin-top:10px;cursor:pointer;
+    background:var(--teal-tint);border:1px solid transparent;border-radius:var(--radius-pill);
+    padding:6px 12px;width:fit-content;
+  }
+  #syncStatusLine:active{transform:scale(.97);}
   #syncStatusLine .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-soft);flex:none;}
   #syncStatusLine.on .dot{background:var(--good);}
   #syncStatusLine.syncing .dot{background:var(--amber);animation:pulse 1s ease-in-out infinite;}
+  #syncStatusLine.err{background:var(--danger-tint);color:var(--danger);}
   #syncStatusLine.err .dot{background:var(--danger);}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
   .sync-provider-row{display:flex;align-items:center;gap:10px;padding:12px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;}
@@ -985,7 +992,7 @@ function initFirebaseIfConfigured(){
         cloudUser = null;
         driveAccessToken = null;
         if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
-        setSyncStatus('off', 'לא מחובר לסנכרון');
+        setSyncStatus('off', 'לחצו כאן להתחברות לסנכרון');
       }
       renderSyncOverlay();
     });
