@@ -1637,9 +1637,8 @@ function openEditTripForm(id){
   document.getElementById('tfDepart').value = t.departDateTime || "";
   document.getElementById('tfReturn').value = t.returnDateTime || "";
   document.getElementById('tfFinished').checked = !!t.finished;
-  const canDelete = state.trips.length > 1;
-  document.getElementById('btnDeleteTrip').style.display = canDelete ? "block" : "none";
-  document.getElementById('deleteTripDivider').style.display = canDelete ? "block" : "none";
+  document.getElementById('btnDeleteTrip').style.display = "block";
+  document.getElementById('deleteTripDivider').style.display = "block";
   showOverlay('overlayTripForm');
 }
 
@@ -1687,8 +1686,19 @@ document.getElementById('btnDeleteTrip').addEventListener('click', () => {
   const removedTrip = state.trips.find(t => t.id === editingTripId);
   if (removedTrip) removedTrip.expenses.forEach(deleteAttachmentsOf);
   state.trips = state.trips.filter(t => t.id !== editingTripId);
-  if (state.activeTripId === editingTripId){
-    state.activeTripId = state.trips[0] ? state.trips[0].id : null;
+  if (state.trips.length === 0){
+    // Never leave the app with zero trips — that's a confusing blank screen with
+    // nothing to tap. Give it a fresh, empty one to land on instead.
+    const fresh = {
+      id: uid(), name: "טיול חדש", startDate: "", endDate: "",
+      cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 }, finished: false,
+      flightOut: "", flightReturn: "", bookingRef: "", departDateTime: "", returnDateTime: "",
+      expenses: []
+    };
+    state.trips.push(fresh);
+    state.activeTripId = fresh.id;
+  } else if (state.activeTripId === editingTripId){
+    state.activeTripId = state.trips[0].id;
   }
   saveState();
   closeOverlay('overlayTripForm');
