@@ -535,25 +535,6 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>מזומן שהבאתי לטיול</label>
-      <div class="grid3">
-        <div>
-          <label style="font-weight:400;">שקל ₪</label>
-          <input type="number" id="tfCashILS" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-        <div>
-          <label style="font-weight:400;">דולר $</label>
-          <input type="number" id="tfCashUSD" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-        <div>
-          <label style="font-weight:400;">יורו €</label>
-          <input type="number" id="tfCashEUR" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-      </div>
-      <div class="hint" style="margin-top:8px;">נחשב לכם כמה מזומן אמור להישאר, לפי ההוצאות שסומנו כ״מזומן״.</div>
-    </div>
-
     <div class="divider"></div>
 
     <div class="grid2">
@@ -609,6 +590,36 @@
     <button class="btn-ghost" style="width:100%;display:none;" id="btnExportXlsx">📤 ייצוא הטיול לאקסל</button>
     <div class="divider" id="deleteTripDivider" style="display:none;"></div>
     <button class="btn-ghost btn-danger-outline" style="width:100%;display:none;" id="btnDeleteTrip">מחיקת הטיול הזה</button>
+  </div>
+</div>
+
+<!-- Cash sheet — independent of trip editing, reached directly from the cash card -->
+<div class="overlay" id="overlayCash">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>מזומן לטיול</h2>
+    <div class="field">
+      <label>מזומן שהבאתי לטיול</label>
+      <div class="grid3">
+        <div>
+          <label style="font-weight:400;">שקל ₪</label>
+          <input type="number" id="cashILS" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div>
+          <label style="font-weight:400;">דולר $</label>
+          <input type="number" id="cashUSD" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div>
+          <label style="font-weight:400;">יורו €</label>
+          <input type="number" id="cashEUR" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">נחשב לכם כמה מזומן אמור להישאר, לפי ההוצאות שסומנו כ״מזומן״.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-primary" id="btnSaveCash">שמירה</button>
+      <button class="btn-ghost" id="btnCancelCash">ביטול</button>
+    </div>
   </div>
 </div>
 
@@ -1531,7 +1542,7 @@ function renderCash(){
           <button class="mini-btn" id="btnSetCashQuick">הגדרת מזומן</button>
         </div>
       </div>`;
-    document.getElementById('btnSetCashQuick').addEventListener('click', () => openEditTripForm(trip.id));
+    document.getElementById('btnSetCashQuick').addEventListener('click', openCashSheet);
     return;
   }
 
@@ -1558,8 +1569,34 @@ function renderCash(){
     </div>
     <div class="card">${rows}</div>
   `;
-  document.getElementById('btnEditCash').addEventListener('click', () => openEditTripForm(trip.id));
+  document.getElementById('btnEditCash').addEventListener('click', openCashSheet);
 }
+
+/* ---- Cash sheet — independent of trip editing ---- */
+function openCashSheet(){
+  const trip = activeTrip();
+  if (!trip) return;
+  const cash = trip.cashInitial || {};
+  document.getElementById('cashILS').value = cash["שקל"] || "";
+  document.getElementById('cashUSD').value = cash["דולר"] || "";
+  document.getElementById('cashEUR').value = cash["יורו"] || "";
+  showOverlay('overlayCash');
+}
+document.getElementById('btnSaveCash').addEventListener('click', () => {
+  const trip = activeTrip();
+  if (!trip) return;
+  trip.cashInitial = {
+    "שקל": parseFloat(document.getElementById('cashILS').value) || 0,
+    "דולר": parseFloat(document.getElementById('cashUSD').value) || 0,
+    "יורו": parseFloat(document.getElementById('cashEUR').value) || 0
+  };
+  saveState();
+  closeOverlay('overlayCash');
+  renderAll();
+  toast("המזומן עודכן ✓");
+});
+document.getElementById('btnCancelCash').addEventListener('click', () => closeOverlay('overlayCash'));
+document.getElementById('overlayCash').addEventListener('click', (e) => { if (e.target.id === 'overlayCash') closeOverlay('overlayCash'); });
 
 /* ========================= Rendering: Category donut chart ========================= */
 function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color, cat){
@@ -1965,9 +2002,6 @@ function openNewTripForm(){
   document.getElementById('tfName').value = "";
   document.getElementById('tfStart').value = "";
   document.getElementById('tfEnd').value = "";
-  document.getElementById('tfCashILS').value = "";
-  document.getElementById('tfCashUSD').value = "";
-  document.getElementById('tfCashEUR').value = "";
   document.getElementById('tfFlightOut').value = "";
   document.getElementById('tfFlightReturn').value = "";
   document.getElementById('tfBooking').value = "";
@@ -1987,14 +2021,10 @@ function openEditTripForm(id){
   const t = state.trips.find(x => x.id === id);
   if (!t) return;
   editingTripId = id;
-  const cash = t.cashInitial || {};
   document.getElementById('tripFormTitle').textContent = "עריכת טיול";
   document.getElementById('tfName').value = t.name || "";
   document.getElementById('tfStart').value = t.startDate || "";
   document.getElementById('tfEnd').value = t.endDate || "";
-  document.getElementById('tfCashILS').value = cash["שקל"] || "";
-  document.getElementById('tfCashUSD').value = cash["דולר"] || "";
-  document.getElementById('tfCashEUR').value = cash["יורו"] || "";
   document.getElementById('tfFlightOut').value = t.flightOut || "";
   document.getElementById('tfFlightReturn').value = t.flightReturn || "";
   document.getElementById('tfBooking').value = t.bookingRef || "";
@@ -2017,11 +2047,6 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const name = document.getElementById('tfName').value.trim() || "טיול ללא שם";
   const start = document.getElementById('tfStart').value;
   const end = document.getElementById('tfEnd').value;
-  const cashInitial = {
-    "שקל": parseFloat(document.getElementById('tfCashILS').value) || 0,
-    "דולר": parseFloat(document.getElementById('tfCashUSD').value) || 0,
-    "יורו": parseFloat(document.getElementById('tfCashEUR').value) || 0
-  };
   const flightOut = document.getElementById('tfFlightOut').value.trim();
   const flightReturn = document.getElementById('tfFlightReturn').value.trim();
   const bookingRef = document.getElementById('tfBooking').value.trim();
@@ -2031,14 +2056,17 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   if (editingTripId){
     const t = state.trips.find(x => x.id === editingTripId);
     if (t){
-      t.name = name; t.startDate = start; t.endDate = end; t.cashInitial = cashInitial;
+      // Cash is edited entirely through its own dedicated sheet now — this form
+      // never touches t.cashInitial, so whatever's already there is left alone.
+      t.name = name; t.startDate = start; t.endDate = end;
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
       t.finished = finished;
     }
   } else {
     const t = {
-      id: uid(), name, startDate: start, endDate: end, cashInitial: cashInitial,
+      id: uid(), name, startDate: start, endDate: end,
+      cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
       flightOut, flightReturn, bookingRef, departDateTime, returnDateTime, finished,
       expenses: []
     };
