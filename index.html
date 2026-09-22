@@ -880,10 +880,22 @@ function migrateTrip(t){
   return t;
 }
 
+// If a Drive folder ID was already entered before the "use existing folder" toggle's
+// state started persisting (it used to silently reset on every reload), treat that as
+// meaning "yes, use it" rather than making the user re-flip a switch that looked like
+// it was already on.
+function migrateGlobalState(s){
+  if (typeof s.useExistingDriveFolder !== "boolean" && s.driveFolderId){
+    s.useExistingDriveFolder = true;
+  }
+  return s;
+}
+
 let state = loadState();
 
 // Migrate trips saved before cash-tracking / finished-flag / flight-info existed.
 state.trips.forEach(migrateTrip);
+migrateGlobalState(state);
 
 function saveState(){
   try{
@@ -1034,6 +1046,7 @@ function startCloudListener(uid){
     try{
       state = JSON.parse(remote.payload);
       state.trips.forEach(migrateTrip);
+      migrateGlobalState(state);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAll();
       setSyncStatus('on', 'מעודכן מהענן ✓');
@@ -1100,7 +1113,7 @@ function requestDriveReauth(){
 }
 
 async function ensureDriveFolderId(){
-  if (state.driveFolderId) return state.driveFolderId;
+  if (state.autoDriveFolderId) return state.autoDriveFolderId;
   if (!driveAccessToken) throw new Error("no drive token");
   const q = encodeURIComponent(`name='${DEFAULT_DRIVE_FOLDER_NAME.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
@@ -1117,15 +1130,19 @@ async function ensureDriveFolderId(){
     const createJson = await createRes.json();
     id = createJson.id;
   }
-  state.driveFolderId = id;
+  state.autoDriveFolderId = id;
   saveState();
   return id;
 }
 
 async function uploadFileToDrive(file){
   if (!cloudUser) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
-  const useExisting = document.getElementById('toggleExistingFolder').checked;
-  const explicitFolder = document.getElementById('driveFolderIdInput').value.trim();
+  // Read the "use existing folder" choice from persisted state, not the checkbox's live
+  // DOM value — the checkbox itself doesn't survive a page reload (and a reload now
+  // happens on every sign-in, since that's a redirect), so relying on it silently sent
+  // uploads to the auto-created default folder instead of the one actually configured.
+  const useExisting = !!state.useExistingDriveFolder;
+  const explicitFolder = (state.driveFolderId || "").trim();
   // Deliberately never pops up a sign-in/consent window from here: this runs deep inside
   // an async save flow, well past the moment of the user's tap, so browsers block a popup
   // triggered here anyway (that's exactly what produced the old "no permission" error).
@@ -1181,6 +1198,8 @@ function renderSyncOverlay(){
     document.getElementById('syncUserEmail').textContent = cloudUser.email || "";
     document.getElementById('syncStatusDetail').textContent = "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
   }
+  document.getElementById('toggleExistingFolder').checked = !!state.useExistingDriveFolder;
+  document.getElementById('folderIdField').style.display = state.useExistingDriveFolder ? "block" : "none";
   document.getElementById('driveFolderIdInput').value = state.driveFolderId || "";
 }
 
@@ -1209,6 +1228,8 @@ document.getElementById('btnSignOut').addEventListener('click', () => {
 });
 document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
   document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
+  state.useExistingDriveFolder = e.target.checked;
+  saveState();
   // Drive scope is chosen at sign-in time — flipping this after already being signed in
   // means the cached token still only has the old (narrower) scope. Send them to grant
   // the broader one right away so uploads to an existing folder don't silently fail.
@@ -1217,10 +1238,8 @@ document.getElementById('toggleExistingFolder').addEventListener('change', (e) =
   }
 });
 document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
-  if (document.getElementById('toggleExistingFolder').checked){
-    state.driveFolderId = e.target.value.trim();
-    saveState();
-  }
+  state.driveFolderId = e.target.value.trim();
+  saveState();
 });
 document.getElementById('overlaySync').addEventListener('click', (e) => { if (e.target.id === 'overlaySync') closeOverlay('overlaySync'); });
 
