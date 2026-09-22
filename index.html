@@ -883,14 +883,39 @@ function migrateTrip(t){
   return t;
 }
 
-// If a Drive folder ID was already entered before the "use existing folder" toggle's
-// state started persisting (it used to silently reset on every reload), treat that as
-// meaning "yes, use it" rather than making the user re-flip a switch that looked like
-// it was already on.
+// These two live in their OWN localStorage entry, deliberately outside the state
+// object that syncs through Firestore. Turning the "use existing folder" toggle on
+// triggers a redirect to Google (needed to grant the broader Drive scope) — a full
+// page reload — and the cloud push of a state change is debounced by ~900ms, so it
+// never gets a chance to fire before the redirect navigates away. If this setting
+// lived in the synced state, the page would come back, reconnect to Firestore, and
+// the still-stale cloud copy would silently overwrite the change back to "off". Since
+// it's genuinely which-device-dependent anyway (not trip data), keeping it local-only
+// sidesteps that race entirely rather than trying to win a timing battle against it.
+const DRIVE_SETTINGS_KEY = "tripcost.driveSettings";
+function loadDriveSettings(){
+  try{
+    const raw = localStorage.getItem(DRIVE_SETTINGS_KEY);
+    if (raw) return Object.assign({ useExistingDriveFolder:false, driveFolderId:"" }, JSON.parse(raw));
+  }catch(e){ /* fall through to default */ }
+  return { useExistingDriveFolder:false, driveFolderId:"" };
+}
+function saveDriveSettings(s){
+  try{ localStorage.setItem(DRIVE_SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
+}
+let driveSettings = loadDriveSettings();
+
+// If a Drive folder ID was entered back when this setting still (incorrectly) lived in
+// the synced state, or before the toggle's own state started persisting at all, treat
+// that as meaning "yes, use it" — a one-time carry-over so nothing has to be re-entered.
 function migrateGlobalState(s){
-  if (typeof s.useExistingDriveFolder !== "boolean" && s.driveFolderId){
-    s.useExistingDriveFolder = true;
+  if (!driveSettings.driveFolderId && s.driveFolderId){
+    driveSettings.driveFolderId = s.driveFolderId;
+    driveSettings.useExistingDriveFolder = true;
+    saveDriveSettings(driveSettings);
   }
+  delete s.useExistingDriveFolder;
+  delete s.driveFolderId;
   return s;
 }
 
@@ -1144,8 +1169,8 @@ async function uploadFileToDrive(file){
   // DOM value — the checkbox itself doesn't survive a page reload (and a reload now
   // happens on every sign-in, since that's a redirect), so relying on it silently sent
   // uploads to the auto-created default folder instead of the one actually configured.
-  const useExisting = !!state.useExistingDriveFolder;
-  const explicitFolder = (state.driveFolderId || "").trim();
+  const useExisting = !!driveSettings.useExistingDriveFolder;
+  const explicitFolder = (driveSettings.driveFolderId || "").trim();
   // Deliberately never pops up a sign-in/consent window from here: this runs deep inside
   // an async save flow, well past the moment of the user's tap, so browsers block a popup
   // triggered here anyway (that's exactly what produced the old "no permission" error).
@@ -1201,9 +1226,9 @@ function renderSyncOverlay(){
     document.getElementById('syncUserEmail').textContent = cloudUser.email || "";
     document.getElementById('syncStatusDetail').textContent = "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
   }
-  document.getElementById('toggleExistingFolder').checked = !!state.useExistingDriveFolder;
-  document.getElementById('folderIdField').style.display = state.useExistingDriveFolder ? "block" : "none";
-  document.getElementById('driveFolderIdInput').value = state.driveFolderId || "";
+  document.getElementById('toggleExistingFolder').checked = !!driveSettings.useExistingDriveFolder;
+  document.getElementById('folderIdField').style.display = driveSettings.useExistingDriveFolder ? "block" : "none";
+  document.getElementById('driveFolderIdInput').value = driveSettings.driveFolderId || "";
 }
 
 document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
@@ -1231,8 +1256,8 @@ document.getElementById('btnSignOut').addEventListener('click', () => {
 });
 document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
   document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
-  state.useExistingDriveFolder = e.target.checked;
-  saveState();
+  driveSettings.useExistingDriveFolder = e.target.checked;
+  saveDriveSettings(driveSettings);
   // Drive scope is chosen at sign-in time — flipping this after already being signed in
   // means the cached token still only has the old (narrower) scope. Send them to grant
   // the broader one right away so uploads to an existing folder don't silently fail.
@@ -1241,8 +1266,8 @@ document.getElementById('toggleExistingFolder').addEventListener('change', (e) =
   }
 });
 document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
-  state.driveFolderId = e.target.value.trim();
-  saveState();
+  driveSettings.driveFolderId = e.target.value.trim();
+  saveDriveSettings(driveSettings);
 });
 document.getElementById('overlaySync').addEventListener('click', (e) => { if (e.target.id === 'overlaySync') closeOverlay('overlaySync'); });
 
