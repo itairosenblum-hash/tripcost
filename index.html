@@ -437,11 +437,6 @@
       <section id="summarySection"></section>
 
       <section id="cashSection"></section>
-
-      <section id="ratesSection">
-        <div class="section-title">שערי מטבע</div>
-        <div class="card" id="ratesCard"></div>
-      </section>
     </div>
 
     <div id="mainCol">
@@ -494,7 +489,12 @@
     <h2>הטיולים שלי</h2>
     <div id="tripListWrap"></div>
     <button class="btn-primary" style="margin-top:16px;" id="btnNewTrip">+ טיול חדש</button>
-    <button class="btn-ghost" style="width:100%;margin-top:10px;" id="btnCloseTrips">סגור</button>
+
+    <div class="divider"></div>
+    <div class="section-title" style="margin-bottom:10px;">שערי מטבע</div>
+    <div class="card" id="ratesCard"></div>
+
+    <button class="btn-ghost" style="width:100%;margin-top:16px;" id="btnCloseTrips">סגור</button>
   </div>
 </div>
 
@@ -555,12 +555,22 @@
     </div>
     <div class="grid2">
       <div class="field">
-        <label>יציאה — תאריך ושעה</label>
-        <input type="datetime-local" id="tfDepart">
+        <label>יציאה — תאריך</label>
+        <input type="date" id="tfDepartDate">
       </div>
       <div class="field">
-        <label>חזרה — תאריך ושעה</label>
-        <input type="datetime-local" id="tfReturn">
+        <label>יציאה — שעה (24H)</label>
+        <input type="text" id="tfDepartTime" inputmode="numeric" placeholder="14:30" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>חזרה — תאריך</label>
+        <input type="date" id="tfReturnDate">
+      </div>
+      <div class="field">
+        <label>חזרה — שעה (24H)</label>
+        <input type="text" id="tfReturnTime" inputmode="numeric" placeholder="22:30" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
       </div>
     </div>
 
@@ -1211,6 +1221,39 @@ function fmtMoney(n){
   return v.toLocaleString('he-IL', {minimumFractionDigits:0, maximumFractionDigits:2});
 }
 function pad2(n){ return String(n).padStart(2, "0"); }
+
+/* Plain-text 24H time fields, fully independent of the device's own 12/24H
+   setting — a native <input type="time"> or datetime-local would silently
+   follow the OS format instead, which is exactly what we're avoiding here. */
+function wireTimeInput(id){
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    const digits = el.value.replace(/[^0-9]/g, "").slice(0, 4);
+    el.value = digits.length > 2 ? digits.slice(0,2) + ":" + digits.slice(2) : digits;
+  });
+  el.addEventListener('blur', () => {
+    if (!el.value.trim()) return;
+    const m = el.value.match(/^(\d{1,2}):?(\d{0,2})$/);
+    if (!m){ el.value = ""; return; }
+    const h = Math.min(23, parseInt(m[1] || "0", 10));
+    const mi = Math.min(59, parseInt(m[2] || "0", 10));
+    el.value = pad2(h) + ":" + pad2(mi);
+  });
+}
+wireTimeInput('tfDepartTime');
+wireTimeInput('tfReturnTime');
+
+/* departDateTime/returnDateTime are stored as "YYYY-MM-DDTHH:MM" (same shape a
+   datetime-local input produced before), just assembled from two plain fields now. */
+function splitDateTime(dt){
+  if (!dt) return { date: "", time: "" };
+  const [date, time] = dt.split("T");
+  return { date: date || "", time: (time || "").slice(0,5) };
+}
+function joinDateTime(date, time){
+  if (!date) return "";
+  return date + "T" + (time && /^\d{2}:\d{2}$/.test(time) ? time : "00:00");
+}
 function fmtDate(d){
   if (!d) return "—";
   try{
@@ -1424,12 +1467,12 @@ function renderRates(){
     state.rates["יורו"] = parseFloat(e.target.value) || 1;
     saveState();
   });
-  document.getElementById('btnRefreshRates').addEventListener('click', refreshRatesFromWeb);
+  document.getElementById('btnRefreshRates').addEventListener('click', () => refreshRatesFromWeb());
 }
 
-async function refreshRatesFromWeb(){
+async function refreshRatesFromWeb(silent){
   const btn = document.getElementById('btnRefreshRates');
-  btn.classList.add('loading');
+  if (btn && !silent) btn.classList.add('loading');
   try{
     const [usdRes, eurRes] = await Promise.all([
       fetch('https://open.er-api.com/v6/latest/USD'),
@@ -1445,14 +1488,14 @@ async function refreshRatesFromWeb(){
       state.rates.updatedAt = Date.now();
       saveState();
       renderRates();
-      toast("השערים עודכנו ✓");
+      if (!silent) toast("השערים עודכנו ✓");
     } else {
       throw new Error("bad payload");
     }
   }catch(e){
-    toast("לא הצלחתי לעדכן שערים כרגע — הזן ידנית");
+    if (!silent) toast("לא הצלחתי לעדכן שערים כרגע — הזן ידנית");
   }finally{
-    btn.classList.remove('loading');
+    if (btn && !silent) btn.classList.remove('loading');
   }
 }
 
@@ -1596,6 +1639,7 @@ function openTripsList(){
     closeOverlay('overlayTrips');
     openEditTripForm(b.dataset.id);
   }));
+  renderRates();
   showOverlay('overlayTrips');
 }
 
@@ -1611,8 +1655,10 @@ function openNewTripForm(){
   document.getElementById('tfFlightOut').value = "";
   document.getElementById('tfFlightReturn').value = "";
   document.getElementById('tfBooking').value = "";
-  document.getElementById('tfDepart').value = "";
-  document.getElementById('tfReturn').value = "";
+  document.getElementById('tfDepartDate').value = "";
+  document.getElementById('tfDepartTime').value = "";
+  document.getElementById('tfReturnDate').value = "";
+  document.getElementById('tfReturnTime').value = "";
   document.getElementById('tfFinished').checked = false;
   document.getElementById('btnDeleteTrip').style.display = "none";
   document.getElementById('deleteTripDivider').style.display = "none";
@@ -1634,8 +1680,12 @@ function openEditTripForm(id){
   document.getElementById('tfFlightOut').value = t.flightOut || "";
   document.getElementById('tfFlightReturn').value = t.flightReturn || "";
   document.getElementById('tfBooking').value = t.bookingRef || "";
-  document.getElementById('tfDepart').value = t.departDateTime || "";
-  document.getElementById('tfReturn').value = t.returnDateTime || "";
+  const dep = splitDateTime(t.departDateTime);
+  const ret = splitDateTime(t.returnDateTime);
+  document.getElementById('tfDepartDate').value = dep.date;
+  document.getElementById('tfDepartTime').value = dep.time;
+  document.getElementById('tfReturnDate').value = ret.date;
+  document.getElementById('tfReturnTime').value = ret.time;
   document.getElementById('tfFinished').checked = !!t.finished;
   document.getElementById('btnDeleteTrip').style.display = "block";
   document.getElementById('deleteTripDivider').style.display = "block";
@@ -1654,8 +1704,8 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const flightOut = document.getElementById('tfFlightOut').value.trim();
   const flightReturn = document.getElementById('tfFlightReturn').value.trim();
   const bookingRef = document.getElementById('tfBooking').value.trim();
-  const departDateTime = document.getElementById('tfDepart').value;
-  const returnDateTime = document.getElementById('tfReturn').value;
+  const departDateTime = joinDateTime(document.getElementById('tfDepartDate').value, document.getElementById('tfDepartTime').value);
+  const returnDateTime = joinDateTime(document.getElementById('tfReturnDate').value, document.getElementById('tfReturnTime').value);
   const finished = document.getElementById('tfFinished').checked;
   if (editingTripId){
     const t = state.trips.find(x => x.id === editingTripId);
@@ -2237,6 +2287,7 @@ if ('serviceWorker' in navigator){
 /* ========================= Init ========================= */
 renderAll();
 initFirebaseIfConfigured();
+refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app opens
 
 })();
 </script>
