@@ -257,16 +257,21 @@
   }
   .fab button:active{transform:scale(.94);}
 
-  /* ---- Decorative background: a faint plane drifting across the screen ---- */
+  /* ---- Decorative background: a faint plane drifting across the screen, nose
+     pointed exactly along its direction of travel ---- */
   #bgPlane{
-    position:fixed;top:14%;right:-12%;width:120px;height:120px;
-    z-index:0;pointer-events:none;opacity:.05;color:var(--ink);
+    position:fixed;top:8%;right:-30%;width:min(62vw, 480px);height:min(62vw, 480px);
+    z-index:0;pointer-events:none;opacity:.07;color:var(--ink);
     animation:planeDrift 46s linear infinite;
   }
-  #bgPlane svg{width:100%;height:100%;transform:rotate(-35deg);}
+  /* The icon's nose points straight up (0,-1) by default. It travels along
+     (-120vw, 55vw) — same unit on both axes, so the ratio is aspect-ratio-safe.
+     atan2(55,-120) ≈ 155.4°; rotating the up-pointing nose by 245.4° (155.4+90)
+     aims it exactly along that path. */
+  #bgPlane svg{width:100%;height:100%;transform:rotate(245.4deg);}
   @keyframes planeDrift{
-    0%{transform:translate(0,0) rotate(0deg);}
-    100%{transform:translate(-130vw,60vh) rotate(0deg);}
+    0%{transform:translate(0,0);}
+    100%{transform:translate(-120vw,55vw);}
   }
   @media (prefers-reduced-motion: reduce){ #bgPlane{animation:none;display:none;} }
   #app{position:relative;z-index:1;}
@@ -356,7 +361,7 @@
   @media (min-width: 860px){
     body{ background: var(--card-2); }
     #app{
-      max-width:1180px;margin:28px auto;background:var(--bg);
+      max-width:1180px;margin:28px auto;background:transparent;
       border-radius:26px;box-shadow:var(--shadow);overflow:hidden;
       min-height:calc(100vh - 56px);
     }
@@ -394,7 +399,7 @@
     }
     .overlay.show .sheet{ transform:translateY(0); }
 
-    #bgPlane{ opacity:.045; }
+    #bgPlane{ opacity:.06; }
   }
   @media (min-width: 860px) and (max-width: 1023px){
     main{ grid-template-columns:300px 1fr; }
@@ -536,13 +541,17 @@
 
     <div class="grid2">
       <div class="field">
-        <label>מספר טיסה</label>
-        <input type="text" id="tfFlight" placeholder="לדוגמה: LY321">
+        <label>מספר טיסה — הלוך</label>
+        <input type="text" id="tfFlightOut" placeholder="לדוגמה: LY321">
       </div>
       <div class="field">
-        <label>מספר הזמנה</label>
-        <input type="text" id="tfBooking" placeholder="לדוגמה: ABC123">
+        <label>מספר טיסה — חזור</label>
+        <input type="text" id="tfFlightReturn" placeholder="לדוגמה: LY322">
       </div>
+    </div>
+    <div class="field">
+      <label>מספר הזמנה</label>
+      <input type="text" id="tfBooking" placeholder="לדוגמה: ABC123">
     </div>
     <div class="grid2">
       <div class="field">
@@ -843,7 +852,8 @@ function defaultState(){
     endDate: "",
     cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
     finished: false,
-    flightNumber: "",
+    flightOut: "",
+    flightReturn: "",
     bookingRef: "",
     departDateTime: "",
     returnDateTime: "",
@@ -859,7 +869,10 @@ function defaultState(){
 function migrateTrip(t){
   if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
   if (typeof t.finished !== "boolean") t.finished = false;
-  if (typeof t.flightNumber !== "string") t.flightNumber = "";
+  // Older saves had a single `flightNumber` for the whole trip — treat it as the outbound leg.
+  if (typeof t.flightOut !== "string") t.flightOut = (typeof t.flightNumber === "string" ? t.flightNumber : "");
+  if (typeof t.flightReturn !== "string") t.flightReturn = "";
+  delete t.flightNumber;
   if (typeof t.bookingRef !== "string") t.bookingRef = "";
   if (typeof t.departDateTime !== "string") t.departDateTime = "";
   if (typeof t.returnDateTime !== "string") t.returnDateTime = "";
@@ -1197,11 +1210,13 @@ function fmtMoney(n){
   const v = Math.round((n||0) * 100) / 100;
   return v.toLocaleString('he-IL', {minimumFractionDigits:0, maximumFractionDigits:2});
 }
+function pad2(n){ return String(n).padStart(2, "0"); }
 function fmtDate(d){
   if (!d) return "—";
   try{
     const dt = new Date(d + "T00:00:00");
-    return dt.toLocaleDateString('he-IL', {day:'2-digit', month:'2-digit', year:'numeric'});
+    if (isNaN(dt)) return d;
+    return `${pad2(dt.getDate())}/${pad2(dt.getMonth()+1)}/${dt.getFullYear()}`;
   }catch(e){ return d; }
 }
 function todayISO(){
@@ -1383,7 +1398,7 @@ function renderCash(){
 function renderRates(){
   const card = document.getElementById('ratesCard');
   const r = state.rates;
-  const updated = r.updatedAt ? new Date(r.updatedAt).toLocaleString('he-IL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : "טרם עודכן אוטומטית";
+  const updated = r.updatedAt ? fmtDateTime(r.updatedAt) : "טרם עודכן אוטומטית";
   card.innerHTML = `
     <div class="rate-item">
       <div class="rate-cur"><span class="rate-flag">$</span> דולר → שקל</div>
@@ -1535,7 +1550,8 @@ function fmtDateTime(dt){
   if (!dt) return "";
   try{
     const d = new Date(dt);
-    return d.toLocaleString('he-IL', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+    if (isNaN(d)) return dt;
+    return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }catch(e){ return dt; }
 }
 function renderTripInfoStrip(){
@@ -1543,7 +1559,8 @@ function renderTripInfoStrip(){
   const wrap = document.getElementById('tripInfoStrip');
   if (!trip){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
   const items = [];
-  if (trip.flightNumber) items.push(`✈️ טיסה <b>${escapeHtml(trip.flightNumber)}</b>`);
+  if (trip.flightOut) items.push(`✈️ הלוך <b>${escapeHtml(trip.flightOut)}</b>`);
+  if (trip.flightReturn) items.push(`✈️ חזור <b>${escapeHtml(trip.flightReturn)}</b>`);
   if (trip.bookingRef) items.push(`🔖 הזמנה <b>${escapeHtml(trip.bookingRef)}</b>`);
   if (trip.departDateTime) items.push(`🛫 יציאה <b>${fmtDateTime(trip.departDateTime)}</b>`);
   if (trip.returnDateTime) items.push(`🛬 חזרה <b>${fmtDateTime(trip.returnDateTime)}</b>`);
@@ -1591,7 +1608,8 @@ function openNewTripForm(){
   document.getElementById('tfCashILS').value = "";
   document.getElementById('tfCashUSD').value = "";
   document.getElementById('tfCashEUR').value = "";
-  document.getElementById('tfFlight').value = "";
+  document.getElementById('tfFlightOut').value = "";
+  document.getElementById('tfFlightReturn').value = "";
   document.getElementById('tfBooking').value = "";
   document.getElementById('tfDepart').value = "";
   document.getElementById('tfReturn').value = "";
@@ -1613,7 +1631,8 @@ function openEditTripForm(id){
   document.getElementById('tfCashILS').value = cash["שקל"] || "";
   document.getElementById('tfCashUSD').value = cash["דולר"] || "";
   document.getElementById('tfCashEUR').value = cash["יורו"] || "";
-  document.getElementById('tfFlight').value = t.flightNumber || "";
+  document.getElementById('tfFlightOut').value = t.flightOut || "";
+  document.getElementById('tfFlightReturn').value = t.flightReturn || "";
   document.getElementById('tfBooking').value = t.bookingRef || "";
   document.getElementById('tfDepart').value = t.departDateTime || "";
   document.getElementById('tfReturn').value = t.returnDateTime || "";
@@ -1633,7 +1652,8 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
     "דולר": parseFloat(document.getElementById('tfCashUSD').value) || 0,
     "יורו": parseFloat(document.getElementById('tfCashEUR').value) || 0
   };
-  const flightNumber = document.getElementById('tfFlight').value.trim();
+  const flightOut = document.getElementById('tfFlightOut').value.trim();
+  const flightReturn = document.getElementById('tfFlightReturn').value.trim();
   const bookingRef = document.getElementById('tfBooking').value.trim();
   const departDateTime = document.getElementById('tfDepart').value;
   const returnDateTime = document.getElementById('tfReturn').value;
@@ -1642,14 +1662,14 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
     const t = state.trips.find(x => x.id === editingTripId);
     if (t){
       t.name = name; t.startDate = start; t.endDate = end; t.cashInitial = cashInitial;
-      t.flightNumber = flightNumber; t.bookingRef = bookingRef;
+      t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
       t.finished = finished;
     }
   } else {
     const t = {
       id: uid(), name, startDate: start, endDate: end, cashInitial: cashInitial,
-      flightNumber, bookingRef, departDateTime, returnDateTime, finished,
+      flightOut, flightReturn, bookingRef, departDateTime, returnDateTime, finished,
       expenses: []
     };
     state.trips.push(t);
