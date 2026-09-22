@@ -145,6 +145,10 @@
   .pass-eyebrow{font-size:12.5px;color:var(--ink-soft);margin-bottom:2px;}
   .pass-total{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:38px;line-height:1.05;color:var(--ink);}
   .pass-total small{font-family:'Heebo';font-weight:600;font-size:16px;color:var(--ink-soft);}
+  .pass-pending{margin-top:4px;font-size:15px;font-weight:700;color:#8a6417;}
+  .pass-pending span{font-family:'Heebo';font-weight:600;font-size:12.5px;color:var(--ink-soft);margin-right:4px;}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass-pending{color:var(--amber);}}
+  :root[data-theme="dark"] .pass-pending{color:var(--amber);}
   .pass-meta{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
   .pass-meta .m{font-size:13px;color:var(--ink-soft);}
   .pass-meta .m b{color:var(--ink);font-weight:700;}
@@ -1080,29 +1084,38 @@ function renderSummary(){
   const section = document.getElementById('summarySection');
   if (!trip){ section.innerHTML = ""; return; }
 
-  const total = trip.expenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const paidExpenses = trip.expenses.filter(e => e.paid);
+  const pendingExpenses = trip.expenses.filter(e => !e.paid);
+
+  const totalPaid = paidExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const totalPending = pendingExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const totalAll = totalPaid + totalPending;
+
+  // Currency & payment-method breakdowns reflect only what's actually been paid —
+  // a booked-but-unpaid hotel shouldn't look like money that's already out the door.
   const byCurrency = {};
   CURRENCIES.forEach(c => byCurrency[c] = 0);
-  trip.expenses.forEach(e => { byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0); });
+  paidExpenses.forEach(e => { byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0); });
 
   const byPayment = {};
-  trip.expenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + expenseTotalILS(e); });
+  paidExpenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + expenseTotalILS(e); });
   const paymentEntries = Object.entries(byPayment).sort((a,b)=>b[1]-a[1]);
 
   let daysLine = "";
   if (trip.startDate && trip.endDate){
     const totalDays = Math.max(1, daysBetween(trip.startDate, trip.endDate) + 1);
     const remaining = Math.max(0, daysBetween(todayISO(), trip.endDate) + 1);
-    const avgPerDay = total / totalDays;
+    const avgPerDay = totalAll / totalDays;
     daysLine = `<div class="m"><b class="tnum">${remaining > 0 && remaining <= totalDays ? remaining : totalDays}</b> ימים${remaining>0 && remaining<=totalDays ? ' נותרו' : ' סה״כ'}</div>
-                <div class="m">ממוצע ליום: <b class="tnum">₪${fmtMoney(avgPerDay)}</b></div>`;
+                <div class="m">ממוצע ליום (הכל): <b class="tnum">₪${fmtMoney(avgPerDay)}</b></div>`;
   }
 
   section.innerHTML = `
     <div class="pass">
       <div class="pass-top">
         <div class="pass-eyebrow">${escapeHtml(trip.name || "טיול")}${trip.startDate ? " · " + fmtDate(trip.startDate) + (trip.endDate ? " – "+fmtDate(trip.endDate) : "") : ""}</div>
-        <div class="pass-total tnum">₪${fmtMoney(total)} <small>סה״כ עד כה</small></div>
+        <div class="pass-total tnum">₪${fmtMoney(totalPaid)} <small>שולם עד כה</small></div>
+        ${totalPending > 0 ? `<div class="pass-pending tnum">+ ₪${fmtMoney(totalPending)} <span>צפוי · טרם שולם (${pendingExpenses.length})</span></div>` : ""}
         <div class="pass-meta">
           <div class="m"><b class="tnum">${trip.expenses.length}</b> הוצאות</div>
           ${daysLine}
@@ -1113,6 +1126,7 @@ function renderSummary(){
         ${CURRENCIES.filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
         ${paymentEntries.slice(0,2).map(([m,v]) => `<span class="chip-stat amber">${escapeHtml(m)}: ₪${fmtMoney(v)}</span>`).join("")}
         ${trip.expenses.length === 0 ? '<span class="chip-stat">עוד אין הוצאות</span>' : ""}
+        ${trip.expenses.length > 0 && byCurrency["שקל"]===0 && byCurrency["דולר"]===0 && byCurrency["יורו"]===0 ? '<span class="chip-stat">עוד לא שולם בפועל</span>' : ""}
       </div>
     </div>
   `;
@@ -1127,14 +1141,18 @@ function renderCash(){
   const cashInitial = trip.cashInitial || {};
   const hasAnyCash = CURRENCIES.some(c => (cashInitial[c] || 0) > 0);
 
+  // Only PAID cash expenses actually reduce the cash on hand — a cash payment
+  // that's only "booked" (e.g. paying for a hotel on arrival) hasn't left the wallet yet.
   const spentByCurrency = {};
-  CURRENCIES.forEach(c => spentByCurrency[c] = 0);
+  const pendingByCurrency = {};
+  CURRENCIES.forEach(c => { spentByCurrency[c] = 0; pendingByCurrency[c] = 0; });
   trip.expenses.forEach(e => {
     if (e.paymentMethod === "מזומן"){
-      spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
+      if (e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
+      else pendingByCurrency[e.currency] = (pendingByCurrency[e.currency] || 0) + (e.amount || 0);
     }
   });
-  const hasAnyCashSpent = CURRENCIES.some(c => spentByCurrency[c] > 0);
+  const hasAnyCashSpent = CURRENCIES.some(c => spentByCurrency[c] > 0 || pendingByCurrency[c] > 0);
 
   if (!hasAnyCash && !hasAnyCashSpent){
     section.innerHTML = `
@@ -1149,9 +1167,10 @@ function renderCash(){
     return;
   }
 
-  const rows = CURRENCIES.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0).map(c => {
+  const rows = CURRENCIES.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0 || pendingByCurrency[c] > 0).map(c => {
     const initial = cashInitial[c] || 0;
     const spent = spentByCurrency[c] || 0;
+    const pending = pendingByCurrency[c] || 0;
     const remaining = initial - spent;
     const neg = remaining < 0;
     return `
@@ -1159,7 +1178,7 @@ function renderCash(){
         <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${c}</div>
         <div style="text-align:left;">
           <div class="tnum" style="font-weight:800;color:${neg ? 'var(--danger)' : 'var(--good)'};">${CUR_SYMBOL[c]}${fmtMoney(remaining)}</div>
-          <div class="tnum" style="font-size:11.5px;color:var(--ink-soft);">מתוך ${CUR_SYMBOL[c]}${fmtMoney(initial)} · הוצאו ${CUR_SYMBOL[c]}${fmtMoney(spent)}</div>
+          <div class="tnum" style="font-size:11.5px;color:var(--ink-soft);">מתוך ${CUR_SYMBOL[c]}${fmtMoney(initial)} · שולם במזומן ${CUR_SYMBOL[c]}${fmtMoney(spent)}${pending > 0 ? ` · צפוי במזומן ${CUR_SYMBOL[c]}${fmtMoney(pending)}` : ""}</div>
         </div>
       </div>`;
   }).join("");
