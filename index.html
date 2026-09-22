@@ -443,13 +443,8 @@
       <section id="toolsSection">
         <div class="section-title">כלים</div>
         <div class="toolbar">
-          <button class="tool-btn" id="btnImport">📥 ייבוא מאקסל</button>
           <button class="tool-btn" id="btnExportXlsx">📤 ייצוא לאקסל</button>
-          <button class="tool-btn" id="btnBackup">💾 גיבוי</button>
-          <button class="tool-btn" id="btnRestore">♻️ שחזור</button>
         </div>
-        <input type="file" id="fileImport" accept=".xlsx,.xls,.csv">
-        <input type="file" id="fileRestore" accept="application/json">
       </section>
 
       <section id="expensesSection">
@@ -728,6 +723,10 @@
         </div>
 
         <div class="divider"></div>
+        <button class="btn-ghost" style="width:100%;" id="btnRefreshDriveAuth">🔄 רענון הרשאת Drive</button>
+        <div class="hint" style="margin-top:6px;">לחצו כאן אם קבצים לא עולים ל-Drive (למשל אחרי "אין הרשאה" או שההרשאה פגה)</div>
+
+        <div class="divider"></div>
         <button class="btn-ghost btn-danger-outline" style="width:100%;" id="btnSignOut">התנתקות</button>
       </div>
     </div>
@@ -798,21 +797,6 @@ function idbDelete(id){
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   })).catch(()=>{});
-}
-function blobToBase64(blob){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-function base64ToBlob(dataUrl, type){
-  const parts = dataUrl.split(",");
-  const byteStr = atob(parts[1]);
-  const arr = new Uint8Array(byteStr.length);
-  for (let i=0; i<byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-  return new Blob([arr], {type: type || "application/octet-stream"});
 }
 function iconForType(type){
   if (type && type.startsWith("image/")) return "🖼️";
@@ -1089,7 +1073,6 @@ async function refreshDriveToken(){
 
 async function ensureDriveFolderId(){
   if (state.driveFolderId) return state.driveFolderId;
-  if (!driveAccessToken) await refreshDriveToken();
   if (!driveAccessToken) throw new Error("no drive token");
   const q = encodeURIComponent(`name='${DEFAULT_DRIVE_FOLDER_NAME.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
@@ -1115,27 +1098,27 @@ async function uploadFileToDrive(file){
   if (!cloudUser) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
   const useExisting = document.getElementById('toggleExistingFolder').checked;
   const explicitFolder = document.getElementById('driveFolderIdInput').value.trim();
+  // Deliberately never pops up a sign-in/consent window from here: this runs deep inside
+  // an async save flow, well past the moment of the user's tap, so browsers block a popup
+  // triggered here anyway (that's exactly what produced the old "no permission" error).
+  // Getting/refreshing the token only happens from a direct click in the sync menu.
+  if (!driveAccessToken){
+    return { ok:false, reason:"אין הרשאת Drive פעילה — פתחו את תפריט הסנכרון והתחברו מחדש" };
+  }
   try{
-    if (!driveAccessToken) await refreshDriveToken();
-    if (!driveAccessToken) return { ok:false, reason:"לא התקבלה הרשאה ל-Drive" };
     const folderId = (useExisting && explicitFolder) ? explicitFolder : await ensureDriveFolderId();
     const metadata = { name: file.name, mimeType: file.type || "application/octet-stream", parents: [folderId] };
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify(metadata)], {type:"application/json"}));
     form.append("file", file);
-    let res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
       method: "POST",
       headers: { Authorization: "Bearer " + driveAccessToken },
       body: form
     });
     if (res.status === 401){
-      await refreshDriveToken();
-      if (!driveAccessToken) return { ok:false, reason:"ההרשאה פגה ולא חודשה" };
-      res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + driveAccessToken },
-        body: form
-      });
+      driveAccessToken = null; // stale — next attempt will ask for a fresh sign-in instead of guessing
+      return { ok:false, reason:"ההרשאה ל-Drive פגה — פתחו את תפריט הסנכרון והתחברו מחדש" };
     }
     if (!res.ok){
       let detail = "שגיאת שרת " + res.status;
@@ -1191,6 +1174,11 @@ document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () =>
 });
 
 document.getElementById('btnGoogleSignIn').addEventListener('click', signInWithGoogle);
+document.getElementById('btnRefreshDriveAuth').addEventListener('click', async () => {
+  toast("פותח חלון הרשאה של Google...");
+  const token = await refreshDriveToken();
+  toast(token ? "ההרשאה ל-Drive עודכנה ✓" : "ההרשאה לא התקבלה — נסו שוב");
+});
 document.getElementById('btnSignOut').addEventListener('click', () => {
   if (!confirm("להתנתק מהסנכרון? הנתונים המקומיים במכשיר הזה יישארו.")) return;
   signOutCloud();
@@ -2079,121 +2067,6 @@ function closeOverlay(id){ document.getElementById(id).classList.remove('show');
 });
 
 /* ========================= Import from Excel ========================= */
-document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileImport').click());
-document.getElementById('fileImport').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try{
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type: 'array', cellDates: true});
-    const sheetName = wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, raw:true, defval:null});
-
-    // Find header row containing both "פריט" and "תאריך"
-    let headerRowIdx = -1, colIdx = {};
-    for (let i=0; i<rows.length; i++){
-      const row = rows[i];
-      if (!row) continue;
-      const hasItem = row.some(c => typeof c === 'string' && c.trim() === 'פריט');
-      const hasDate = row.some(c => typeof c === 'string' && c.trim() === 'תאריך');
-      if (hasItem && hasDate){
-        headerRowIdx = i;
-        row.forEach((cell, ci) => {
-          if (typeof cell === 'string'){
-            const key = cell.trim();
-            if (['פריט','תאריך','חלוקה','אופן תשלום','סכום','מטבע','שער המרה','הזמנה','תשלום','הערות'].includes(key)){
-              colIdx[key] = ci;
-            }
-          }
-        });
-        break;
-      }
-    }
-
-    if (headerRowIdx === -1){
-      toast("לא זוהתה טבלת הוצאות בקובץ");
-      return;
-    }
-
-    // Trip name guess: look at rows above the header for a non-empty text cell
-    let tripName = file.name.replace(/\.[^.]+$/, "");
-    for (let i = headerRowIdx - 1; i >= 0 && i >= headerRowIdx - 3; i--){
-      const row = rows[i];
-      if (row){
-        const textCell = row.find(c => typeof c === 'string' && c.trim().length > 1);
-        if (textCell){ tripName = textCell.trim(); break; }
-      }
-    }
-
-    const newExpenses = [];
-    let blankStreak = 0;
-    for (let i = headerRowIdx+1; i < rows.length && blankStreak < 4; i++){
-      const row = rows[i] || [];
-      const itemRaw = colIdx['פריט'] !== undefined ? row[colIdx['פריט']] : null;
-      const amountRaw = colIdx['סכום'] !== undefined ? row[colIdx['סכום']] : null;
-      const item = (typeof itemRaw === 'string') ? itemRaw.trim() : itemRaw;
-      const amount = typeof amountRaw === 'number' ? amountRaw : parseFloat(amountRaw);
-
-      if (!item && !(amount > 0)){
-        blankStreak++;
-        continue;
-      }
-      blankStreak = 0;
-      if (!item) continue;
-
-      let dateVal = colIdx['תאריך'] !== undefined ? row[colIdx['תאריך']] : null;
-      let dateISO = "";
-      if (dateVal instanceof Date && !isNaN(dateVal)){
-        dateISO = dateVal.toISOString().slice(0,10);
-      } else if (typeof dateVal === 'string' && dateVal.length >= 8){
-        const d = new Date(dateVal);
-        if (!isNaN(d)) dateISO = d.toISOString().slice(0,10);
-      }
-
-      const currencyRaw = colIdx['מטבע'] !== undefined ? row[colIdx['מטבע']] : "שקל";
-      const currency = CURRENCIES.includes(currencyRaw) ? currencyRaw : "שקל";
-      const rateRaw = colIdx['שער המרה'] !== undefined ? row[colIdx['שער המרה']] : 1;
-      const rate = parseFloat(rateRaw) || 1;
-      const splitRaw = colIdx['חלוקה'] !== undefined ? row[colIdx['חלוקה']] : 1;
-      const split = parseInt(splitRaw) || 1;
-      const payment = colIdx['אופן תשלום'] !== undefined ? row[colIdx['אופן תשלום']] : "";
-      const bookedRaw = colIdx['הזמנה'] !== undefined ? row[colIdx['הזמנה']] : null;
-      const paidRaw = colIdx['תשלום'] !== undefined ? row[colIdx['תשלום']] : null;
-      const notes = colIdx['הערות'] !== undefined ? row[colIdx['הערות']] : "";
-
-      newExpenses.push({
-        id: uid(),
-        item: String(item),
-        date: dateISO,
-        split: split,
-        paymentMethod: payment ? String(payment) : "אשראי",
-        amount: amount || 0,
-        currency: currency,
-        rate: currency === "שקל" ? 1 : rate,
-        booked: !!bookedRaw,
-        paid: !!paidRaw,
-        notes: notes ? String(notes) : ""
-      });
-    }
-
-    if (newExpenses.length === 0){
-      toast("לא נמצאו שורות הוצאה לייבוא");
-      return;
-    }
-
-    const trip = { id: uid(), name: tripName, startDate: "", endDate: "", expenses: newExpenses };
-    state.trips.push(trip);
-    state.activeTripId = trip.id;
-    saveState();
-    renderAll();
-    toast(`יובאו ${newExpenses.length} הוצאות לטיול חדש "${tripName}"`);
-  }catch(err){
-    console.error(err);
-    toast("הייבוא נכשל — בדקו את מבנה הקובץ");
-  }
-  e.target.value = "";
-});
-
 /* ========================= Export to Excel ========================= */
 document.getElementById('btnExportXlsx').addEventListener('click', () => {
   const trip = activeTrip();
@@ -2211,66 +2084,6 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
   XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
-});
-
-/* ========================= Backup / Restore (JSON, incl. attached files) ========================= */
-document.getElementById('btnBackup').addEventListener('click', async () => {
-  const btn = document.getElementById('btnBackup');
-  btn.disabled = true;
-  toast("מכין גיבוי, רגע...");
-  const attachmentsData = {};
-  try{
-    const allIds = [];
-    state.trips.forEach(t => t.expenses.forEach(e => (e.attachments||[]).forEach(a => allIds.push(a.id))));
-    for (const id of allIds){
-      const rec = await idbGet(id);
-      if (rec && rec.blob){
-        attachmentsData[id] = { name: rec.name, type: rec.type, base64: await blobToBase64(rec.blob) };
-      }
-    }
-  }catch(err){ console.warn("tripcost: attachment backup failed", err); }
-
-  const payload = Object.assign({}, state, { attachmentsData });
-  const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `tripcost-backup-${todayISO()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=> URL.revokeObjectURL(url), 2000);
-  btn.disabled = false;
-  toast("הגיבוי הורד ✓ (כולל קבצים מצורפים)");
-});
-
-document.getElementById('btnRestore').addEventListener('click', () => document.getElementById('fileRestore').click());
-document.getElementById('fileRestore').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try{
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    if (!parsed || !Array.isArray(parsed.trips)) throw new Error("invalid backup");
-    if (!confirm("שחזור יחליף את כל הנתונים הנוכחיים באפליקציה. להמשיך?")) return;
-    const attachmentsData = parsed.attachmentsData || {};
-    delete parsed.attachmentsData;
-    state = parsed;
-    state.trips.forEach(migrateTrip);
-    saveState();
-    for (const [id, info] of Object.entries(attachmentsData)){
-      try{
-        const blob = base64ToBlob(info.base64, info.type);
-        await idbPut({id, blob, name: info.name, type: info.type, size: blob.size});
-      }catch(err){ console.warn("tripcost: failed restoring attachment", id, err); }
-    }
-    renderAll();
-    toast("השחזור הושלם ✓");
-  }catch(err){
-    console.error(err);
-    toast("קובץ הגיבוי לא תקין");
-  }
-  e.target.value = "";
 });
 
 /* ========================= Misc ========================= */
