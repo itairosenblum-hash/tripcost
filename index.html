@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TripCost · מעקב הוצאות טיולים</title>
+<meta name="description" content="ניהול הוצאות חו״ל לפי טיולים, עם שערי מטבע ועדכון בזמן ההוצאה">
+<meta name="theme-color" content="#2F6F6B">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#FAF6EF;
+    --card:#FFFDF8;
+    --card-2:#F3ECDC;
+    --ink:#20302E;
+    --ink-soft:#5B6E68;
+    --border:#E4DCC8;
+    --teal:#2F6F6B;
+    --teal-dark:#1E4A47;
+    --teal-tint:#E4EFEC;
+    --amber:#D9A441;
+    --amber-tint:#FBF0DA;
+    --danger:#B5533C;
+    --danger-tint:#F7E7E1;
+    --good:#3D7A52;
+    --shadow: 0 1px 2px rgba(32,48,46,.06), 0 6px 20px rgba(32,48,46,.07);
+    --radius-card: 20px;
+    --radius-pill: 999px;
+    --radius-sm: 10px;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#141B1A;
+      --card:#1C2624;
+      --card-2:#233130;
+      --ink:#EDEFE9;
+      --ink-soft:#9AACA5;
+      --border:#324240;
+      --teal:#5FA79F;
+      --teal-dark:#8CC9C1;
+      --teal-tint:#20322F;
+      --amber:#E3B564;
+      --amber-tint:#33291A;
+      --danger:#E28468;
+      --danger-tint:#3A2420;
+      --good:#7FC495;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 24px rgba(0,0,0,.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141B1A; --card:#1C2624; --card-2:#233130; --ink:#EDEFE9; --ink-soft:#9AACA5;
+    --border:#324240; --teal:#5FA79F; --teal-dark:#8CC9C1; --teal-tint:#20322F;
+    --amber:#E3B564; --amber-tint:#33291A; --danger:#E28468; --danger-tint:#3A2420;
+    --good:#7FC495; color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  html{scroll-padding-top: var(--safe-t);}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Heebo',-apple-system,sans-serif;
+    padding-top:var(--safe-t);
+    padding-bottom:var(--safe-b);
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,h2,h3,.display{font-family:'Frank Ruhl Libre',serif;}
+  .tnum{font-variant-numeric: tabular-nums;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;}
+
+  /* ---- App shell ---- */
+  #app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;}
+
+  header.topbar{
+    position:sticky;top:var(--safe-t);z-index:20;
+    background:var(--bg);
+    padding:18px 18px 10px;
+    border-bottom:1px solid transparent;
+  }
+  header.topbar.scrolled{border-bottom-color:var(--border);}
+  .brand-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .brand{display:flex;align-items:baseline;gap:8px;}
+  .brand .mark{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--teal-dark);letter-spacing:.3px;}
+  .brand .sub{font-size:12.5px;color:var(--ink-soft);}
+  .icon-btn{
+    width:38px;height:38px;border-radius:var(--radius-pill);border:1px solid var(--border);
+    background:var(--card);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--ink);flex:none;
+  }
+  .icon-btn:active{transform:scale(.94);}
+
+  .trip-tabs{display:flex;gap:8px;overflow-x:auto;padding:14px 2px 4px;margin:0 -2px;scrollbar-width:none;}
+  .trip-tabs::-webkit-scrollbar{display:none;}
+  #syncStatusLine{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);margin-top:8px;cursor:pointer;}
+  #syncStatusLine .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-soft);flex:none;}
+  #syncStatusLine.on .dot{background:var(--good);}
+  #syncStatusLine.syncing .dot{background:var(--amber);animation:pulse 1s ease-in-out infinite;}
+  #syncStatusLine.err .dot{background:var(--danger);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .sync-provider-row{display:flex;align-items:center;gap:10px;padding:12px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;}
+  .sync-provider-row img{width:32px;height:32px;border-radius:50%;flex:none;background:var(--card-2);}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;}
+  .switch{position:relative;width:42px;height:24px;flex:none;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .track{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:.2s;cursor:pointer;}
+  .switch .track::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+  .switch input:checked + .track{background:var(--teal);}
+  .switch input:checked + .track::before{transform:translateX(-18px);}
+  code.inline{background:var(--card-2);padding:1px 5px;border-radius:5px;font-size:12px;}
+  .trip-chip{
+    flex:none;padding:9px 16px;border-radius:var(--radius-pill);border:1px solid var(--border);
+    background:var(--card);color:var(--ink-soft);font-size:14px;font-weight:600;cursor:pointer;
+    white-space:nowrap;
+  }
+  .trip-chip.active{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .trip-chip.add{background:transparent;border-style:dashed;color:var(--teal-dark);font-weight:700;}
+
+  main{flex:1;padding:6px 18px 110px;}
+  section{margin-top:18px;}
+  .section-title{font-size:13px;font-weight:700;color:var(--ink-soft);margin:0 0 10px 2px;letter-spacing:.2px;}
+
+  /* ---- Summary / boarding-pass card ---- */
+  .pass{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .pass-top{padding:20px 20px 16px;}
+  .pass-eyebrow{font-size:12.5px;color:var(--ink-soft);margin-bottom:2px;}
+  .pass-total{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:38px;line-height:1.05;color:var(--ink);}
+  .pass-total small{font-family:'Heebo';font-weight:600;font-size:16px;color:var(--ink-soft);}
+  .pass-meta{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
+  .pass-meta .m{font-size:13px;color:var(--ink-soft);}
+  .pass-meta .m b{color:var(--ink);font-weight:700;}
+  .perf{
+    position:relative;height:0;border-top:2px dashed var(--border);margin:0 0;
+  }
+  .perf::before,.perf::after{
+    content:"";position:absolute;top:-11px;width:22px;height:22px;border-radius:50%;background:var(--bg);
+  }
+  .perf::before{right:-11px;}
+  .perf::after{left:-11px;}
+  .pass-bottom{padding:14px 20px 18px;display:flex;gap:8px;flex-wrap:wrap;}
+  .chip-stat{
+    background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);
+    padding:6px 12px;font-size:12.5px;font-weight:700;display:flex;gap:5px;align-items:center;
+  }
+  .chip-stat.amber{background:var(--amber-tint);color:#8a6417;}
+  :root[data-theme="dark"] .chip-stat.amber, @media (prefers-color-scheme:dark){.chip-stat.amber{color:var(--amber);}}
+
+  /* ---- Cards ---- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);padding:16px;box-shadow:var(--shadow);}
+  .card + .card{margin-top:10px;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+
+  /* ---- Rates card ---- */
+  .rate-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+  .rate-item:last-of-type{border-bottom:none;}
+  .rate-cur{display:flex;align-items:center;gap:8px;font-weight:700;}
+  .rate-flag{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;background:var(--teal-tint);color:var(--teal-dark);}
+  .rate-val{display:flex;align-items:center;gap:6px;}
+  .rate-input{
+    width:78px;text-align:center;border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:7px 6px;background:var(--card-2);color:var(--ink);font-weight:700;font-size:14px;
+  }
+  .rate-updated{font-size:11.5px;color:var(--ink-soft);margin-top:8px;}
+  .btn-refresh{
+    display:flex;align-items:center;gap:6px;background:var(--teal);color:#fff;border:none;
+    border-radius:var(--radius-pill);padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
+  }
+  .btn-refresh:active{transform:scale(.97);}
+  .btn-refresh.loading{opacity:.7;}
+  .btn-refresh svg{transition:transform .6s ease;}
+  .btn-refresh.loading svg{animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---- Expense list ---- */
+  .exp-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 14px;box-shadow:var(--shadow);}
+  .exp-card + .exp-card{margin-top:8px;}
+  .exp-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+  .exp-item{font-weight:700;font-size:15px;}
+  .exp-date{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .exp-amt{text-align:left;flex:none;}
+  .exp-total{font-weight:800;font-size:16px;}
+  .exp-orig{font-size:12px;color:var(--ink-soft);}
+  .exp-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .tag{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);background:var(--card-2);color:var(--ink-soft);}
+  .tag.on{background:var(--teal-tint);color:var(--teal-dark);}
+  .tag.off{background:var(--danger-tint);color:var(--danger);}
+  .exp-note{font-size:12.5px;color:var(--ink-soft);margin-top:8px;border-right:2px solid var(--border);padding-right:8px;}
+  .exp-attachments{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .attach-chip{
+    display:flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--card-2);
+    color:var(--ink-soft);border-radius:var(--radius-pill);padding:5px 10px 5px 6px;font-size:11.5px;font-weight:700;
+    cursor:pointer;max-width:170px;
+  }
+  .attach-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .attach-chip img{width:18px;height:18px;border-radius:5px;object-fit:cover;flex:none;}
+  .attach-chip .x{
+    flex:none;width:16px;height:16px;border-radius:50%;background:var(--border);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;font-size:10px;margin-right:2px;
+  }
+  .exp-actions{display:flex;gap:6px;margin-top:10px;}
+  .mini-btn{
+    border:1px solid var(--border);background:var(--card-2);color:var(--ink-soft);
+    border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;
+  }
+  .mini-btn.danger{color:var(--danger);}
+
+  .empty{
+    text-align:center;padding:40px 20px;color:var(--ink-soft);
+  }
+  .empty .big{font-size:34px;margin-bottom:8px;}
+  .empty p{margin:4px 0;font-size:14px;}
+
+  /* ---- Toolbar ---- */
+  .toolbar{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+  .toolbar::-webkit-scrollbar{display:none;}
+  .tool-btn{
+    flex:none;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius-pill);padding:9px 14px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;
+  }
+
+  /* ---- FAB ---- */
+  .fab{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(22px + var(--safe-b));
+    max-width:560px;width:calc(100% - 36px);
+    z-index:30;
+  }
+  .fab button{
+    width:100%;background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
+    padding:16px;font-size:15.5px;font-weight:800;box-shadow:0 10px 30px rgba(30,74,71,.35);
+    display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;
+  }
+  .fab button:active{transform:translateX(-50%) scale(.98);}
+
+  /* ---- Sheet / modal ---- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(20,27,26,.45);z-index:50;
+    display:flex;align-items:flex-end;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .2s ease;
+  }
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .sheet{
+    background:var(--bg);width:100%;max-width:560px;border-radius:22px 22px 0 0;
+    max-height:92vh;overflow-y:auto;transform:translateY(16px);transition:transform .25s ease;
+    padding:18px 18px calc(24px + var(--safe-b));border-top:1px solid var(--border);
+  }
+  .overlay.show .sheet{transform:translateY(0);}
+  .sheet-handle{width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 14px;}
+  .sheet h2{margin:0 0 16px;font-size:20px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;}
+  .field input[type=text],.field input[type=number],.field input[type=date],.field select,.field textarea{
+    width:100%;border:1px solid var(--border);background:var(--card);color:var(--ink);
+    border-radius:var(--radius-sm);padding:11px 12px;font-size:15px;
+  }
+  .field textarea{resize:vertical;min-height:52px;}
+  .seg{display:flex;background:var(--card-2);border-radius:var(--radius-sm);padding:3px;gap:3px;}
+  .seg button{
+    flex:1;border:none;background:transparent;padding:9px 4px;border-radius:8px;font-size:13.5px;
+    font-weight:700;color:var(--ink-soft);cursor:pointer;
+  }
+  .seg button.active{background:var(--teal);color:#fff;}
+  .check-row{display:flex;gap:10px;}
+  .check-pill{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:11px;font-weight:700;font-size:13.5px;color:var(--ink-soft);cursor:pointer;
+  }
+  .check-pill.on{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
+  .sheet-actions{display:flex;gap:10px;margin-top:18px;}
+  .btn-primary{
+    flex:1;background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
+    padding:14px;font-weight:800;font-size:15px;cursor:pointer;
+  }
+  .btn-ghost{
+    flex:none;background:transparent;color:var(--ink-soft);border:1px solid var(--border);border-radius:var(--radius-pill);
+    padding:14px 18px;font-weight:700;font-size:14px;cursor:pointer;
+  }
+  .btn-danger-outline{color:var(--danger);border-color:var(--danger-tint);background:var(--danger-tint);}
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:-8px;margin-bottom:14px;}
+  .divider{height:1px;background:var(--border);margin:18px 0;}
+  .trip-list-item{
+    display:flex;align-items:center;justify-content:space-between;padding:12px 4px;border-bottom:1px solid var(--border);
+  }
+  .trip-list-item:last-child{border-bottom:none;}
+  .toast{
+    position:fixed;bottom:calc(96px + var(--safe-b));left:50%;transform:translateX(-50%);
+    background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:var(--radius-pill);
+    font-size:13.5px;font-weight:600;z-index:60;opacity:0;transition:opacity .25s,transform .25s;
+    pointer-events:none;max-width:88%;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  input[type=file]{display:none;}
+  .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  a{color:inherit;}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;transition-duration:.001ms !important;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar" id="topbar">
+    <div class="brand-row">
+      <div class="brand">
+        <span class="mark">TripCost</span>
+        <span class="sub">מעקב הוצאות טיולים</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="icon-btn" id="btnSync" aria-label="סנכרון וגיבוי בענן" title="סנכרון וגיבוי בענן">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M7 17a4 4 0 01-1-7.87A5.5 5.5 0 0116.9 8.2 4.5 4.5 0 0117 17H7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnMenu" aria-label="ניהול טיולים" title="ניהול טיולים">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="syncStatusLine" style="display:none;"></div>
+    <div class="trip-tabs" id="tripTabs"></div>
+  </header>
+
+  <main id="main">
+
+    <section id="summarySection"></section>
+
+    <section id="cashSection"></section>
+
+    <section id="ratesSection">
+      <div class="section-title">שערי מטבע</div>
+      <div class="card" id="ratesCard"></div>
+    </section>
+
+    <section id="toolsSection">
+      <div class="section-title">כלים</div>
+      <div class="toolbar">
+        <button class="tool-btn" id="btnImport">📥 ייבוא מאקסל</button>
+        <button class="tool-btn" id="btnExportXlsx">📤 ייצוא לאקסל</button>
+        <button class="tool-btn" id="btnBackup">💾 גיבוי</button>
+        <button class="tool-btn" id="btnRestore">♻️ שחזור</button>
+      </div>
+      <input type="file" id="fileImport" accept=".xlsx,.xls,.csv">
+      <input type="file" id="fileRestore" accept="application/json">
+    </section>
+
+    <section id="expensesSection">
+      <div class="row" style="margin-bottom:10px;">
+        <div class="section-title" style="margin:0;">הוצאות</div>
+        <select id="sortSelect" style="border:1px solid var(--border);background:var(--card);border-radius:var(--radius-sm);padding:6px 10px;font-size:12.5px;color:var(--ink-soft);font-weight:700;">
+          <option value="date_desc">תאריך: חדש→ישן</option>
+          <option value="date_asc">תאריך: ישן→חדש</option>
+          <option value="amount_desc">סכום: גבוה→נמוך</option>
+        </select>
+      </div>
+      <div id="expensesList"></div>
+    </section>
+
+  </main>
+
+  <div class="fab">
+    <button id="btnAddExpense">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+      הוצאה חדשה
+    </button>
+  </div>
+
+</div>
+
+<!-- Trip management sheet -->
+<div class="overlay" id="overlayTrips">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>הטיולים שלי</h2>
+    <div id="tripListWrap"></div>
+    <button class="btn-primary" style="margin-top:16px;" id="btnNewTrip">+ טיול חדש</button>
+    <button class="btn-ghost" style="width:100%;margin-top:10px;" id="btnCloseTrips">סגור</button>
+  </div>
+</div>
+
+<!-- New/Edit trip sheet -->
+<div class="overlay" id="overlayTripForm">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="tripFormTitle">טיול חדש</h2>
+    <div class="field">
+      <label>שם הטיול</label>
+      <input type="text" id="tfName" placeholder="לדוגמה: אוסטריה 2026">
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>תאריך התחלה</label>
+        <input type="date" id="tfStart">
+      </div>
+      <div class="field">
+        <label>תאריך סיום</label>
+        <input type="date" id="tfEnd">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>מזומן שהבאתי לטיול</label>
+      <div class="grid3">
+        <div>
+          <label style="font-weight:400;">שקל ₪</label>
+          <input type="number" id="tfCashILS" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div>
+          <label style="font-weight:400;">דולר $</label>
+          <input type="number" id="tfCashUSD" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div>
+          <label style="font-weight:400;">יורו €</label>
+          <input type="number" id="tfCashEUR" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">נחשב לכם כמה מזומן אמור להישאר, לפי ההוצאות שסומנו כ״מזומן״.</div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-primary" id="btnSaveTrip">שמירה</button>
+      <button class="btn-ghost" id="btnCancelTripForm">ביטול</button>
+    </div>
+    <div class="divider" id="deleteTripDivider" style="display:none;"></div>
+    <button class="btn-ghost btn-danger-outline" style="width:100%;display:none;" id="btnDeleteTrip">מחיקת הטיול הזה</button>
+  </div>
+</div>
+
+<!-- Add/Edit expense sheet -->
+<div class="overlay" id="overlayExpense">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="expFormTitle">הוצאה חדשה</h2>
+
+    <div class="field">
+      <label>פריט</label>
+      <input type="text" id="efItem" placeholder="לדוגמה: מלון בזלצבורג">
+    </div>
+
+    <div class="field">
+      <label>תאריך</label>
+      <input type="date" id="efDate">
+    </div>
+
+    <div class="field">
+      <label>אופן תשלום</label>
+      <div class="seg" id="efPaymentSeg">
+        <button type="button" data-val="אשראי" class="active">💳 אשראי</button>
+        <button type="button" data-val="מזומן">💵 מזומן</button>
+        <button type="button" data-val="אחר">⋯ אחר</button>
+      </div>
+    </div>
+    <div class="field" id="efPaymentOtherField" style="display:none;">
+      <label>פירוט אופן התשלום</label>
+      <input type="text" id="efPaymentOther" placeholder="לדוגמה: ביט, העברה בנקאית">
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label>סכום</label>
+        <input type="number" id="efAmount" inputmode="decimal" step="0.01" placeholder="0">
+      </div>
+      <div class="field">
+        <label>מטבע</label>
+        <select id="efCurrency">
+          <option value="שקל">שקל ₪</option>
+          <option value="דולר">דולר $</option>
+          <option value="יורו">יורו €</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field" id="efRateField">
+      <label>שער המרה (לרגע ההוצאה)</label>
+      <input type="number" id="efRate" inputmode="decimal" step="0.0001" value="1">
+    </div>
+
+    <div class="hint" id="efTotalHint">סה״כ עלות: —</div>
+
+    <div class="field">
+      <label>סטטוס</label>
+      <div class="check-row">
+        <div class="check-pill" id="efBookedPill">✓ הוזמן</div>
+        <div class="check-pill" id="efPaidPill">✓ שולם</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>הערות</label>
+      <textarea id="efNotes" placeholder="לדוגמה: הסכום כולל עוד 2 אנשים · אבא ואמא החזירו 500 ש״ח"></textarea>
+    </div>
+
+    <div class="field">
+      <label>קבצים מצורפים (הזמנה, קבלה, שובר וכו׳)</label>
+      <div class="exp-attachments" id="efAttachList"></div>
+      <button type="button" class="tool-btn" id="btnAttachFile" style="margin-top:2px;">📎 צירוף קובץ</button>
+      <input type="file" id="efFileInput" accept="image/*,application/pdf" multiple>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-primary" id="btnSaveExpense">שמירה</button>
+      <button class="btn-ghost" id="btnCancelExpense">ביטול</button>
+    </div>
+    <div class="divider" id="deleteExpenseDivider" style="display:none;"></div>
+    <button class="btn-ghost btn-danger-outline" style="width:100%;display:none;" id="btnDeleteExpense">מחיקת הוצאה זו</button>
+  </div>
+</div>
+
+<!-- Sync / cloud settings sheet -->
+<div class="overlay" id="overlaySync">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>סנכרון וגיבוי בענן</h2>
+
+    <div id="syncStep1">
+      <p class="hint" style="margin-bottom:14px;">כדי לסנכרן בין מכשירים (Firebase) ולשמור קבצים ב-Drive, מדביקים כאן את פרטי הפרויקט מה-Firebase Console. הוראות מלאות בהודעה בצ'אט.</p>
+      <div class="field">
+        <label>הדבקת firebaseConfig (מה-Firebase Console)</label>
+        <textarea id="syncConfigInput" rows="6" placeholder='אפשר להדביק בדיוק כמו שמופיע ב-Firebase, למשל: const firebaseConfig = { apiKey: "...", projectId: "...", ... };'></textarea>
+      </div>
+      <button class="btn-primary" style="width:100%;" id="btnSaveFirebaseConfig">שמירת הגדרות</button>
+    </div>
+
+    <div id="syncStep2" style="display:none;">
+      <div class="sync-provider-row">
+        <img id="syncUserPhoto" alt="">
+        <div style="flex:1;min-width:0;">
+          <div id="syncUserName" style="font-weight:700;font-size:14px;"></div>
+          <div id="syncUserEmail" style="font-size:12px;color:var(--ink-soft);"></div>
+        </div>
+      </div>
+
+      <div id="syncSignedOutBlock">
+        <button class="btn-primary" style="width:100%;" id="btnGoogleSignIn">🔵 התחברות עם Google</button>
+      </div>
+
+      <div id="syncSignedInBlock" style="display:none;">
+        <div id="syncStatusDetail" class="hint" style="margin-bottom:6px;"></div>
+
+        <div class="divider"></div>
+        <div class="toggle-row">
+          <div>
+            <div style="font-weight:700;font-size:13.5px;">שימוש בתיקייה קיימת ב-Drive</div>
+            <div class="hint" style="margin:2px 0 0;">אחרת תיווצר אוטומטית תיקייה בשם "TripCost - קבצים מצורפים"</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="toggleExistingFolder"><span class="track"></span></label>
+        </div>
+        <div class="field" id="folderIdField" style="display:none;">
+          <label>מזהה התיקייה (מהכתובת של התיקייה ב-Drive)</label>
+          <input type="text" id="driveFolderIdInput" placeholder="לדוגמה: 1AbCdEfGhIjKlMnOpQrStUvWxYz">
+        </div>
+
+        <div class="divider"></div>
+        <button class="btn-ghost btn-danger-outline" style="width:100%;" id="btnSignOut">התנתקות</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn-ghost" style="width:100%;" id="btnCloseSync">סגור</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ========================= Storage ========================= */
+const STORAGE_KEY = "tripcost.v1";
+const CURRENCIES = ["שקל","דולר","יורו"];
+const CUR_SYMBOL = {"שקל":"₪","דולר":"$","יורו":"€"};
+const CUR_FLAG = {"שקל":"₪","דולר":"$","יורו":"€"};
+
+function uid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+}
+
+/* ========================= File attachments (IndexedDB) =========================
+   Expense objects only store lightweight metadata ({id,name,type,size}); the actual
+   file bytes live in IndexedDB (localStorage is too small/text-only for photos & PDFs). */
+const FILES_DB_NAME = "tripcost-files";
+const FILES_STORE = "attachments";
+let filesDbPromise = null;
+
+function openFilesDB(){
+  if (filesDbPromise) return filesDbPromise;
+  filesDbPromise = new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)){ reject(new Error("indexedDB not available")); return; }
+    const req = indexedDB.open(FILES_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(FILES_STORE)) db.createObjectStore(FILES_STORE, {keyPath:"id"});
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return filesDbPromise;
+}
+function idbPut(record){
+  return openFilesDB().then(db => new Promise((resolve,reject)=>{
+    const tx = db.transaction(FILES_STORE,"readwrite");
+    tx.objectStore(FILES_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+function idbGet(id){
+  return openFilesDB().then(db => new Promise((resolve,reject)=>{
+    const tx = db.transaction(FILES_STORE,"readonly");
+    const req = tx.objectStore(FILES_STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  }));
+}
+function idbDelete(id){
+  return openFilesDB().then(db => new Promise((resolve,reject)=>{
+    const tx = db.transaction(FILES_STORE,"readwrite");
+    tx.objectStore(FILES_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  })).catch(()=>{});
+}
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+function base64ToBlob(dataUrl, type){
+  const parts = dataUrl.split(",");
+  const byteStr = atob(parts[1]);
+  const arr = new Uint8Array(byteStr.length);
+  for (let i=0; i<byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+  return new Blob([arr], {type: type || "application/octet-stream"});
+}
+function iconForType(type){
+  if (type && type.startsWith("image/")) return "🖼️";
+  if (type === "application/pdf") return "📄";
+  return "📎";
+}
+function truncateName(name, max){
+  max = max || 18;
+  if (!name || name.length <= max) return name || "קובץ";
+  const dot = name.lastIndexOf(".");
+  const ext = dot > -1 ? name.slice(dot) : "";
+  return name.slice(0, max - ext.length - 1) + "…" + ext;
+}
+async function openAttachment(id, driveUrl){
+  try{
+    const rec = await idbGet(id);
+    if (rec && rec.blob){
+      const url = URL.createObjectURL(rec.blob);
+      window.open(url, "_blank");
+      setTimeout(()=> URL.revokeObjectURL(url), 60000);
+      return;
+    }
+  }catch(e){ console.warn("tripcost: local attachment lookup failed", e); }
+  if (driveUrl){ window.open(driveUrl, "_blank"); return; }
+  toast("הקובץ לא נמצא — אולי שוחזר גיבוי ישן בלי הקבצים, וגם לא הועלה ל-Drive");
+}
+function deleteAttachmentsOf(exp){
+  (exp.attachments || []).forEach(a => idbDelete(a.id));
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw){
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.trips)) return parsed;
+    }
+  }catch(e){ console.warn("tripcost: failed to load state", e); }
+  return defaultState();
+}
+
+function defaultState(){
+  const trip = {
+    id: uid(),
+    name: "הטיול הראשון שלי",
+    startDate: "",
+    endDate: "",
+    cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
+    expenses: []
+  };
+  return {
+    activeTripId: trip.id,
+    trips: [trip],
+    rates: { "דולר": 3.7, "יורו": 4.0, updatedAt: null }
+  };
+}
+
+let state = loadState();
+
+// Migrate trips saved before cash-tracking existed.
+state.trips.forEach(t => {
+  if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
+});
+
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){
+    console.warn("tripcost: failed to save state", e);
+    toast("שמירה נכשלה — נגמר מקום האחסון?");
+  }
+  schedulePushToCloud();
+}
+
+function activeTrip(){
+  let t = state.trips.find(t => t.id === state.activeTripId);
+  if (!t) { t = state.trips[0]; if (t) state.activeTripId = t.id; }
+  return t;
+}
+
+/* ========================= Cloud sync (Firebase Auth + Firestore) + Drive uploads =========================
+   Fully optional: with no firebaseConfig saved, none of this runs and the app behaves exactly as a
+   local-only PWA. Once configured + signed in, the whole `state` object mirrors to a single Firestore
+   document per user, and newly-attached files also upload to Google Drive so other devices (which don't
+   have the local IndexedDB copy) can still open them. */
+const FB_CONFIG_KEY = "tripcost.firebaseConfig";
+const DRIVE_SCOPE_FILE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_SCOPE_FULL = "https://www.googleapis.com/auth/drive";
+const DEFAULT_DRIVE_FOLDER_NAME = "TripCost - קבצים מצורפים";
+
+let fbApp = null, fbAuth = null, fbDb = null;
+let cloudUser = null;              // firebase user object once signed in
+let driveAccessToken = null;       // short-lived OAuth token for Drive REST calls
+let cloudUnsub = null;             // firestore onSnapshot unsubscribe fn
+let isApplyingRemote = false;      // guards against feedback loops
+let pushTimer = null;
+
+function loadFirebaseConfig(){
+  try{
+    const raw = localStorage.getItem(FB_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveFirebaseConfig(cfg){
+  localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(cfg));
+}
+function clearFirebaseConfig(){
+  localStorage.removeItem(FB_CONFIG_KEY);
+}
+/* Accepts either strict JSON, or the exact snippet the Firebase Console shows
+   (unquoted keys, an optional `const firebaseConfig = ... ;` wrapper) — people
+   naturally copy the whole line rather than hand-editing it into valid JSON. */
+function parseFirebaseConfigInput(raw){
+  try{ return JSON.parse(raw); }catch(e){}
+  // Handles the full snippet Firebase gives (imports, comments, the initializeApp(...) call) —
+  // pull out just the "firebaseConfig = { ... }" object, wherever it sits in the paste.
+  const m = raw.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\})\s*;/);
+  const candidate = m ? m[1] : raw.trim().replace(/^(const|let|var)\s+\w+\s*=\s*/, "").replace(/;\s*$/, "");
+  try{
+    const obj = new Function("return (" + candidate + ")")();
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) return obj;
+  }catch(e){}
+  return null;
+}
+
+function setSyncStatus(mode, text){
+  // mode: 'off' | 'on' | 'syncing' | 'err'
+  const line = document.getElementById('syncStatusLine');
+  line.className = mode === 'on' ? 'on' : mode === 'syncing' ? 'syncing' : mode === 'err' ? 'err' : '';
+  if (!text){ line.style.display = 'none'; return; }
+  line.style.display = 'flex';
+  line.innerHTML = `<span class="dot"></span><span>${escapeHtml(text)}</span>`;
+}
+
+function initFirebaseIfConfigured(){
+  const cfg = loadFirebaseConfig();
+  if (!cfg) { setSyncStatus('off', ''); return; }
+  if (typeof firebase === 'undefined'){
+    setSyncStatus('err', 'ספריית Firebase לא נטענה (בדוק חיבור לאינטרנט)');
+    return;
+  }
+  try{
+    fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(cfg);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    setSyncStatus('', 'מתחבר...');
+    fbAuth.onAuthStateChanged(user => {
+      if (user){
+        cloudUser = user;
+        setSyncStatus('on', `מחובר כ-${user.displayName || user.email || ''}`);
+        startCloudListener(user.uid);
+      } else {
+        cloudUser = null;
+        driveAccessToken = null;
+        if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
+        setSyncStatus('off', 'לא מחובר לסנכרון');
+      }
+      renderSyncOverlay();
+    });
+  }catch(e){
+    console.error("tripcost: firebase init failed", e);
+    setSyncStatus('err', 'החיבור ל-Firebase נכשל — בדוק את ה-config');
+  }
+}
+
+function startCloudListener(uid){
+  if (cloudUnsub) cloudUnsub();
+  const ref = fbDb.collection('users').doc(uid).collection('data').doc('state');
+  cloudUnsub = ref.onSnapshot(snap => {
+    if (!snap.exists){
+      // first time this account connects: seed the cloud with whatever is stored locally
+      pushToCloudNow();
+      return;
+    }
+    if (snap.metadata.hasPendingWrites) return; // this is the echo of our own write — ignore
+    const remote = snap.data();
+    if (!remote || !remote.payload) return;
+    isApplyingRemote = true;
+    try{
+      state = JSON.parse(remote.payload);
+      state.trips.forEach(t => { if (!t.cashInitial) t.cashInitial = { "שקל":0, "דולר":0, "יורו":0 }; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderAll();
+      setSyncStatus('on', 'מעודכן מהענן ✓');
+    }catch(e){
+      console.error("tripcost: failed applying remote state", e);
+    }
+    isApplyingRemote = false;
+  }, err => {
+    console.error("tripcost: firestore listener error", err);
+    setSyncStatus('err', 'שגיאת סנכרון — ' + (err.code || ''));
+  });
+}
+
+function schedulePushToCloud(){
+  if (!cloudUser || isApplyingRemote) return;
+  setSyncStatus('syncing', 'מסנכרן...');
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushToCloudNow, 900);
+}
+
+function pushToCloudNow(){
+  if (!cloudUser || !fbDb) return;
+  const ref = fbDb.collection('users').doc(cloudUser.uid).collection('data').doc('state');
+  ref.set({ payload: JSON.stringify(state), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(()=> setSyncStatus('on', 'מעודכן ✓'))
+    .catch(err => { console.error("tripcost: push failed", err); setSyncStatus('err', 'שמירה בענן נכשלה'); });
+}
+
+async function signInWithGoogle(){
+  if (!fbAuth){ toast("יש לשמור קודם את הגדרות Firebase"); return; }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  const wantsExisting = document.getElementById('toggleExistingFolder').checked;
+  provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+  try{
+    const result = await fbAuth.signInWithPopup(provider);
+    const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+    driveAccessToken = credential && credential.accessToken;
+    toast("התחברת בהצלחה ✓");
+  }catch(e){
+    console.error(e);
+    toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
+  }
+}
+
+async function refreshDriveToken(){
+  if (!fbAuth || !fbAuth.currentUser) return null;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  const wantsExisting = document.getElementById('toggleExistingFolder').checked;
+  provider.addScope(wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE);
+  try{
+    const result = await fbAuth.currentUser.reauthenticateWithPopup(provider);
+    const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+    driveAccessToken = credential && credential.accessToken;
+    return driveAccessToken;
+  }catch(e){
+    console.error("tripcost: drive token refresh failed", e);
+    return null;
+  }
+}
+
+async function ensureDriveFolderId(){
+  if (state.driveFolderId) return state.driveFolderId;
+  if (!driveAccessToken) await refreshDriveToken();
+  if (!driveAccessToken) throw new Error("no drive token");
+  const q = encodeURIComponent(`name='${DEFAULT_DRIVE_FOLDER_NAME.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
+    headers: { Authorization: "Bearer " + driveAccessToken }
+  });
+  const searchJson = await searchRes.json();
+  let id = (searchJson.files && searchJson.files[0] && searchJson.files[0].id) || null;
+  if (!id){
+    const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + driveAccessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: DEFAULT_DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
+    });
+    const createJson = await createRes.json();
+    id = createJson.id;
+  }
+  state.driveFolderId = id;
+  saveState();
+  return id;
+}
+
+async function uploadFileToDrive(file){
+  if (!cloudUser) return null; // sync not connected — attachment stays local-only (IndexedDB)
+  const useExisting = document.getElementById('toggleExistingFolder').checked;
+  const explicitFolder = document.getElementById('driveFolderIdInput').value.trim();
+  try{
+    if (!driveAccessToken) await refreshDriveToken();
+    if (!driveAccessToken) return null;
+    const folderId = (useExisting && explicitFolder) ? explicitFolder : await ensureDriveFolderId();
+    const metadata = { name: file.name, mimeType: file.type || "application/octet-stream", parents: [folderId] };
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)], {type:"application/json"}));
+    form.append("file", file);
+    let res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + driveAccessToken },
+      body: form
+    });
+    if (res.status === 401){
+      await refreshDriveToken();
+      if (!driveAccessToken) return null;
+      res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + driveAccessToken },
+        body: form
+      });
+    }
+    if (!res.ok) throw new Error("drive upload http " + res.status);
+    const json = await res.json();
+    return { driveId: json.id, driveUrl: json.webViewLink };
+  }catch(e){
+    console.error("tripcost: drive upload failed", e);
+    return null;
+  }
+}
+
+function signOutCloud(){
+  if (fbAuth) fbAuth.signOut();
+}
+
+function renderSyncOverlay(){
+  const cfg = loadFirebaseConfig();
+  document.getElementById('syncStep1').style.display = cfg ? "none" : "block";
+  document.getElementById('syncStep2').style.display = cfg ? "block" : "none";
+  if (!cfg) return;
+
+  const signedIn = !!cloudUser;
+  document.getElementById('syncSignedOutBlock').style.display = signedIn ? "none" : "block";
+  document.getElementById('syncSignedInBlock').style.display = signedIn ? "block" : "none";
+  document.getElementById('syncUserPhoto').style.display = signedIn ? "block" : "none";
+  if (signedIn){
+    document.getElementById('syncUserPhoto').src = cloudUser.photoURL || "";
+    document.getElementById('syncUserName').textContent = cloudUser.displayName || "מחובר";
+    document.getElementById('syncUserEmail').textContent = cloudUser.email || "";
+    document.getElementById('syncStatusDetail').textContent = "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
+  }
+  document.getElementById('driveFolderIdInput').value = state.driveFolderId || "";
+}
+
+document.getElementById('btnSync').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+document.getElementById('btnCloseSync').addEventListener('click', () => closeOverlay('overlaySync'));
+document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+
+document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () => {
+  const raw = document.getElementById('syncConfigInput').value.trim();
+  if (!raw){ toast("נא להדביק את ה-config"); return; }
+  const cfg = parseFirebaseConfigInput(raw);
+  if (!cfg || !cfg.apiKey || !cfg.projectId){
+    toast("לא זיהיתי firebaseConfig תקין — ודאו שהדבקתם את הקטע מ-Firebase");
+    return;
+  }
+  saveFirebaseConfig(cfg);
+  toast("ההגדרות נשמרו — מתחבר...");
+  initFirebaseIfConfigured();
+  renderSyncOverlay();
+});
+
+document.getElementById('btnGoogleSignIn').addEventListener('click', signInWithGoogle);
+document.getElementById('btnSignOut').addEventListener('click', () => {
+  if (!confirm("להתנתק מהסנכרון? הנתונים המקומיים במכשיר הזה יישארו.")) return;
+  signOutCloud();
+});
+document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
+  document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
+});
+document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
+  if (document.getElementById('toggleExistingFolder').checked){
+    state.driveFolderId = e.target.value.trim();
+    saveState();
+  }
+});
+document.getElementById('overlaySync').addEventListener('click', (e) => { if (e.target.id === 'overlaySync') closeOverlay('overlaySync'); });
+
+/* ========================= Utilities ========================= */
+function fmtMoney(n){
+  const v = Math.round((n||0) * 100) / 100;
+  return v.toLocaleString('he-IL', {minimumFractionDigits:0, maximumFractionDigits:2});
+}
+function fmtDate(d){
+  if (!d) return "—";
+  try{
+    const dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString('he-IL', {day:'2-digit', month:'2-digit', year:'numeric'});
+  }catch(e){ return d; }
+}
+function todayISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+function daysBetween(a,b){
+  const A = new Date(a+"T00:00:00"), B = new Date(b+"T00:00:00");
+  return Math.round((B-A)/86400000);
+}
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 2600);
+}
+
+function rateFor(currency){
+  if (currency === "שקל") return 1;
+  return (state.rates[currency]) || 1;
+}
+
+function expenseTotalILS(exp){
+  const rate = (exp.currency === "שקל") ? 1 : (exp.rate || 1);
+  return (exp.amount || 0) * rate;
+}
+
+/* ========================= Rendering: Trip tabs ========================= */
+function renderTripTabs(){
+  const wrap = document.getElementById('tripTabs');
+  wrap.innerHTML = "";
+  state.trips.forEach(t => {
+    const chip = document.createElement('button');
+    chip.className = 'trip-chip' + (t.id === state.activeTripId ? ' active' : '');
+    chip.textContent = t.name || "טיול ללא שם";
+    chip.addEventListener('click', () => {
+      state.activeTripId = t.id;
+      saveState();
+      renderAll();
+    });
+    wrap.appendChild(chip);
+  });
+  const addChip = document.createElement('button');
+  addChip.className = 'trip-chip add';
+  addChip.textContent = "+ טיול";
+  addChip.addEventListener('click', openNewTripForm);
+  wrap.appendChild(addChip);
+}
+
+/* ========================= Rendering: Summary ========================= */
+function renderSummary(){
+  const trip = activeTrip();
+  const section = document.getElementById('summarySection');
+  if (!trip){ section.innerHTML = ""; return; }
+
+  const total = trip.expenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const byCurrency = {};
+  CURRENCIES.forEach(c => byCurrency[c] = 0);
+  trip.expenses.forEach(e => { byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0); });
+
+  const byPayment = {};
+  trip.expenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + expenseTotalILS(e); });
+  const paymentEntries = Object.entries(byPayment).sort((a,b)=>b[1]-a[1]);
+
+  let daysLine = "";
+  if (trip.startDate && trip.endDate){
+    const totalDays = Math.max(1, daysBetween(trip.startDate, trip.endDate) + 1);
+    const remaining = Math.max(0, daysBetween(todayISO(), trip.endDate) + 1);
+    const avgPerDay = total / totalDays;
+    daysLine = `<div class="m"><b class="tnum">${remaining > 0 && remaining <= totalDays ? remaining : totalDays}</b> ימים${remaining>0 && remaining<=totalDays ? ' נותרו' : ' סה״כ'}</div>
+                <div class="m">ממוצע ליום: <b class="tnum">₪${fmtMoney(avgPerDay)}</b></div>`;
+  }
+
+  section.innerHTML = `
+    <div class="pass">
+      <div class="pass-top">
+        <div class="pass-eyebrow">${escapeHtml(trip.name || "טיול")}${trip.startDate ? " · " + fmtDate(trip.startDate) + (trip.endDate ? " – "+fmtDate(trip.endDate) : "") : ""}</div>
+        <div class="pass-total tnum">₪${fmtMoney(total)} <small>סה״כ עד כה</small></div>
+        <div class="pass-meta">
+          <div class="m"><b class="tnum">${trip.expenses.length}</b> הוצאות</div>
+          ${daysLine}
+        </div>
+      </div>
+      <div class="perf"></div>
+      <div class="pass-bottom">
+        ${CURRENCIES.filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
+        ${paymentEntries.slice(0,2).map(([m,v]) => `<span class="chip-stat amber">${escapeHtml(m)}: ₪${fmtMoney(v)}</span>`).join("")}
+        ${trip.expenses.length === 0 ? '<span class="chip-stat">עוד אין הוצאות</span>' : ""}
+      </div>
+    </div>
+  `;
+}
+
+/* ========================= Rendering: Cash status ========================= */
+function renderCash(){
+  const trip = activeTrip();
+  const section = document.getElementById('cashSection');
+  if (!trip){ section.innerHTML = ""; return; }
+
+  const cashInitial = trip.cashInitial || {};
+  const hasAnyCash = CURRENCIES.some(c => (cashInitial[c] || 0) > 0);
+
+  const spentByCurrency = {};
+  CURRENCIES.forEach(c => spentByCurrency[c] = 0);
+  trip.expenses.forEach(e => {
+    if (e.paymentMethod === "מזומן"){
+      spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
+    }
+  });
+  const hasAnyCashSpent = CURRENCIES.some(c => spentByCurrency[c] > 0);
+
+  if (!hasAnyCash && !hasAnyCashSpent){
+    section.innerHTML = `
+      <div class="section-title">מצב מזומן</div>
+      <div class="card">
+        <div class="row">
+          <div style="font-size:13.5px;color:var(--ink-soft);">עוד לא הוזן מזומן לטיול הזה</div>
+          <button class="mini-btn" id="btnSetCashQuick">הגדרת מזומן</button>
+        </div>
+      </div>`;
+    document.getElementById('btnSetCashQuick').addEventListener('click', () => openEditTripForm(trip.id));
+    return;
+  }
+
+  const rows = CURRENCIES.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0).map(c => {
+    const initial = cashInitial[c] || 0;
+    const spent = spentByCurrency[c] || 0;
+    const remaining = initial - spent;
+    const neg = remaining < 0;
+    return `
+      <div class="rate-item">
+        <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${c}</div>
+        <div style="text-align:left;">
+          <div class="tnum" style="font-weight:800;color:${neg ? 'var(--danger)' : 'var(--good)'};">${CUR_SYMBOL[c]}${fmtMoney(remaining)}</div>
+          <div class="tnum" style="font-size:11.5px;color:var(--ink-soft);">מתוך ${CUR_SYMBOL[c]}${fmtMoney(initial)} · הוצאו ${CUR_SYMBOL[c]}${fmtMoney(spent)}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  section.innerHTML = `
+    <div class="row" style="margin-bottom:10px;">
+      <div class="section-title" style="margin:0;">מצב מזומן</div>
+      <button class="mini-btn" id="btnEditCash">עריכה</button>
+    </div>
+    <div class="card">${rows}</div>
+  `;
+  document.getElementById('btnEditCash').addEventListener('click', () => openEditTripForm(trip.id));
+}
+
+/* ========================= Rendering: Rates ========================= */
+function renderRates(){
+  const card = document.getElementById('ratesCard');
+  const r = state.rates;
+  const updated = r.updatedAt ? new Date(r.updatedAt).toLocaleString('he-IL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : "טרם עודכן אוטומטית";
+  card.innerHTML = `
+    <div class="rate-item">
+      <div class="rate-cur"><span class="rate-flag">$</span> דולר → שקל</div>
+      <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="rateUSD" value="${r["דולר"]}"></div>
+    </div>
+    <div class="rate-item">
+      <div class="rate-cur"><span class="rate-flag">€</span> יורו → שקל</div>
+      <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="rateEUR" value="${r["יורו"]}"></div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="rate-updated">עדכון אחרון: ${updated}</div>
+      <button class="btn-refresh" id="btnRefreshRates">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 11A8 8 0 105.5 16.5M4 12a8 8 0 0114.5-5.5" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>
+        עדכן שערים
+      </button>
+    </div>
+  `;
+  document.getElementById('rateUSD').addEventListener('change', (e)=>{
+    state.rates["דולר"] = parseFloat(e.target.value) || 1;
+    saveState();
+  });
+  document.getElementById('rateEUR').addEventListener('change', (e)=>{
+    state.rates["יורו"] = parseFloat(e.target.value) || 1;
+    saveState();
+  });
+  document.getElementById('btnRefreshRates').addEventListener('click', refreshRatesFromWeb);
+}
+
+async function refreshRatesFromWeb(){
+  const btn = document.getElementById('btnRefreshRates');
+  btn.classList.add('loading');
+  try{
+    const [usdRes, eurRes] = await Promise.all([
+      fetch('https://open.er-api.com/v6/latest/USD'),
+      fetch('https://open.er-api.com/v6/latest/EUR')
+    ]);
+    const usdJson = await usdRes.json();
+    const eurJson = await eurRes.json();
+    const usdIls = usdJson && usdJson.rates && usdJson.rates.ILS;
+    const eurIls = eurJson && eurJson.rates && eurJson.rates.ILS;
+    if (usdIls && eurIls){
+      state.rates["דולר"] = Math.round(usdIls * 10000) / 10000;
+      state.rates["יורו"] = Math.round(eurIls * 10000) / 10000;
+      state.rates.updatedAt = Date.now();
+      saveState();
+      renderRates();
+      toast("השערים עודכנו ✓");
+    } else {
+      throw new Error("bad payload");
+    }
+  }catch(e){
+    toast("לא הצלחתי לעדכן שערים כרגע — הזן ידנית");
+  }finally{
+    btn.classList.remove('loading');
+  }
+}
+
+/* ========================= Rendering: Expenses list ========================= */
+function renderExpenses(){
+  const trip = activeTrip();
+  const list = document.getElementById('expensesList');
+  if (!trip || trip.expenses.length === 0){
+    list.innerHTML = `
+      <div class="empty">
+        <div class="big">🧳</div>
+        <p><b>עדיין אין הוצאות בטיול הזה</b></p>
+        <p>לחצו על "הוצאה חדשה" כדי להתחיל לתעד</p>
+      </div>`;
+    return;
+  }
+
+  const sortMode = document.getElementById('sortSelect').value;
+  const items = [...trip.expenses];
+  items.sort((a,b) => {
+    if (sortMode === 'date_asc') return (a.date||"").localeCompare(b.date||"");
+    if (sortMode === 'amount_desc') return expenseTotalILS(b) - expenseTotalILS(a);
+    return (b.date||"").localeCompare(a.date||"");
+  });
+
+  list.innerHTML = items.map(exp => {
+    const totalIls = expenseTotalILS(exp);
+    const showOrig = exp.currency !== "שקל";
+    return `
+    <div class="exp-card" data-id="${exp.id}">
+      <div class="exp-top">
+        <div>
+          <div class="exp-item">${escapeHtml(exp.item || "הוצאה")}</div>
+          <div class="exp-date">${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
+        </div>
+        <div class="exp-amt">
+          <div class="exp-total tnum">₪${fmtMoney(totalIls)}</div>
+          ${showOrig ? `<div class="exp-orig tnum">${CUR_SYMBOL[exp.currency]}${fmtMoney(exp.amount)} × ${exp.rate}</div>` : ""}
+        </div>
+      </div>
+      <div class="exp-tags">
+        <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
+        <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
+        <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? '✓ שולם' : '✗ לא שולם'}</span>
+      </div>
+      ${exp.notes ? `<div class="exp-note">${escapeHtml(exp.notes)}</div>` : ""}
+      ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
+      <div class="exp-actions">
+        <button class="mini-btn" data-action="edit" data-id="${exp.id}">עריכה</button>
+        <button class="mini-btn danger" data-action="delete" data-id="${exp.id}">מחיקה</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  list.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', () => openEditExpense(b.dataset.id)));
+  list.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', () => deleteExpense(b.dataset.id)));
+  list.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openAttachment(b.dataset.open, b.dataset.driveurl)));
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderAll(){
+  renderTripTabs();
+  renderSummary();
+  renderCash();
+  renderRates();
+  renderExpenses();
+}
+
+/* ========================= Trip management ========================= */
+let editingTripId = null;
+
+function openTripsList(){
+  const wrap = document.getElementById('tripListWrap');
+  wrap.innerHTML = state.trips.map(t => `
+    <div class="trip-list-item">
+      <div>
+        <div style="font-weight:700;">${escapeHtml(t.name)}</div>
+        <div style="font-size:12px;color:var(--ink-soft);">${t.expenses.length} הוצאות${t.startDate ? " · " + fmtDate(t.startDate) : ""}</div>
+      </div>
+      <button class="mini-btn" data-id="${t.id}">עריכה</button>
+    </div>
+  `).join("");
+  wrap.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', () => {
+    closeOverlay('overlayTrips');
+    openEditTripForm(b.dataset.id);
+  }));
+  showOverlay('overlayTrips');
+}
+
+function openNewTripForm(){
+  editingTripId = null;
+  document.getElementById('tripFormTitle').textContent = "טיול חדש";
+  document.getElementById('tfName').value = "";
+  document.getElementById('tfStart').value = "";
+  document.getElementById('tfEnd').value = "";
+  document.getElementById('tfCashILS').value = "";
+  document.getElementById('tfCashUSD').value = "";
+  document.getElementById('tfCashEUR').value = "";
+  document.getElementById('btnDeleteTrip').style.display = "none";
+  document.getElementById('deleteTripDivider').style.display = "none";
+  showOverlay('overlayTripForm');
+}
+
+function openEditTripForm(id){
+  const t = state.trips.find(x => x.id === id);
+  if (!t) return;
+  editingTripId = id;
+  const cash = t.cashInitial || {};
+  document.getElementById('tripFormTitle').textContent = "עריכת טיול";
+  document.getElementById('tfName').value = t.name || "";
+  document.getElementById('tfStart').value = t.startDate || "";
+  document.getElementById('tfEnd').value = t.endDate || "";
+  document.getElementById('tfCashILS').value = cash["שקל"] || "";
+  document.getElementById('tfCashUSD').value = cash["דולר"] || "";
+  document.getElementById('tfCashEUR').value = cash["יורו"] || "";
+  const canDelete = state.trips.length > 1;
+  document.getElementById('btnDeleteTrip').style.display = canDelete ? "block" : "none";
+  document.getElementById('deleteTripDivider').style.display = canDelete ? "block" : "none";
+  showOverlay('overlayTripForm');
+}
+
+document.getElementById('btnSaveTrip').addEventListener('click', () => {
+  const name = document.getElementById('tfName').value.trim() || "טיול ללא שם";
+  const start = document.getElementById('tfStart').value;
+  const end = document.getElementById('tfEnd').value;
+  const cashInitial = {
+    "שקל": parseFloat(document.getElementById('tfCashILS').value) || 0,
+    "דולר": parseFloat(document.getElementById('tfCashUSD').value) || 0,
+    "יורו": parseFloat(document.getElementById('tfCashEUR').value) || 0
+  };
+  if (editingTripId){
+    const t = state.trips.find(x => x.id === editingTripId);
+    if (t){ t.name = name; t.startDate = start; t.endDate = end; t.cashInitial = cashInitial; }
+  } else {
+    const t = { id: uid(), name, startDate: start, endDate: end, cashInitial: cashInitial, expenses: [] };
+    state.trips.push(t);
+    state.activeTripId = t.id;
+  }
+  saveState();
+  closeOverlay('overlayTripForm');
+  renderAll();
+  toast("הטיול נשמר ✓");
+});
+
+document.getElementById('btnDeleteTrip').addEventListener('click', () => {
+  if (!editingTripId) return;
+  if (!confirm("למחוק את הטיול הזה לצמיתות? כל ההוצאות שלו יימחקו.")) return;
+  const removedTrip = state.trips.find(t => t.id === editingTripId);
+  if (removedTrip) removedTrip.expenses.forEach(deleteAttachmentsOf);
+  state.trips = state.trips.filter(t => t.id !== editingTripId);
+  if (state.activeTripId === editingTripId){
+    state.activeTripId = state.trips[0] ? state.trips[0].id : null;
+  }
+  saveState();
+  closeOverlay('overlayTripForm');
+  renderAll();
+  toast("הטיול נמחק");
+});
+
+document.getElementById('btnCancelTripForm').addEventListener('click', () => closeOverlay('overlayTripForm'));
+document.getElementById('btnNewTrip').addEventListener('click', () => { closeOverlay('overlayTrips'); openNewTripForm(); });
+document.getElementById('btnCloseTrips').addEventListener('click', () => closeOverlay('overlayTrips'));
+document.getElementById('btnMenu').addEventListener('click', openTripsList);
+
+/* ========================= Expense form ========================= */
+let editingExpenseId = null;
+let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
+let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
+
+function renderAttachChips(){
+  const wrap = document.getElementById('efAttachList');
+  if (currentAttachments.length === 0){ wrap.innerHTML = ""; return; }
+  wrap.innerHTML = currentAttachments.map((a,idx) => {
+    const isImage = a.type && a.type.startsWith("image/") && a.file;
+    const thumb = isImage ? `<img src="${URL.createObjectURL(a.file)}" alt="">` : `<span>${iconForType(a.type)}</span>`;
+    return `<span class="attach-chip" data-idx="${idx}" style="cursor:default;">${thumb}<span>${escapeHtml(truncateName(a.name))}</span><span class="x" data-remove="${idx}">×</span></span>`;
+  }).join("");
+  wrap.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.remove);
+      const a = currentAttachments[idx];
+      if (a && !a.isNew) removedAttachmentIds.push(a.id);
+      currentAttachments.splice(idx,1);
+      renderAttachChips();
+    });
+  });
+}
+
+document.getElementById('btnAttachFile').addEventListener('click', () => document.getElementById('efFileInput').click());
+document.getElementById('efFileInput').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  files.forEach(file => {
+    currentAttachments.push({ id: uid(), name: file.name, type: file.type, size: file.size, file: file, isNew: true });
+  });
+  renderAttachChips();
+  e.target.value = "";
+});
+
+function updateRateFieldVisibility(){
+  const cur = document.getElementById('efCurrency').value;
+  const rateField = document.getElementById('efRateField');
+  if (cur === "שקל"){
+    rateField.style.display = "none";
+    document.getElementById('efRate').value = 1;
+  } else {
+    rateField.style.display = "block";
+    document.getElementById('efRate').value = rateFor(cur);
+  }
+  updateTotalHint();
+}
+
+function updateTotalHint(){
+  const amount = parseFloat(document.getElementById('efAmount').value) || 0;
+  const cur = document.getElementById('efCurrency').value;
+  const rate = cur === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1);
+  document.getElementById('efTotalHint').textContent = "סה״כ עלות: ₪" + fmtMoney(amount * rate);
+}
+
+document.getElementById('efCurrency').addEventListener('change', updateRateFieldVisibility);
+document.getElementById('efAmount').addEventListener('input', updateTotalHint);
+document.getElementById('efRate').addEventListener('input', updateTotalHint);
+
+document.getElementById('efBookedPill').addEventListener('click', function(){ this.classList.toggle('on'); });
+document.getElementById('efPaidPill').addEventListener('click', function(){ this.classList.toggle('on'); });
+
+/* -- payment method segmented control -- */
+function setPaymentUI(value){
+  const seg = document.getElementById('efPaymentSeg');
+  const otherField = document.getElementById('efPaymentOtherField');
+  const otherInput = document.getElementById('efPaymentOther');
+  const known = ["אשראי", "מזומן"];
+  const isKnown = known.includes(value);
+  seg.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', isKnown ? b.dataset.val === value : b.dataset.val === "אחר");
+  });
+  otherField.style.display = isKnown ? "none" : "block";
+  otherInput.value = isKnown ? "" : (value || "");
+}
+function getPaymentValue(){
+  const active = document.getElementById('efPaymentSeg').querySelector('button.active');
+  const val = active ? active.dataset.val : "אשראי";
+  if (val === "אחר"){
+    return document.getElementById('efPaymentOther').value.trim() || "אחר";
+  }
+  return val;
+}
+document.getElementById('efPaymentSeg').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('efPaymentSeg').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('efPaymentOtherField').style.display = (btn.dataset.val === "אחר") ? "block" : "none";
+    if (btn.dataset.val !== "אחר") document.getElementById('efPaymentOther').value = "";
+  });
+});
+
+function openNewExpense(){
+  const trip = activeTrip();
+  if (!trip){ toast("יש ליצור טיול קודם"); return; }
+  editingExpenseId = null;
+  currentAttachments = [];
+  removedAttachmentIds = [];
+  document.getElementById('expFormTitle').textContent = "הוצאה חדשה";
+  document.getElementById('efItem').value = "";
+  document.getElementById('efDate').value = todayISO();
+  setPaymentUI("אשראי");
+  document.getElementById('efAmount').value = "";
+  document.getElementById('efCurrency').value = "שקל";
+  document.getElementById('efNotes').value = "";
+  document.getElementById('efBookedPill').classList.remove('on');
+  document.getElementById('efPaidPill').classList.remove('on');
+  document.getElementById('btnDeleteExpense').style.display = "none";
+  document.getElementById('deleteExpenseDivider').style.display = "none";
+  renderAttachChips();
+  updateRateFieldVisibility();
+  showOverlay('overlayExpense');
+  setTimeout(()=> document.getElementById('efItem').focus(), 250);
+}
+
+function openEditExpense(id){
+  const trip = activeTrip();
+  const exp = trip.expenses.find(e => e.id === id);
+  if (!exp) return;
+  editingExpenseId = id;
+  currentAttachments = (exp.attachments || []).map(a => Object.assign({}, a, {isNew:false}));
+  removedAttachmentIds = [];
+  document.getElementById('expFormTitle').textContent = "עריכת הוצאה";
+  document.getElementById('efItem').value = exp.item || "";
+  document.getElementById('efDate').value = exp.date || todayISO();
+  setPaymentUI(exp.paymentMethod || "אשראי");
+  document.getElementById('efAmount').value = exp.amount || "";
+  document.getElementById('efCurrency').value = exp.currency || "שקל";
+  document.getElementById('efRate').value = exp.rate || rateFor(exp.currency);
+  document.getElementById('efNotes').value = exp.notes || "";
+  document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
+  document.getElementById('efPaidPill').classList.toggle('on', !!exp.paid);
+  document.getElementById('btnDeleteExpense').style.display = "block";
+  document.getElementById('deleteExpenseDivider').style.display = "block";
+  renderAttachChips();
+  updateTotalHint();
+  showOverlay('overlayExpense');
+}
+
+document.getElementById('btnAddExpense').addEventListener('click', openNewExpense);
+document.getElementById('btnCancelExpense').addEventListener('click', () => closeOverlay('overlayExpense'));
+
+document.getElementById('btnSaveExpense').addEventListener('click', async () => {
+  const trip = activeTrip();
+  if (!trip) return;
+  const currency = document.getElementById('efCurrency').value;
+  const existing = editingExpenseId ? trip.expenses.find(e => e.id === editingExpenseId) : null;
+  const item = document.getElementById('efItem').value.trim();
+  if (!item){ toast("נא להזין שם פריט"); return; }
+
+  const saveBtn = document.getElementById('btnSaveExpense');
+  saveBtn.disabled = true;
+  try{
+    for (const a of currentAttachments){
+      if (a.isNew){
+        await idbPut({id: a.id, blob: a.file, name: a.name, type: a.type, size: a.size});
+        const driveResult = await uploadFileToDrive(a.file).catch(()=>null);
+        if (driveResult){ a.driveId = driveResult.driveId; a.driveUrl = driveResult.driveUrl; }
+      }
+    }
+    for (const id of removedAttachmentIds){
+      await idbDelete(id);
+    }
+  }catch(err){
+    console.error(err);
+    toast("שמירת הקובץ נכשלה — ההוצאה נשמרה בלי הקובץ");
+  }
+  saveBtn.disabled = false;
+
+  const data = {
+    item: item,
+    date: document.getElementById('efDate').value,
+    split: (existing && existing.split) || 1,
+    paymentMethod: getPaymentValue(),
+    amount: parseFloat(document.getElementById('efAmount').value) || 0,
+    currency: currency,
+    rate: currency === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1),
+    booked: document.getElementById('efBookedPill').classList.contains('on'),
+    paid: document.getElementById('efPaidPill').classList.contains('on'),
+    notes: document.getElementById('efNotes').value.trim(),
+    attachments: currentAttachments.map(a => ({id:a.id, name:a.name, type:a.type, size:a.size, driveId:a.driveId||null, driveUrl:a.driveUrl||null}))
+  };
+
+  if (editingExpenseId){
+    const idx = trip.expenses.findIndex(e => e.id === editingExpenseId);
+    if (idx > -1) trip.expenses[idx] = Object.assign({id: editingExpenseId}, data);
+  } else {
+    trip.expenses.push(Object.assign({id: uid()}, data));
+    // Learn from this entry: keep the manually-entered rate as the new default suggestion.
+    if (currency !== "שקל") state.rates[currency] = data.rate;
+  }
+  saveState();
+  closeOverlay('overlayExpense');
+  renderAll();
+  toast("ההוצאה נשמרה ✓");
+});
+
+document.getElementById('btnDeleteExpense').addEventListener('click', () => {
+  if (!editingExpenseId) return;
+  deleteExpense(editingExpenseId, true);
+});
+
+function deleteExpense(id, fromForm){
+  const trip = activeTrip();
+  if (!trip) return;
+  if (!confirm("למחוק את ההוצאה הזו?")) return;
+  const removed = trip.expenses.find(e => e.id === id);
+  if (removed) deleteAttachmentsOf(removed);
+  trip.expenses = trip.expenses.filter(e => e.id !== id);
+  saveState();
+  if (fromForm) closeOverlay('overlayExpense');
+  renderAll();
+  toast("ההוצאה נמחקה");
+}
+
+document.getElementById('sortSelect').addEventListener('change', renderExpenses);
+
+/* ========================= Overlays ========================= */
+function showOverlay(id){ document.getElementById(id).classList.add('show'); }
+function closeOverlay(id){ document.getElementById(id).classList.remove('show'); }
+[['overlayTrips'],['overlayTripForm'],['overlayExpense']].forEach(([id]) => {
+  document.getElementById(id).addEventListener('click', (e) => { if (e.target.id === id) closeOverlay(id); });
+});
+
+/* ========================= Import from Excel ========================= */
+document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileImport').click());
+document.getElementById('fileImport').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type: 'array', cellDates: true});
+    const sheetName = wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, raw:true, defval:null});
+
+    // Find header row containing both "פריט" and "תאריך"
+    let headerRowIdx = -1, colIdx = {};
+    for (let i=0; i<rows.length; i++){
+      const row = rows[i];
+      if (!row) continue;
+      const hasItem = row.some(c => typeof c === 'string' && c.trim() === 'פריט');
+      const hasDate = row.some(c => typeof c === 'string' && c.trim() === 'תאריך');
+      if (hasItem && hasDate){
+        headerRowIdx = i;
+        row.forEach((cell, ci) => {
+          if (typeof cell === 'string'){
+            const key = cell.trim();
+            if (['פריט','תאריך','חלוקה','אופן תשלום','סכום','מטבע','שער המרה','הזמנה','תשלום','הערות'].includes(key)){
+              colIdx[key] = ci;
+            }
+          }
+        });
+        break;
+      }
+    }
+
+    if (headerRowIdx === -1){
+      toast("לא זוהתה טבלת הוצאות בקובץ");
+      return;
+    }
+
+    // Trip name guess: look at rows above the header for a non-empty text cell
+    let tripName = file.name.replace(/\.[^.]+$/, "");
+    for (let i = headerRowIdx - 1; i >= 0 && i >= headerRowIdx - 3; i--){
+      const row = rows[i];
+      if (row){
+        const textCell = row.find(c => typeof c === 'string' && c.trim().length > 1);
+        if (textCell){ tripName = textCell.trim(); break; }
+      }
+    }
+
+    const newExpenses = [];
+    let blankStreak = 0;
+    for (let i = headerRowIdx+1; i < rows.length && blankStreak < 4; i++){
+      const row = rows[i] || [];
+      const itemRaw = colIdx['פריט'] !== undefined ? row[colIdx['פריט']] : null;
+      const amountRaw = colIdx['סכום'] !== undefined ? row[colIdx['סכום']] : null;
+      const item = (typeof itemRaw === 'string') ? itemRaw.trim() : itemRaw;
+      const amount = typeof amountRaw === 'number' ? amountRaw : parseFloat(amountRaw);
+
+      if (!item && !(amount > 0)){
+        blankStreak++;
+        continue;
+      }
+      blankStreak = 0;
+      if (!item) continue;
+
+      let dateVal = colIdx['תאריך'] !== undefined ? row[colIdx['תאריך']] : null;
+      let dateISO = "";
+      if (dateVal instanceof Date && !isNaN(dateVal)){
+        dateISO = dateVal.toISOString().slice(0,10);
+      } else if (typeof dateVal === 'string' && dateVal.length >= 8){
+        const d = new Date(dateVal);
+        if (!isNaN(d)) dateISO = d.toISOString().slice(0,10);
+      }
+
+      const currencyRaw = colIdx['מטבע'] !== undefined ? row[colIdx['מטבע']] : "שקל";
+      const currency = CURRENCIES.includes(currencyRaw) ? currencyRaw : "שקל";
+      const rateRaw = colIdx['שער המרה'] !== undefined ? row[colIdx['שער המרה']] : 1;
+      const rate = parseFloat(rateRaw) || 1;
+      const splitRaw = colIdx['חלוקה'] !== undefined ? row[colIdx['חלוקה']] : 1;
+      const split = parseInt(splitRaw) || 1;
+      const payment = colIdx['אופן תשלום'] !== undefined ? row[colIdx['אופן תשלום']] : "";
+      const bookedRaw = colIdx['הזמנה'] !== undefined ? row[colIdx['הזמנה']] : null;
+      const paidRaw = colIdx['תשלום'] !== undefined ? row[colIdx['תשלום']] : null;
+      const notes = colIdx['הערות'] !== undefined ? row[colIdx['הערות']] : "";
+
+      newExpenses.push({
+        id: uid(),
+        item: String(item),
+        date: dateISO,
+        split: split,
+        paymentMethod: payment ? String(payment) : "אשראי",
+        amount: amount || 0,
+        currency: currency,
+        rate: currency === "שקל" ? 1 : rate,
+        booked: !!bookedRaw,
+        paid: !!paidRaw,
+        notes: notes ? String(notes) : ""
+      });
+    }
+
+    if (newExpenses.length === 0){
+      toast("לא נמצאו שורות הוצאה לייבוא");
+      return;
+    }
+
+    const trip = { id: uid(), name: tripName, startDate: "", endDate: "", expenses: newExpenses };
+    state.trips.push(trip);
+    state.activeTripId = trip.id;
+    saveState();
+    renderAll();
+    toast(`יובאו ${newExpenses.length} הוצאות לטיול חדש "${tripName}"`);
+  }catch(err){
+    console.error(err);
+    toast("הייבוא נכשל — בדקו את מבנה הקובץ");
+  }
+  e.target.value = "";
+});
+
+/* ========================= Export to Excel ========================= */
+document.getElementById('btnExportXlsx').addEventListener('click', () => {
+  const trip = activeTrip();
+  if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
+  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","הוזמן","שולם","הערות","קבצים מצורפים"];
+  const data = [header, ...trip.expenses.map(e => [
+    e.item, e.date, e.split, e.paymentMethod, e.amount, e.currency, e.rate,
+    Math.round(expenseTotalILS(e)*100)/100, e.booked ? "V" : "", e.paid ? "V" : "", e.notes,
+    (e.attachments||[]).map(a=>a.name).join(", ")
+  ])];
+  data.push([]);
+  data.push(["", "", "", "", "", "", "סה\"כ", Math.round(trip.expenses.reduce((s,e)=>s+expenseTotalILS(e),0)*100)/100]);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:8},{wch:14},{wch:10},{wch:8},{wch:10},{wch:14},{wch:8},{wch:8},{wch:26},{wch:26}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
+  XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
+});
+
+/* ========================= Backup / Restore (JSON, incl. attached files) ========================= */
+document.getElementById('btnBackup').addEventListener('click', async () => {
+  const btn = document.getElementById('btnBackup');
+  btn.disabled = true;
+  toast("מכין גיבוי, רגע...");
+  const attachmentsData = {};
+  try{
+    const allIds = [];
+    state.trips.forEach(t => t.expenses.forEach(e => (e.attachments||[]).forEach(a => allIds.push(a.id))));
+    for (const id of allIds){
+      const rec = await idbGet(id);
+      if (rec && rec.blob){
+        attachmentsData[id] = { name: rec.name, type: rec.type, base64: await blobToBase64(rec.blob) };
+      }
+    }
+  }catch(err){ console.warn("tripcost: attachment backup failed", err); }
+
+  const payload = Object.assign({}, state, { attachmentsData });
+  const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tripcost-backup-${todayISO()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+  btn.disabled = false;
+  toast("הגיבוי הורד ✓ (כולל קבצים מצורפים)");
+});
+
+document.getElementById('btnRestore').addEventListener('click', () => document.getElementById('fileRestore').click());
+document.getElementById('fileRestore').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || !Array.isArray(parsed.trips)) throw new Error("invalid backup");
+    if (!confirm("שחזור יחליף את כל הנתונים הנוכחיים באפליקציה. להמשיך?")) return;
+    const attachmentsData = parsed.attachmentsData || {};
+    delete parsed.attachmentsData;
+    state = parsed;
+    state.trips.forEach(t => { if (!t.cashInitial) t.cashInitial = { "שקל":0, "דולר":0, "יורו":0 }; });
+    saveState();
+    for (const [id, info] of Object.entries(attachmentsData)){
+      try{
+        const blob = base64ToBlob(info.base64, info.type);
+        await idbPut({id, blob, name: info.name, type: info.type, size: blob.size});
+      }catch(err){ console.warn("tripcost: failed restoring attachment", id, err); }
+    }
+    renderAll();
+    toast("השחזור הושלם ✓");
+  }catch(err){
+    console.error(err);
+    toast("קובץ הגיבוי לא תקין");
+  }
+  e.target.value = "";
+});
+
+/* ========================= Misc ========================= */
+window.addEventListener('scroll', () => {
+  document.getElementById('topbar').classList.toggle('scrolled', window.scrollY > 4);
+});
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {/* not hosted standalone yet — ignore */});
+  });
+}
+
+/* ========================= Init ========================= */
+renderAll();
+initFirebaseIfConfigured();
+
+})();
+</script>
+</body>
+</html>
