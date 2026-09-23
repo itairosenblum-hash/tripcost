@@ -193,6 +193,13 @@
   .row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .cash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;}
+  .cur-grid{display:flex;flex-wrap:wrap;gap:8px;}
+  .cur-chip{
+    display:flex;align-items:center;gap:6px;padding:8px 13px;border:1px solid var(--border);
+    border-radius:var(--radius-pill);background:var(--card);cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-soft);
+  }
+  .cur-chip.active{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
 
   /* ---- Rates card ---- */
   .rate-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
@@ -305,6 +312,7 @@
   }
   .trip-info-row b{color:var(--ink);font-weight:700;}
   .trip-info-booking{color:var(--ink-soft);font-size:11.5px;margin-inline-start:auto;}
+  .trip-countdown{background:var(--teal-tint);color:var(--teal-dark);font-weight:700;}
 
   /* ---- Sheet / modal ---- */
   .overlay{
@@ -371,6 +379,17 @@
     pointer-events:none;max-width:88%;text-align:center;
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .undo-toast{
+    position:fixed;bottom:calc(96px + var(--safe-b));left:50%;transform:translateX(-50%);
+    background:var(--ink);color:var(--bg);padding:11px 12px 11px 18px;border-radius:var(--radius-pill);
+    font-size:13.5px;font-weight:600;z-index:60;opacity:0;transition:opacity .25s,transform .25s;
+    pointer-events:none;max-width:88%;display:flex;align-items:center;gap:14px;
+  }
+  .undo-toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);pointer-events:auto;}
+  .undo-toast button{
+    background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
+    padding:7px 16px;font-weight:800;font-size:13px;cursor:pointer;flex:none;
+  }
   input[type=file]{display:none;}
   #btnAddExpenseDesktop{display:none;}
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
@@ -484,6 +503,9 @@
             </button>
           </div>
         </div>
+        <div class="field" style="margin-bottom:10px;">
+          <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
+        </div>
         <div id="filterBar" style="display:none;margin-bottom:10px;"></div>
         <div id="expensesList"></div>
       </section>
@@ -574,6 +596,14 @@
 
     <div class="divider"></div>
 
+    <div class="field">
+      <label>מטבעות זרים רלוונטיים לטיול</label>
+      <div id="tfCurrencyGrid" class="cur-grid"></div>
+      <div class="hint" style="margin-top:6px;">שקל תמיד זמין. בחרו כאן אילו מטבעות נוספים יופיעו בבחירת המטבע בהוצאות ובמזומן.</div>
+    </div>
+
+    <div class="divider"></div>
+
     <div class="toggle-row">
       <div>
         <div style="font-weight:700;font-size:13.5px;">הטיול הסתיים</div>
@@ -600,20 +630,7 @@
     <h2>מזומן לטיול</h2>
     <div class="field">
       <label>מזומן שהבאתי לטיול</label>
-      <div class="grid3">
-        <div>
-          <label style="font-weight:400;">שקל ₪</label>
-          <input type="number" id="cashILS" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-        <div>
-          <label style="font-weight:400;">דולר $</label>
-          <input type="number" id="cashUSD" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-        <div>
-          <label style="font-weight:400;">יורו €</label>
-          <input type="number" id="cashEUR" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-      </div>
+      <div id="cashInputsGrid" class="cash-grid"></div>
       <div class="hint" style="margin-top:8px;">נחשב לכם כמה מזומן אמור להישאר, לפי ההוצאות שסומנו כ״מזומן״.</div>
     </div>
     <div class="sheet-actions">
@@ -788,6 +805,10 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="undo-toast" id="undoToast">
+  <span id="undoToastText"></span>
+  <button id="undoToastBtn">בטל</button>
+</div>
 
 <script>
 (function(){
@@ -795,8 +816,34 @@
 
 /* ========================= Storage ========================= */
 const STORAGE_KEY = "tripcost.v1";
-const CURRENCIES = ["שקל","דולר","יורו"];
-const CUR_SYMBOL = {"שקל":"₪","דולר":"$","יורו":"€"};
+const CURRENCY_POOL = [
+  { name: "דולר", symbol: "$", code: "USD" },
+  { name: "יורו", symbol: "€", code: "EUR" },
+  { name: "לירה שטרלינג", symbol: "£", code: "GBP" },
+  { name: "ין יפני", symbol: "¥", code: "JPY" },
+  { name: "פרנק שוויצרי", symbol: "Fr", code: "CHF" },
+  { name: "דולר אוסטרלי", symbol: "A$", code: "AUD" },
+  { name: "דולר קנדי", symbol: "C$", code: "CAD" },
+  { name: "לירה טורקית", symbol: "₺", code: "TRY" },
+  { name: "באט תאילנדי", symbol: "฿", code: "THB" }
+]; // ILS is the implicit base currency, not part of the selectable foreign pool
+const CURRENCY_CODE = { "שקל": "ILS" };
+CURRENCY_POOL.forEach(c => CURRENCY_CODE[c.name] = c.code);
+const CURRENCIES = ["שקל","דולר","יורו"]; // default set for new trips & pre-existing ones
+const CUR_SYMBOL = { "שקל": "₪" };
+CURRENCY_POOL.forEach(c => CUR_SYMBOL[c.name] = c.symbol);
+function tripCurrencies(trip){
+  // Always שקל + whatever foreign currencies this trip has enabled, plus any currency
+  // that already has real data (an expense, cash brought, or a saved rate) even if
+  // since deselected — never silently hide money that's already been recorded.
+  const enabled = (trip && Array.isArray(trip.enabledCurrencies)) ? trip.enabledCurrencies : ["דולר","יורו"];
+  const set = new Set(["שקל", ...enabled]);
+  if (trip){
+    trip.expenses.forEach(e => set.add(e.currency));
+    Object.keys(trip.cashInitial || {}).forEach(c => { if ((trip.cashInitial[c]||0) > 0) set.add(c); });
+  }
+  return ["שקל", ...CURRENCY_POOL.map(c=>c.name).filter(n => set.has(n))];
+}
 const CATEGORIES = ["טיסה","מלונות","ביטוח","תחבורה","מזון","בגדים","מתנות ומזכרות","אטרקציות","שונות"];
 const CATEGORY_ICON = {
   "טיסה":"✈️", "מלונות":"🏨", "ביטוח":"🛡️", "תחבורה":"🚕", "מזון":"🍽️",
@@ -806,7 +853,6 @@ const CATEGORY_COLOR = {
   "טיסה":"#2F6F6B", "מלונות":"#D9A441", "ביטוח":"#7A6FB0", "תחבורה":"#3D7A52",
   "מזון":"#B5533C", "בגדים":"#4C8FA3", "מתנות ומזכרות":"#C77DA0", "אטרקציות":"#C98A2E", "שונות":"#8A8578"
 };
-const CUR_FLAG = {"שקל":"₪","דולר":"$","יורו":"€"};
 
 function uid(){
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -905,6 +951,7 @@ function defaultState(){
     startDate: "",
     endDate: "",
     cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
+    enabledCurrencies: ["דולר","יורו"],
     finished: false,
     flightOut: "",
     flightReturn: "",
@@ -922,6 +969,7 @@ function defaultState(){
 
 function migrateTrip(t){
   if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
+  if (!Array.isArray(t.enabledCurrencies)) t.enabledCurrencies = ["דולר","יורו"];
   if (typeof t.finished !== "boolean") t.finished = false;
   // Older saves had a single `flightNumber` for the whole trip — treat it as the outbound leg.
   if (typeof t.flightOut !== "string") t.flightOut = (typeof t.flightNumber === "string" ? t.flightNumber : "");
@@ -1414,6 +1462,39 @@ function toast(msg){
   toastTimer = setTimeout(()=> el.classList.remove('show'), 2600);
 }
 
+/* Undo net: an action is applied to the in-memory state (and the view) right away,
+   but the "permanent" part — attachment cleanup, cloud push — is delayed a few
+   seconds behind a visible "בטל" (undo) button, so a stray tap doesn't destroy
+   data with no way back. Only one undo can be pending at a time; starting a new
+   one immediately commits whatever was still pending before it. */
+let pendingUndo = null; // { commit, undo, timer }
+function commitPendingUndo(){
+  if (!pendingUndo) return;
+  clearTimeout(pendingUndo.timer);
+  const p = pendingUndo;
+  pendingUndo = null;
+  p.commit();
+}
+function showUndoToast(message, { onUndo, onCommit, duration = 5000 }){
+  commitPendingUndo();
+  const el = document.getElementById('undoToast');
+  document.getElementById('undoToastText').textContent = message;
+  el.classList.add('show');
+  const timer = setTimeout(() => {
+    el.classList.remove('show');
+    if (pendingUndo === entry) commitPendingUndo();
+  }, duration);
+  const entry = { commit: onCommit, undo: onUndo, timer };
+  pendingUndo = entry;
+  document.getElementById('undoToastBtn').onclick = () => {
+    if (pendingUndo !== entry) return;
+    clearTimeout(timer);
+    pendingUndo = null;
+    el.classList.remove('show');
+    entry.undo();
+  };
+}
+
 function rateFor(currency){
   if (currency === "שקל") return 1;
   return (state.rates[currency]) || 1;
@@ -1466,7 +1547,7 @@ function renderSummary(){
   // Currency & payment-method breakdowns reflect only what's actually been paid —
   // a booked-but-unpaid hotel shouldn't look like money that's already out the door.
   const byCurrency = {};
-  CURRENCIES.forEach(c => byCurrency[c] = 0);
+  tripCurrencies(trip).forEach(c => byCurrency[c] = 0);
   paidExpenses.forEach(e => { byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0); });
 
   const byPayment = {};
@@ -1495,10 +1576,10 @@ function renderSummary(){
       </div>
       <div class="perf"></div>
       <div class="pass-bottom">
-        ${CURRENCIES.filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
+        ${tripCurrencies(trip).filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
         ${paymentEntries.slice(0,2).map(([m,v]) => `<span class="chip-stat amber">${escapeHtml(m)}: ₪${fmtMoney(v)}</span>`).join("")}
         ${trip.expenses.length === 0 ? '<span class="chip-stat">עוד אין הוצאות</span>' : ""}
-        ${trip.expenses.length > 0 && byCurrency["שקל"]===0 && byCurrency["דולר"]===0 && byCurrency["יורו"]===0 ? '<span class="chip-stat">עוד לא שולם בפועל</span>' : ""}
+        ${trip.expenses.length > 0 && tripCurrencies(trip).every(c => (byCurrency[c]||0) === 0) ? '<span class="chip-stat">עוד לא שולם בפועל</span>' : ""}
       </div>
     </div>
   `;
@@ -1517,21 +1598,22 @@ function renderCash(){
   const section = document.getElementById('cashSection');
   if (!trip){ section.innerHTML = ""; return; }
 
+  const currencies = tripCurrencies(trip).filter(c => c !== "שקל" || true); // includes שקל
   const cashInitial = trip.cashInitial || {};
-  const hasAnyCash = CURRENCIES.some(c => (cashInitial[c] || 0) > 0);
+  const hasAnyCash = currencies.some(c => (cashInitial[c] || 0) > 0);
 
   // Only PAID cash expenses actually reduce the cash on hand — a cash payment
   // that's only "booked" (e.g. paying for a hotel on arrival) hasn't left the wallet yet.
   const spentByCurrency = {};
   const pendingByCurrency = {};
-  CURRENCIES.forEach(c => { spentByCurrency[c] = 0; pendingByCurrency[c] = 0; });
+  currencies.forEach(c => { spentByCurrency[c] = 0; pendingByCurrency[c] = 0; });
   trip.expenses.forEach(e => {
     if (e.paymentMethod === "מזומן"){
       if (e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
       else pendingByCurrency[e.currency] = (pendingByCurrency[e.currency] || 0) + (e.amount || 0);
     }
   });
-  const hasAnyCashSpent = CURRENCIES.some(c => spentByCurrency[c] > 0 || pendingByCurrency[c] > 0);
+  const hasAnyCashSpent = currencies.some(c => spentByCurrency[c] > 0 || pendingByCurrency[c] > 0);
 
   if (!hasAnyCash && !hasAnyCashSpent){
     section.innerHTML = `
@@ -1546,7 +1628,7 @@ function renderCash(){
     return;
   }
 
-  const rows = CURRENCIES.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0 || pendingByCurrency[c] > 0).map(c => {
+  const rows = currencies.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0 || pendingByCurrency[c] > 0).map(c => {
     const initial = cashInitial[c] || 0;
     const spent = spentByCurrency[c] || 0;
     const pending = pendingByCurrency[c] || 0;
@@ -1573,23 +1655,29 @@ function renderCash(){
 }
 
 /* ---- Cash sheet — independent of trip editing ---- */
+function cashInputId(currency){ return "cash_" + CURRENCY_CODE[currency]; }
 function openCashSheet(){
   const trip = activeTrip();
   if (!trip) return;
   const cash = trip.cashInitial || {};
-  document.getElementById('cashILS').value = cash["שקל"] || "";
-  document.getElementById('cashUSD').value = cash["דולר"] || "";
-  document.getElementById('cashEUR').value = cash["יורו"] || "";
+  const grid = document.getElementById('cashInputsGrid');
+  grid.innerHTML = tripCurrencies(trip).map(c => `
+    <div>
+      <label style="font-weight:400;">${escapeHtml(c)} ${CUR_SYMBOL[c]}</label>
+      <input type="number" id="${cashInputId(c)}" inputmode="decimal" step="0.01" placeholder="0" value="${cash[c] || ""}">
+    </div>
+  `).join("");
   showOverlay('overlayCash');
 }
 document.getElementById('btnSaveCash').addEventListener('click', () => {
   const trip = activeTrip();
   if (!trip) return;
-  trip.cashInitial = {
-    "שקל": parseFloat(document.getElementById('cashILS').value) || 0,
-    "דולר": parseFloat(document.getElementById('cashUSD').value) || 0,
-    "יורו": parseFloat(document.getElementById('cashEUR').value) || 0
-  };
+  const cashInitial = Object.assign({}, trip.cashInitial);
+  tripCurrencies(trip).forEach(c => {
+    const el = document.getElementById(cashInputId(c));
+    if (el) cashInitial[c] = parseFloat(el.value) || 0;
+  });
+  trip.cashInitial = cashInitial;
   saveState();
   closeOverlay('overlayCash');
   renderAll();
@@ -1674,19 +1762,20 @@ function renderCategoryChart(){
 }
 
 /* ========================= Rendering: Rates ========================= */
+function rateInputId(currency){ return "rate_" + CURRENCY_CODE[currency]; }
 function renderRates(){
   const card = document.getElementById('ratesCard');
+  const trip = activeTrip();
   const r = state.rates;
   const updated = r.updatedAt ? fmtDateTime(r.updatedAt) : "טרם עודכן אוטומטית";
-  card.innerHTML = `
+  const foreignCurrencies = tripCurrencies(trip).filter(c => c !== "שקל");
+  const rows = foreignCurrencies.map(c => `
     <div class="rate-item">
-      <div class="rate-cur"><span class="rate-flag">$</span> דולר → שקל</div>
-      <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="rateUSD" value="${r["דולר"]}"></div>
-    </div>
-    <div class="rate-item">
-      <div class="rate-cur"><span class="rate-flag">€</span> יורו → שקל</div>
-      <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="rateEUR" value="${r["יורו"]}"></div>
-    </div>
+      <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${escapeHtml(c)} → שקל</div>
+      <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="${rateInputId(c)}" value="${r[c] || 1}"></div>
+    </div>`).join("");
+  card.innerHTML = foreignCurrencies.length ? `
+    ${rows}
     <div class="row" style="margin-top:12px;">
       <div class="rate-updated">עדכון אחרון: ${updated}</div>
       <button class="btn-refresh" id="btnRefreshRates">
@@ -1696,17 +1785,19 @@ function renderRates(){
     </div>
     <button class="mini-btn" id="btnToggleRateHistory" style="width:100%;margin-top:10px;">📈 היסטוריית שנה אחרונה</button>
     <div id="rateHistoryWrap" style="display:none;"></div>
-  `;
-  document.getElementById('rateUSD').addEventListener('change', (e)=>{
-    state.rates["דולר"] = parseFloat(e.target.value) || 1;
-    saveState();
+  ` : `<div class="hint">לטיול הזה לא נבחרו מטבעות זרים — ניתן להוסיף בעריכת הטיול.</div>`;
+
+  foreignCurrencies.forEach(c => {
+    const el = document.getElementById(rateInputId(c));
+    if (el) el.addEventListener('change', (e) => {
+      state.rates[c] = parseFloat(e.target.value) || 1;
+      saveState();
+    });
   });
-  document.getElementById('rateEUR').addEventListener('change', (e)=>{
-    state.rates["יורו"] = parseFloat(e.target.value) || 1;
-    saveState();
-  });
-  document.getElementById('btnRefreshRates').addEventListener('click', () => refreshRatesFromWeb());
-  document.getElementById('btnToggleRateHistory').addEventListener('click', toggleRateHistory);
+  const refreshBtn = document.getElementById('btnRefreshRates');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => refreshRatesFromWeb());
+  const historyBtn = document.getElementById('btnToggleRateHistory');
+  if (historyBtn) historyBtn.addEventListener('click', toggleRateHistory);
 }
 
 /* ---- Rate history (past year), fetched from the ECB-backed Frankfurter API and
@@ -1739,7 +1830,7 @@ async function fetchYearHistory(base){
 }
 
 async function ensureRateHistory(currency){
-  const key = currency === "דולר" ? "USD" : "EUR";
+  const key = CURRENCY_CODE[currency];
   const cached = rateHistoryCache[key];
   const oneDay = 24 * 60 * 60 * 1000;
   if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < oneDay && cached.points && cached.points.length){
@@ -1788,14 +1879,19 @@ function renderHistoryBlock(name, symbol, points, color){
     </div>`;
 }
 
+const HISTORY_COLORS = ["#2F6F6B","#D9A441","#7A6FB0","#3D7A52","#B5533C","#4C8FA3","#C77DA0","#C98A2E","#8A8578"];
 async function toggleRateHistory(){
   const wrap = document.getElementById('rateHistoryWrap');
   if (wrap.style.display === 'block'){ wrap.style.display = 'none'; return; }
+  const trip = activeTrip();
+  const foreignCurrencies = tripCurrencies(trip).filter(c => c !== "שקל");
   wrap.style.display = 'block';
   wrap.innerHTML = '<div class="hint" style="margin-top:10px;">טוען היסטוריה...</div>';
   try{
-    const [usdPts, eurPts] = await Promise.all([ensureRateHistory('דולר'), ensureRateHistory('יורו')]);
-    wrap.innerHTML = renderHistoryBlock('דולר', '$', usdPts, '#2F6F6B') + renderHistoryBlock('יורו', '€', eurPts, '#D9A441');
+    const pointsList = await Promise.all(foreignCurrencies.map(c => ensureRateHistory(c)));
+    wrap.innerHTML = foreignCurrencies.map((c, i) =>
+      renderHistoryBlock(c, CUR_SYMBOL[c], pointsList[i], HISTORY_COLORS[i % HISTORY_COLORS.length])
+    ).join("");
   }catch(e){
     console.error("tripcost: rate history failed", e);
     wrap.innerHTML = '<div class="hint" style="margin-top:10px;">לא הצלחתי לטעון היסטוריה כרגע — נסו שוב מאוחר יותר</div>';
@@ -1806,17 +1902,21 @@ async function refreshRatesFromWeb(silent){
   const btn = document.getElementById('btnRefreshRates');
   if (btn && !silent) btn.classList.add('loading');
   try{
-    const [usdRes, eurRes] = await Promise.all([
-      fetch('https://open.er-api.com/v6/latest/USD'),
-      fetch('https://open.er-api.com/v6/latest/EUR')
-    ]);
-    const usdJson = await usdRes.json();
-    const eurJson = await eurRes.json();
-    const usdIls = usdJson && usdJson.rates && usdJson.rates.ILS;
-    const eurIls = eurJson && eurJson.rates && eurJson.rates.ILS;
-    if (usdIls && eurIls){
-      state.rates["דולר"] = Math.round(usdIls * 10000) / 10000;
-      state.rates["יורו"] = Math.round(eurIls * 10000) / 10000;
+    // Refresh every foreign currency in use across ALL trips (not just the active one) —
+    // rates are shared global data, so this keeps every trip's suggestions fresh at once.
+    const namesInUse = new Set();
+    state.trips.forEach(t => tripCurrencies(t).forEach(c => { if (c !== "שקל") namesInUse.add(c); }));
+    if (namesInUse.size === 0){ if (!silent) toast("אין מטבעות זרים פעילים לעדכן"); return; }
+    const names = [...namesInUse];
+    const results = await Promise.all(names.map(name =>
+      fetch(`https://open.er-api.com/v6/latest/${CURRENCY_CODE[name]}`).then(r => r.json())
+    ));
+    let anySucceeded = false;
+    names.forEach((name, i) => {
+      const ils = results[i] && results[i].rates && results[i].rates.ILS;
+      if (ils){ state.rates[name] = Math.round(ils * 10000) / 10000; anySucceeded = true; }
+    });
+    if (anySucceeded){
       state.rates.updatedAt = Date.now();
       saveState();
       renderRates();
@@ -1872,6 +1972,13 @@ function renderExpenses(){
   let items = [...trip.expenses];
   if (expenseFilter.type === 'pending') items = items.filter(e => !e.paid);
   if (expenseFilter.type === 'category') items = items.filter(e => expCategory(e) === expenseFilter.value);
+  const searchQuery = (document.getElementById('expenseSearchInput').value || "").trim().toLowerCase();
+  if (searchQuery){
+    items = items.filter(e =>
+      (e.item || "").toLowerCase().includes(searchQuery) ||
+      (e.notes || "").toLowerCase().includes(searchQuery)
+    );
+  }
   items.sort((a,b) => {
     if (sortMode === 'date_asc') return (a.date||"").localeCompare(b.date||"");
     if (sortMode === 'amount_desc') return expenseTotalILS(b) - expenseTotalILS(a);
@@ -1879,12 +1986,9 @@ function renderExpenses(){
   });
 
   if (items.length === 0){
-    list.innerHTML = `
-      <div class="empty">
-        <div class="big">✅</div>
-        <p><b>הכל שולם!</b></p>
-        <p>אין הוצאות שממתינות לתשלום</p>
-      </div>`;
+    list.innerHTML = searchQuery
+      ? `<div class="empty"><div class="big">🔍</div><p><b>לא נמצאו הוצאות</b></p><p>נסו מילת חיפוש אחרת</p></div>`
+      : `<div class="empty"><div class="big">✅</div><p><b>הכל שולם!</b></p><p>אין הוצאות שממתינות לתשלום</p></div>`;
     return;
   }
 
@@ -1937,6 +2041,14 @@ function fmtDateTime(dt){
     return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }catch(e){ return dt; }
 }
+function daysUntil(dateTimeStr){
+  if (!dateTimeStr) return null;
+  const target = new Date(dateTimeStr);
+  if (isNaN(target)) return null;
+  const now = new Date();
+  return Math.ceil((target - now) / 86400000);
+}
+
 function renderTripInfoStrip(){
   const trip = activeTrip();
   const wrap = document.getElementById('tripInfoStrip');
@@ -1954,6 +2066,20 @@ function renderTripInfoStrip(){
   if (!outLine && !returnLine && !trip.bookingRef){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
 
   const rows = [];
+
+  // A small countdown, shown only while it's still meaningful: counts down to
+  // departure before the trip starts, then switches to counting down to the
+  // return once you've (presumably) already left.
+  if (!trip.finished){
+    const toDepart = daysUntil(trip.departDateTime);
+    const toReturn = daysUntil(trip.returnDateTime);
+    let countdown = null;
+    if (toDepart !== null && toDepart > 0) countdown = toDepart === 1 ? "✈️ הטיסה מחר!" : `✈️ עוד ${toDepart} ימים לטיסה`;
+    else if (toDepart !== null && toDepart === 0) countdown = "✈️ הטיסה היום!";
+    else if (toReturn !== null && toReturn > 0) countdown = toReturn === 1 ? "🏠 החזרה מחר" : `🏠 עוד ${toReturn} ימים לחזרה`;
+    if (countdown) rows.push(`<div class="trip-info-row trip-countdown">${countdown}</div>`);
+  }
+
   if (outLine || trip.bookingRef){
     const booking = trip.bookingRef ? `<span class="trip-info-booking">🔖 ${escapeHtml(trip.bookingRef)}</span>` : "";
     rows.push(`<div class="trip-info-row">${outLine || "🛫 הלוך"} ${booking}</div>`);
@@ -2009,6 +2135,7 @@ function openNewTripForm(){
   document.getElementById('tfDepartTime').value = "";
   document.getElementById('tfReturnDate').value = "";
   document.getElementById('tfReturnTime').value = "";
+  setCurrencyGridSelection(["דולר","יורו"]);
   document.getElementById('tfFinished').checked = false;
   document.getElementById('btnExportXlsx').style.display = "none";
   document.getElementById('exportTripDivider').style.display = "none";
@@ -2034,6 +2161,7 @@ function openEditTripForm(id){
   document.getElementById('tfDepartTime').value = dep.time;
   document.getElementById('tfReturnDate').value = ret.date;
   document.getElementById('tfReturnTime').value = ret.time;
+  setCurrencyGridSelection(t.enabledCurrencies);
   document.getElementById('tfFinished').checked = !!t.finished;
   const hasExpenses = t.expenses.length > 0;
   document.getElementById('btnExportXlsx').style.display = hasExpenses ? "block" : "none";
@@ -2053,6 +2181,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const departDateTime = joinDateTime(document.getElementById('tfDepartDate').value, document.getElementById('tfDepartTime').value);
   const returnDateTime = joinDateTime(document.getElementById('tfReturnDate').value, document.getElementById('tfReturnTime').value);
   const finished = document.getElementById('tfFinished').checked;
+  const enabledCurrencies = getCurrencyGridSelection();
   if (editingTripId){
     const t = state.trips.find(x => x.id === editingTripId);
     if (t){
@@ -2061,12 +2190,13 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       t.name = name; t.startDate = start; t.endDate = end;
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
-      t.finished = finished;
+      t.finished = finished; t.enabledCurrencies = enabledCurrencies;
     }
   } else {
     const t = {
       id: uid(), name, startDate: start, endDate: end,
       cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
+      enabledCurrencies,
       flightOut, flightReturn, bookingRef, departDateTime, returnDateTime, finished,
       expenses: []
     };
@@ -2081,10 +2211,11 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
 
 document.getElementById('btnDeleteTrip').addEventListener('click', () => {
   if (!editingTripId) return;
-  if (!confirm("למחוק את הטיול הזה לצמיתות? כל ההוצאות שלו יימחקו.")) return;
-  const removedTrip = state.trips.find(t => t.id === editingTripId);
-  if (removedTrip) removedTrip.expenses.forEach(deleteAttachmentsOf);
-  state.trips = state.trips.filter(t => t.id !== editingTripId);
+  const idx = state.trips.findIndex(t => t.id === editingTripId);
+  if (idx === -1) return;
+  const [removedTrip] = state.trips.splice(idx, 1);
+  const wasActive = state.activeTripId === editingTripId;
+  let createdFreshId = null;
   if (state.trips.length === 0){
     // Never leave the app with zero trips — that's a confusing blank screen with
     // nothing to tap. Give it a fresh, empty one to land on instead.
@@ -2096,13 +2227,27 @@ document.getElementById('btnDeleteTrip').addEventListener('click', () => {
     };
     state.trips.push(fresh);
     state.activeTripId = fresh.id;
-  } else if (state.activeTripId === editingTripId){
+    createdFreshId = fresh.id;
+  } else if (wasActive){
     state.activeTripId = state.trips[0].id;
   }
   saveState();
   closeOverlay('overlayTripForm');
   renderAll();
-  toast("הטיול נמחק");
+  showUndoToast(`נמחק הטיול: ${removedTrip.name || "טיול"}`, {
+    duration: 6000,
+    onUndo: () => {
+      if (createdFreshId) state.trips = state.trips.filter(t => t.id !== createdFreshId);
+      state.trips.splice(idx, 0, removedTrip);
+      if (wasActive) state.activeTripId = removedTrip.id;
+      saveState();
+      renderAll();
+      toast("הטיול שוחזר ✓");
+    },
+    onCommit: () => {
+      removedTrip.expenses.forEach(deleteAttachmentsOf);
+    }
+  });
 });
 
 document.getElementById('btnCancelTripForm').addEventListener('click', () => closeOverlay('overlayTripForm'));
@@ -2199,8 +2344,8 @@ document.getElementById('efBookedPill').addEventListener('click', function(){ th
 let pendingPaidDate = "";
 
 async function fetchHistoricalRate(currency, isoDate){
-  const base = currency === "דולר" ? "USD" : currency === "יורו" ? "EUR" : null;
-  if (!base || !isoDate) return null;
+  const base = CURRENCY_CODE[currency];
+  if (!base || base === "ILS" || !isoDate) return null;
   try{
     const res = await fetch(`https://api.frankfurter.dev/v1/${isoDate}?from=${base}&to=ILS`);
     if (!res.ok) return null;
@@ -2315,6 +2460,26 @@ function getCategoryValue(){
   const active = document.getElementById('efCategoryGrid').querySelector('.cat-chip.active');
   return active ? active.dataset.val : "שונות";
 }
+
+/* -- trip currency selection chip grid (multi-select, unlike the category grid above) -- */
+(function initCurrencyGrid(){
+  const grid = document.getElementById('tfCurrencyGrid');
+  grid.innerHTML = CURRENCY_POOL.map(c =>
+    `<button type="button" class="cur-chip" data-val="${escapeHtml(c.name)}">${c.symbol} ${escapeHtml(c.name)}</button>`
+  ).join("");
+  grid.querySelectorAll('.cur-chip').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+  });
+})();
+function setCurrencyGridSelection(selected){
+  const set = new Set(selected || []);
+  document.getElementById('tfCurrencyGrid').querySelectorAll('.cur-chip').forEach(btn => {
+    btn.classList.toggle('active', set.has(btn.dataset.val));
+  });
+}
+function getCurrencyGridSelection(){
+  return [...document.getElementById('tfCurrencyGrid').querySelectorAll('.cur-chip.active')].map(b => b.dataset.val);
+}
 function expCategory(exp){
   return (exp && CATEGORIES.includes(exp.category)) ? exp.category : "שונות";
 }
@@ -2332,6 +2497,13 @@ document.getElementById('efDriveWarning').addEventListener('click', () => {
   requestDriveReauth();
 });
 
+function populateCurrencySelect(trip, currentValue){
+  const sel = document.getElementById('efCurrency');
+  const currencies = tripCurrencies(trip);
+  sel.innerHTML = currencies.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)} ${CUR_SYMBOL[c]}</option>`).join("");
+  sel.value = currencies.includes(currentValue) ? currentValue : "שקל";
+}
+
 function openNewExpense(){
   const trip = activeTrip();
   if (!trip){ toast("יש ליצור טיול קודם"); return; }
@@ -2344,7 +2516,7 @@ function openNewExpense(){
   setPaymentUI("אשראי");
   setCategoryUI("שונות");
   document.getElementById('efAmount').value = "";
-  document.getElementById('efCurrency').value = "שקל";
+  populateCurrencySelect(trip, "שקל");
   document.getElementById('efNotes').value = "";
   document.getElementById('efBookedPill').classList.remove('on');
   document.getElementById('efPaidPill').classList.remove('on');
@@ -2372,7 +2544,7 @@ function openEditExpense(id){
   setPaymentUI(exp.paymentMethod || "אשראי");
   setCategoryUI(exp.category);
   document.getElementById('efAmount').value = exp.amount || "";
-  document.getElementById('efCurrency').value = exp.currency || "שקל";
+  populateCurrencySelect(trip, exp.currency || "שקל");
   document.getElementById('efRateField').style.display = (exp.currency && exp.currency !== "שקל") ? "block" : "none";
   document.getElementById('efRateDateHint').style.display = "none";
   document.getElementById('efRate').value = exp.rate || rateFor(exp.currency);
@@ -2478,17 +2650,31 @@ document.getElementById('btnDeleteExpense').addEventListener('click', () => {
 function deleteExpense(id, fromForm){
   const trip = activeTrip();
   if (!trip) return;
-  if (!confirm("למחוק את ההוצאה הזו?")) return;
-  const removed = trip.expenses.find(e => e.id === id);
-  if (removed) deleteAttachmentsOf(removed);
-  trip.expenses = trip.expenses.filter(e => e.id !== id);
+  const idx = trip.expenses.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const [removed] = trip.expenses.splice(idx, 1);
   saveState();
   if (fromForm) closeOverlay('overlayExpense');
   renderAll();
-  toast("ההוצאה נמחקה");
+  showUndoToast(`נמחק: ${removed.item || "הוצאה"}`, {
+    onUndo: () => {
+      const t = state.trips.find(x => x.id === trip.id);
+      if (t){
+        const insertAt = Math.min(idx, t.expenses.length);
+        t.expenses.splice(insertAt, 0, removed);
+        saveState();
+        renderAll();
+        toast("השחזור בוצע ✓");
+      }
+    },
+    onCommit: () => {
+      deleteAttachmentsOf(removed);
+    }
+  });
 }
 
 document.getElementById('sortSelect').addEventListener('change', renderExpenses);
+document.getElementById('expenseSearchInput').addEventListener('input', renderExpenses);
 
 /* ========================= Overlays ========================= */
 function showOverlay(id){ document.getElementById(id).classList.add('show'); }
