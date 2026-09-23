@@ -180,6 +180,64 @@
   .donut-legend-dot{width:10px;height:10px;border-radius:50%;flex:none;}
   .donut-legend-label{flex:1;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .donut-legend-val{color:var(--ink-soft);font-weight:700;white-space:nowrap;}
+
+  /* ---- Ledger section: donut hero (scrolls away) + sticky balance bar ---- */
+  #ledgerSection{margin-top:0;}
+  .ledger-donut-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);
+    padding:16px;margin-bottom:14px;
+  }
+  .ledger-donut-title{font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:10px;}
+  .ledger-balance-bar{
+    position:sticky;top:var(--header-h,0px);z-index:5;
+    background:var(--card);margin:0 -1px;padding:12px 16px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);
+    box-shadow:0 6px 14px rgba(32,48,46,.08);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .ledger-balance-label{font-size:10.5px;color:var(--ink-soft);}
+  .ledger-balance-total{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .ledger-balance-meta{text-align:left;font-size:10.5px;color:var(--ink-soft);}
+  .ledger-balance-meta .pending-btn{
+    background:none;border:none;font:inherit;color:#8a6417;font-weight:700;cursor:pointer;padding:0;
+    display:block;margin-top:2px;
+  }
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ledger-balance-meta .pending-btn{color:var(--amber);}}
+  :root[data-theme="dark"] .ledger-balance-meta .pending-btn{color:var(--amber);}
+  .ledger-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+
+  /* ---- Compact cash row (header) ---- */
+  .cash-compact{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:8px 12px;margin-top:10px;font-size:11.5px;cursor:pointer;width:100%;
+    font-family:inherit;color:inherit;text-align:inherit;
+  }
+  .cash-compact .lbl{color:var(--ink-soft);}
+  .cash-compact .val{font-weight:700;font-variant-numeric:tabular-nums;}
+  .cash-compact .val small{font-weight:400;color:var(--ink-soft);}
+
+  /* ---- Expandable expense rows ---- */
+  .exp-row{border-bottom:1px solid var(--border);}
+  .exp-row:last-child{border-bottom:none;}
+  .exp-row-head{
+    all:unset;display:flex;align-items:center;justify-content:space-between;
+    width:100%;box-sizing:border-box;padding:13px 2px;cursor:pointer;
+  }
+  .exp-row-head:focus-visible{outline:2px solid var(--teal);outline-offset:-2px;}
+  .exp-row-main{display:flex;align-items:center;gap:10px;min-width:0;}
+  .exp-row-bar{width:6px;height:30px;border-radius:4px;flex:none;}
+  .exp-row-name{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .exp-row-sub{font-size:10.5px;color:var(--ink-soft);}
+  .exp-row-amt{font-weight:700;font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none;margin-right:8px;}
+  .exp-row-detail{padding:0 2px 14px 18px;display:flex;flex-direction:column;gap:9px;}
+  .exp-row-tags{display:flex;gap:6px;flex-wrap:wrap;}
+  .exp-row-note{font-size:11.5px;color:var(--ink-soft);background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;}
+  .exp-row-attach{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--teal-dark);
+    background:var(--card-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px;
+    width:fit-content;text-decoration:none;
+  }
   .chip-stat{
     background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);
     padding:6px 12px;font-size:12.5px;font-weight:700;display:flex;gap:5px;align-items:center;
@@ -475,16 +533,19 @@
     <div id="syncStatusLine"></div>
     <div class="trip-tabs" id="tripTabs"></div>
     <div class="trip-info" id="tripInfoStrip"></div>
+    <div id="cashCompactRow"></div>
+    <div class="field" style="margin:10px 0 0;">
+      <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
+    </div>
   </header>
 
   <main id="main">
 
     <div id="sidebarCol">
-      <section id="summarySection"></section>
-
-      <section id="cashSection"></section>
-
-      <section id="categorySection"></section>
+      <section id="ledgerSection">
+        <div id="categoryDonut"></div>
+        <div id="ledgerBalanceBar"></div>
+      </section>
     </div>
 
     <div id="mainCol">
@@ -502,9 +563,6 @@
               הוצאה חדשה
             </button>
           </div>
-        </div>
-        <div class="field" style="margin-bottom:10px;">
-          <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
         </div>
         <div id="filterBar" style="display:none;margin-bottom:10px;"></div>
         <div id="expensesList"></div>
@@ -600,6 +658,14 @@
       <label>מטבעות זרים רלוונטיים לטיול</label>
       <div id="tfCurrencyGrid" class="cur-grid"></div>
       <div class="hint" style="margin-top:6px;">שקל תמיד זמין. בחרו כאן אילו מטבעות נוספים יופיעו בבחירת המטבע בהוצאות ובמזומן.</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="field">
+      <label>תקציב לטיול (אופציונלי, ₪)</label>
+      <input type="number" id="tfBudget" inputmode="decimal" step="1" placeholder="למשל: 20000">
+      <div class="hint" style="margin-top:6px;">אם תוגדר, יתרת החשבון תוצג ביחס לתקציב. בלי תקציב — יוצג פשוט כמה שולם עד כה.</div>
     </div>
 
     <div class="divider"></div>
@@ -952,6 +1018,7 @@ function defaultState(){
     endDate: "",
     cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
     enabledCurrencies: ["דולר","יורו"],
+    budget: 0,
     finished: false,
     flightOut: "",
     flightReturn: "",
@@ -970,6 +1037,7 @@ function defaultState(){
 function migrateTrip(t){
   if (!t.cashInitial) t.cashInitial = { "שקל": 0, "דולר": 0, "יורו": 0 };
   if (!Array.isArray(t.enabledCurrencies)) t.enabledCurrencies = ["דולר","יורו"];
+  if (typeof t.budget !== "number") t.budget = 0;
   if (typeof t.finished !== "boolean") t.finished = false;
   // Older saves had a single `flightNumber` for the whole trip — treat it as the outbound leg.
   if (typeof t.flightOut !== "string") t.flightOut = (typeof t.flightNumber === "string" ? t.flightNumber : "");
@@ -1519,6 +1587,7 @@ function renderTripTabs(){
     chip.addEventListener('click', () => {
       state.activeTripId = t.id;
       expenseFilter = { type: 'all' };
+      expandedExpenseId = null;
       saveState();
       renderAll();
     });
@@ -1531,21 +1600,18 @@ function renderTripTabs(){
   wrap.appendChild(addChip);
 }
 
-/* ========================= Rendering: Summary ========================= */
-function renderSummary(){
+/* ========================= Rendering: Ledger balance bar (replaces the old boarding-pass summary) ========================= */
+function renderBalanceBar(){
   const trip = activeTrip();
-  const section = document.getElementById('summarySection');
-  if (!trip){ section.innerHTML = ""; return; }
+  const el = document.getElementById('ledgerBalanceBar');
+  if (!trip){ el.innerHTML = ""; return; }
 
   const paidExpenses = trip.expenses.filter(e => e.paid);
   const pendingExpenses = trip.expenses.filter(e => !e.paid);
 
   const totalPaid = paidExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
   const totalPending = pendingExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
-  const totalAll = totalPaid + totalPending;
 
-  // Currency & payment-method breakdowns reflect only what's actually been paid —
-  // a booked-but-unpaid hotel shouldn't look like money that's already out the door.
   const byCurrency = {};
   tripCurrencies(trip).forEach(c => byCurrency[c] = 0);
   paidExpenses.forEach(e => { byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0); });
@@ -1554,37 +1620,38 @@ function renderSummary(){
   paidExpenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + expenseTotalILS(e); });
   const paymentEntries = Object.entries(byPayment).sort((a,b)=>b[1]-a[1]);
 
-  let daysLine = "";
-  if (trip.startDate && trip.endDate){
-    const totalDays = Math.max(1, daysBetween(trip.startDate, trip.endDate) + 1);
-    const remaining = Math.max(0, daysBetween(todayISO(), trip.endDate) + 1);
-    const avgPerDay = totalAll / totalDays;
-    daysLine = `<div class="m"><b class="tnum">${remaining > 0 && remaining <= totalDays ? remaining : totalDays}</b> ימים${remaining>0 && remaining<=totalDays ? ' נותרו' : ' סה״כ'}</div>
-                <div class="m">ממוצע ליום (הכל): <b class="tnum">₪${fmtMoney(avgPerDay)}</b></div>`;
+  const hasBudget = trip.budget && trip.budget > 0;
+  let mainLabel, mainValue, metaHtml;
+  if (hasBudget){
+    const remaining = trip.budget - totalPaid;
+    mainLabel = "יתרה מהתקציב";
+    mainValue = `₪${fmtMoney(remaining)}`;
+    metaHtml = `<div>${trip.expenses.length} הוצאות</div><div style="margin-top:2px;">מתוך ₪${fmtMoney(trip.budget)}</div>`;
+  } else {
+    mainLabel = "שולם עד כה";
+    mainValue = `₪${fmtMoney(totalPaid)}`;
+    metaHtml = `<div>${trip.expenses.length} הוצאות</div>`;
   }
 
-  section.innerHTML = `
-    <div class="pass">
-      <div class="pass-top">
-        <div class="pass-eyebrow">${escapeHtml(trip.name || "טיול")}${trip.startDate ? " · " + fmtDate(trip.startDate) + (trip.endDate ? " – "+fmtDate(trip.endDate) : "") : ""}</div>
-        <div class="pass-total tnum">₪${fmtMoney(totalPaid)} <small>שולם עד כה</small></div>
-        ${totalPending > 0 ? `<button type="button" id="btnFilterFromPass" class="pass-pending tnum" style="background:none;border:none;cursor:pointer;padding:0;text-align:inherit;font-family:inherit;">+ ₪${fmtMoney(totalPending)} <span>צפוי · טרם שולם (${pendingExpenses.length}) — לחצו לסינון</span></button>` : ""}
-        <div class="pass-meta">
-          <div class="m"><b class="tnum">${trip.expenses.length}</b> הוצאות</div>
-          ${daysLine}
-        </div>
+  el.innerHTML = `
+    <div class="ledger-balance-bar">
+      <div>
+        <div class="ledger-balance-label">${mainLabel}</div>
+        <div class="ledger-balance-total">${mainValue}</div>
       </div>
-      <div class="perf"></div>
-      <div class="pass-bottom">
-        ${tripCurrencies(trip).filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
-        ${paymentEntries.slice(0,2).map(([m,v]) => `<span class="chip-stat amber">${escapeHtml(m)}: ₪${fmtMoney(v)}</span>`).join("")}
-        ${trip.expenses.length === 0 ? '<span class="chip-stat">עוד אין הוצאות</span>' : ""}
-        ${trip.expenses.length > 0 && tripCurrencies(trip).every(c => (byCurrency[c]||0) === 0) ? '<span class="chip-stat">עוד לא שולם בפועל</span>' : ""}
+      <div class="ledger-balance-meta">
+        ${metaHtml}
+        ${totalPending > 0 ? `<button type="button" class="pending-btn" id="btnFilterPendingLedger">+ ₪${fmtMoney(totalPending)} צפוי (${pendingExpenses.length})</button>` : ""}
       </div>
     </div>
+    <div class="ledger-chip-row">
+      ${tripCurrencies(trip).filter(c => byCurrency[c] > 0).map(c => `<span class="chip-stat">${CUR_SYMBOL[c]} ${fmtMoney(byCurrency[c])} ${c}</span>`).join("")}
+      ${paymentEntries.slice(0,2).map(([m,v]) => `<span class="chip-stat amber">${escapeHtml(m)}: ₪${fmtMoney(v)}</span>`).join("")}
+      ${trip.expenses.length === 0 ? '<span class="chip-stat">עוד אין הוצאות</span>' : ""}
+    </div>
   `;
-  const filterFromPassBtn = document.getElementById('btnFilterFromPass');
-  if (filterFromPassBtn) filterFromPassBtn.addEventListener('click', () => {
+  const pendingBtn = document.getElementById('btnFilterPendingLedger');
+  if (pendingBtn) pendingBtn.addEventListener('click', () => {
     expenseFilter = { type: 'pending' };
     renderFilterBar();
     renderExpenses();
@@ -1592,69 +1659,31 @@ function renderSummary(){
   });
 }
 
-/* ========================= Rendering: Cash status ========================= */
-function renderCash(){
+/* ========================= Rendering: Cash status (compact, header row) ========================= */
+function renderCashCompact(){
   const trip = activeTrip();
-  const section = document.getElementById('cashSection');
-  if (!trip){ section.innerHTML = ""; return; }
+  const el = document.getElementById('cashCompactRow');
+  if (!trip){ el.innerHTML = ""; return; }
 
-  const currencies = tripCurrencies(trip).filter(c => c !== "שקל" || true); // includes שקל
+  const currencies = tripCurrencies(trip);
   const cashInitial = trip.cashInitial || {};
-  const hasAnyCash = currencies.some(c => (cashInitial[c] || 0) > 0);
-
-  // Only PAID cash expenses actually reduce the cash on hand — a cash payment
-  // that's only "booked" (e.g. paying for a hotel on arrival) hasn't left the wallet yet.
   const spentByCurrency = {};
-  const pendingByCurrency = {};
-  currencies.forEach(c => { spentByCurrency[c] = 0; pendingByCurrency[c] = 0; });
+  currencies.forEach(c => spentByCurrency[c] = 0);
   trip.expenses.forEach(e => {
-    if (e.paymentMethod === "מזומן"){
-      if (e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
-      else pendingByCurrency[e.currency] = (pendingByCurrency[e.currency] || 0) + (e.amount || 0);
-    }
+    if (e.paymentMethod === "מזומן" && e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
   });
-  const hasAnyCashSpent = currencies.some(c => spentByCurrency[c] > 0 || pendingByCurrency[c] > 0);
+  const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
 
-  if (!hasAnyCash && !hasAnyCashSpent){
-    section.innerHTML = `
-      <div class="section-title">מצב מזומן</div>
-      <div class="card">
-        <div class="row">
-          <div style="font-size:13.5px;color:var(--ink-soft);">עוד לא הוזן מזומן לטיול הזה</div>
-          <button class="mini-btn" id="btnSetCashQuick">הגדרת מזומן</button>
-        </div>
-      </div>`;
-    document.getElementById('btnSetCashQuick').addEventListener('click', openCashSheet);
-    return;
+  if (active.length === 0){
+    el.innerHTML = `<button type="button" class="cash-compact" id="btnCashCompact"><span class="lbl">💵 מזומן</span><span class="val" style="font-weight:600;color:var(--ink-soft);">לא הוגדר · הגדירו</span></button>`;
+  } else {
+    const parts = active.map(c => `${CUR_SYMBOL[c]}${fmtMoney((cashInitial[c]||0) - (spentByCurrency[c]||0))}`).join(" · ");
+    el.innerHTML = `<button type="button" class="cash-compact" id="btnCashCompact"><span class="lbl">💵 מזומן שנשאר</span><span class="val">${parts}</span></button>`;
   }
-
-  const rows = currencies.filter(c => (cashInitial[c] || 0) > 0 || spentByCurrency[c] > 0 || pendingByCurrency[c] > 0).map(c => {
-    const initial = cashInitial[c] || 0;
-    const spent = spentByCurrency[c] || 0;
-    const pending = pendingByCurrency[c] || 0;
-    const remaining = initial - spent;
-    const neg = remaining < 0;
-    return `
-      <div class="rate-item">
-        <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${c}</div>
-        <div style="text-align:left;">
-          <div class="tnum" style="font-weight:800;color:${neg ? 'var(--danger)' : 'var(--good)'};">${CUR_SYMBOL[c]}${fmtMoney(remaining)}</div>
-          <div class="tnum" style="font-size:11.5px;color:var(--ink-soft);">מתוך ${CUR_SYMBOL[c]}${fmtMoney(initial)} · שולם במזומן ${CUR_SYMBOL[c]}${fmtMoney(spent)}${pending > 0 ? ` · צפוי במזומן ${CUR_SYMBOL[c]}${fmtMoney(pending)}` : ""}</div>
-        </div>
-      </div>`;
-  }).join("");
-
-  section.innerHTML = `
-    <div class="row" style="margin-bottom:10px;">
-      <div class="section-title" style="margin:0;">מצב מזומן</div>
-      <button class="mini-btn" id="btnEditCash">עריכה</button>
-    </div>
-    <div class="card">${rows}</div>
-  `;
-  document.getElementById('btnEditCash').addEventListener('click', openCashSheet);
+  document.getElementById('btnCashCompact').addEventListener('click', openCashSheet);
 }
 
-/* ---- Cash sheet — independent of trip editing ---- */
+/* ---- Cash sheet — independent of trip editing, opened from the compact header row ---- */
 function cashInputId(currency){ return "cash_" + CURRENCY_CODE[currency]; }
 function openCashSheet(){
   const trip = activeTrip();
@@ -1709,7 +1738,7 @@ function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color, cat){
 
 function renderCategoryChart(){
   const trip = activeTrip();
-  const section = document.getElementById('categorySection');
+  const section = document.getElementById('categoryDonut');
   if (!trip || trip.expenses.length === 0){ section.innerHTML = ""; return; }
 
   const byCat = {};
@@ -1739,8 +1768,8 @@ function renderCategoryChart(){
   }).join("");
 
   section.innerHTML = `
-    <div class="section-title">פילוח הוצאות <span style="font-weight:400;color:var(--ink-soft);">— לחצו לסינון</span></div>
-    <div class="card">
+    <div class="ledger-donut-card">
+      <div class="ledger-donut-title">פילוח הוצאות · לחצו לסינון</div>
       <div class="donut-wrap">
         <svg viewBox="0 0 200 200" width="170" height="170" style="cursor:pointer;">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
         <div class="donut-center">
@@ -1996,36 +2025,46 @@ function renderExpenses(){
     const totalIls = expenseTotalILS(exp);
     const showOrig = exp.currency !== "שקל";
     const cat = expCategory(exp);
+    const expanded = expandedExpenseId === exp.id;
     return `
-    <div class="exp-card" data-id="${exp.id}">
-      <div class="exp-top">
-        <div>
-          <div class="exp-item"><span title="${escapeHtml(cat)}">${CATEGORY_ICON[cat]}</span> ${escapeHtml(exp.item || "הוצאה")}</div>
-          <div class="exp-date">${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
+    <div class="exp-row" data-id="${exp.id}">
+      <button type="button" class="exp-row-head" data-action="toggle" data-id="${exp.id}">
+        <div class="exp-row-main">
+          <div class="exp-row-bar" style="background:${CATEGORY_COLOR[cat]};"></div>
+          <div style="min-width:0;">
+            <div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>
+            <div class="exp-row-sub">${escapeHtml(cat)} · ${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
+          </div>
         </div>
-        <div class="exp-amt">
-          <div class="exp-total tnum">₪${fmtMoney(totalIls)}</div>
-          ${showOrig ? `<div class="exp-orig tnum">${CUR_SYMBOL[exp.currency]}${fmtMoney(exp.amount)} × ${exp.rate}</div>` : ""}
+        <div style="text-align:left;">
+          <div class="exp-row-amt">₪${fmtMoney(totalIls)}</div>
+          ${showOrig ? `<div class="exp-orig tnum" style="font-size:10px;">${CUR_SYMBOL[exp.currency]}${fmtMoney(exp.amount)} × ${exp.rate}</div>` : ""}
         </div>
-      </div>
-      <div class="exp-tags">
-        <span class="tag">${escapeHtml(cat)}</span>
-        <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
-        <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
-        <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
-      </div>
-      ${exp.notes ? `<div class="exp-note">${escapeHtml(exp.notes)}</div>` : ""}
-      ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
-      <div class="exp-actions">
-        <button class="mini-btn" data-action="edit" data-id="${exp.id}">עריכה</button>
-        <button class="mini-btn danger" data-action="delete" data-id="${exp.id}">מחיקה</button>
-      </div>
+      </button>
+      ${expanded ? `
+      <div class="exp-row-detail">
+        <div class="exp-row-tags">
+          <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
+          <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
+          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
+        </div>
+        ${exp.notes ? `<div class="exp-row-note">📝 ${escapeHtml(exp.notes)}</div>` : ""}
+        ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
+        <div class="exp-actions">
+          <button class="mini-btn" data-action="edit" data-id="${exp.id}">עריכה</button>
+          <button class="mini-btn danger" data-action="delete" data-id="${exp.id}">מחיקה</button>
+        </div>
+      </div>` : ""}
     </div>`;
   }).join("");
 
-  list.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', () => openEditExpense(b.dataset.id)));
-  list.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', () => deleteExpense(b.dataset.id)));
-  list.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openAttachment(b.dataset.open, b.dataset.driveurl)));
+  list.querySelectorAll('[data-action="toggle"]').forEach(b => b.addEventListener('click', () => {
+    expandedExpenseId = (expandedExpenseId === b.dataset.id) ? null : b.dataset.id;
+    renderExpenses();
+  }));
+  list.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openEditExpense(b.dataset.id); }));
+  list.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); deleteExpense(b.dataset.id); }));
+  list.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openAttachment(b.dataset.open, b.dataset.driveurl); }));
 }
 
 function escapeHtml(s){
@@ -2093,12 +2132,18 @@ function renderTripInfoStrip(){
 function renderAll(){
   renderTripTabs();
   renderTripInfoStrip();
-  renderSummary();
-  renderCash();
+  renderCashCompact();
   renderCategoryChart();
+  renderBalanceBar();
   renderRates();
   renderExpenses();
+  updateHeaderHeightVar();
 }
+function updateHeaderHeightVar(){
+  const header = document.getElementById('topbar');
+  if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+}
+window.addEventListener('resize', updateHeaderHeightVar);
 
 /* ========================= Trip management ========================= */
 let editingTripId = null;
@@ -2136,6 +2181,7 @@ function openNewTripForm(){
   document.getElementById('tfReturnDate').value = "";
   document.getElementById('tfReturnTime').value = "";
   setCurrencyGridSelection(["דולר","יורו"]);
+  document.getElementById('tfBudget').value = "";
   document.getElementById('tfFinished').checked = false;
   document.getElementById('btnExportXlsx').style.display = "none";
   document.getElementById('exportTripDivider').style.display = "none";
@@ -2162,6 +2208,7 @@ function openEditTripForm(id){
   document.getElementById('tfReturnDate').value = ret.date;
   document.getElementById('tfReturnTime').value = ret.time;
   setCurrencyGridSelection(t.enabledCurrencies);
+  document.getElementById('tfBudget').value = t.budget || "";
   document.getElementById('tfFinished').checked = !!t.finished;
   const hasExpenses = t.expenses.length > 0;
   document.getElementById('btnExportXlsx').style.display = hasExpenses ? "block" : "none";
@@ -2182,6 +2229,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const returnDateTime = joinDateTime(document.getElementById('tfReturnDate').value, document.getElementById('tfReturnTime').value);
   const finished = document.getElementById('tfFinished').checked;
   const enabledCurrencies = getCurrencyGridSelection();
+  const budget = parseFloat(document.getElementById('tfBudget').value) || 0;
   if (editingTripId){
     const t = state.trips.find(x => x.id === editingTripId);
     if (t){
@@ -2190,13 +2238,13 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       t.name = name; t.startDate = start; t.endDate = end;
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
-      t.finished = finished; t.enabledCurrencies = enabledCurrencies;
+      t.finished = finished; t.enabledCurrencies = enabledCurrencies; t.budget = budget;
     }
   } else {
     const t = {
       id: uid(), name, startDate: start, endDate: end,
       cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
-      enabledCurrencies,
+      enabledCurrencies, budget,
       flightOut, flightReturn, bookingRef, departDateTime, returnDateTime, finished,
       expenses: []
     };
@@ -2258,6 +2306,7 @@ document.getElementById('btnMenu').addEventListener('click', openTripsList);
 /* ========================= Expense form ========================= */
 let editingExpenseId = null;
 let expenseFilter = { type: 'all' }; // {type:'all'} | {type:'pending'} | {type:'category', value:'טיסה'}
+let expandedExpenseId = null; // tap-to-expand: which row (if any) currently shows its full detail
 let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
 let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
 
