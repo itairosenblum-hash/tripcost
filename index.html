@@ -508,6 +508,16 @@
   @media (min-width: 860px) and (max-width: 1023px){
     main{ grid-template-columns:300px 1fr; }
   }
+  /* -- date inputs: show dd/mm/yyyy regardless of browser locale -- */
+  .date-wrap{position:relative;}
+  .date-wrap input[type=date]{color:transparent !important;}
+  .date-wrap input[type=date]::-webkit-datetime-edit{color:transparent;}
+  .date-display{
+    position:absolute;inset:0;display:flex;align-items:center;
+    padding:0 12px;font-size:15px;color:var(--ink);
+    direction:ltr;pointer-events:none;
+  }
+  .date-display.empty{color:var(--ink-soft);opacity:.6;}
 </style>
 </head>
 <body>
@@ -877,6 +887,49 @@
 </div>
 
 <script>
+/* ===== Date inputs: display dd/mm/yyyy (value stays yyyy-mm-dd) ===== */
+(function(){
+  const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  function fmt(v){
+    if (!v) return 'dd/mm/yyyy';
+    const [y,m,d] = v.split('-');
+    return d + '/' + m + '/' + y;
+  }
+  document.querySelectorAll('input[type="date"]').forEach(inp => {
+    const wrap = document.createElement('div');
+    wrap.className = 'date-wrap';
+    // move inline layout styles (e.g. margin-top / display of efPaidDateInput) to the wrapper
+    wrap.style.marginTop = inp.style.marginTop;
+    inp.style.marginTop = '';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+    const span = document.createElement('span');
+    span.className = 'date-display';
+    wrap.appendChild(span);
+
+    const sync = () => {
+      const v = proto.get.call(inp);
+      span.textContent = fmt(v);
+      span.classList.toggle('empty', !v);
+    };
+    // keep display in sync when code sets .value programmatically
+    Object.defineProperty(inp, 'value', {
+      configurable: true,
+      get(){ return proto.get.call(inp); },
+      set(v){ proto.set.call(inp, v); sync(); }
+    });
+    inp.addEventListener('input', sync);
+    inp.addEventListener('change', sync);
+    // when code toggles inp.style.display, mirror it on the wrapper
+    const mirror = () => { wrap.style.display = inp.style.display === 'none' ? 'none' : ''; };
+    new MutationObserver(mirror).observe(inp, { attributes: true, attributeFilter: ['style'] });
+    mirror();
+    sync();
+  });
+})();
+</script>
+
+<script>
 (function(){
 "use strict";
 
@@ -1133,7 +1186,45 @@ const DEFAULT_FIREBASE_CONFIG = {
 
 let fbApp = null, fbAuth = null, fbDb = null;
 let cloudUser = null;              // firebase user object once signed in
-let driveAccessToken = null;       // short-lived OAuth token for Drive REST calls
+let driveAccessToken = null;       // short-lived OAuth token for Drive REST calls (~1 hour)
+let driveTokenExp = 0;             // ms timestamp when driveAccessToken expires
+let driveTokenScope = "";
+const DRIVE_TOKEN_KEY = "tripcost.driveToken";
+// Persist the token so it survives reloads / closing the PWA (it's only valid ~1 hour anyway).
+function saveDriveToken(token, expiresInSec, scope){
+  driveAccessToken = token;
+  driveTokenExp = Date.now() + (Number(expiresInSec) || 3600) * 1000;
+  driveTokenScope = scope || "";
+  try{ localStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify({ token, exp: driveTokenExp, scope: driveTokenScope })); }catch(e){}
+}
+function clearDriveToken(){
+  driveAccessToken = null; driveTokenExp = 0; driveTokenScope = "";
+  try{ localStorage.removeItem(DRIVE_TOKEN_KEY); }catch(e){}
+}
+function wantedDriveScope(){
+  return driveSettings.useExistingDriveFolder ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE;
+}
+// true if we hold a token that is still valid (with a 2-minute safety margin) and has the right scope
+function driveTokenValid(){
+  if (!driveAccessToken) return false;
+  if (Date.now() > driveTokenExp - 120000 || (driveTokenScope && driveTokenScope !== wantedDriveScope())){
+    clearDriveToken();
+    return false;
+  }
+  return true;
+}
+(function restoreDriveToken(){
+  try{
+    const raw = localStorage.getItem(DRIVE_TOKEN_KEY);
+    if (!raw) return;
+    const t = JSON.parse(raw);
+    if (t && t.token && t.exp > Date.now() + 120000){
+      driveAccessToken = t.token; driveTokenExp = t.exp; driveTokenScope = t.scope || "";
+    } else {
+      localStorage.removeItem(DRIVE_TOKEN_KEY);
+    }
+  }catch(e){}
+})();
 let cloudUnsub = null;             // firestore onSnapshot unsubscribe fn
 let isApplyingRemote = false;      // guards against feedback loops
 let pushTimer = null;
@@ -1208,7 +1299,7 @@ function initFirebaseIfConfigured(){
         startCloudListener(user.uid);
       } else {
         cloudUser = null;
-        driveAccessToken = null;
+        clearDriveToken();
         if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
         setSyncStatus('off', 'לחצו כאן להתחברות לסנכרון');
       }
@@ -1309,9 +1400,12 @@ function requestDriveReauth(){
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: scope,
+      // pre-select the account that's signed in to sync, so Google can skip the account picker
+      login_hint: (cloudUser && cloudUser.email) || undefined,
       callback: (resp) => {
         if (resp && resp.access_token){
-          driveAccessToken = resp.access_token;
+          saveDriveToken(resp.access_token, resp.expires_in, scope);
+          try{ localStorage.setItem("tripcost.driveGranted", scope); }catch(e){}
           toast("ההרשאה ל-Drive עודכנה ✓");
           if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
         } else {
@@ -1323,7 +1417,11 @@ function requestDriveReauth(){
         toast("ההתחברות נכשלה: " + ((err && err.type) || "שגיאה לא ידועה"));
       }
     });
-    client.requestAccessToken();
+    // Once consent was given for this scope, prompt:'' lets Google close the popup by itself
+    // without showing the consent screen again — a quick flash instead of a full sign-in.
+    let granted = "";
+    try{ granted = localStorage.getItem("tripcost.driveGranted") || ""; }catch(e){}
+    client.requestAccessToken({ prompt: granted === scope ? "" : "consent" });
   }catch(e){
     console.error(e);
     toast("הפעולה נכשלה: " + (e.message || e.code || ""));
@@ -1365,7 +1463,7 @@ async function uploadFileToDrive(file){
   // an async save flow, well past the moment of the user's tap, so browsers block a popup
   // triggered here anyway (that's exactly what produced the old "no permission" error).
   // Getting/refreshing the token only happens from a direct click in the sync menu.
-  if (!driveAccessToken){
+  if (!driveTokenValid()){
     return { ok:false, reason:"אין הרשאת Drive פעילה — פתחו את תפריט הסנכרון והתחברו מחדש" };
   }
   try{
@@ -1380,7 +1478,7 @@ async function uploadFileToDrive(file){
       body: form
     });
     if (res.status === 401){
-      driveAccessToken = null; // stale — next attempt will ask for a fresh sign-in instead of guessing
+      clearDriveToken(); // stale — next attempt will ask for a fresh sign-in instead of guessing
       return { ok:false, reason:"ההרשאה ל-Drive פגה — פתחו את תפריט הסנכרון והתחברו מחדש" };
     }
     if (!res.ok){
@@ -2538,7 +2636,7 @@ function updateDriveWarning(){
   // Only worth flagging when they're actually signed in but this session's Drive
   // token isn't live — if they're not signed in at all, that's communicated
   // elsewhere (the sync status line), not here.
-  el.style.display = (cloudUser && !driveAccessToken) ? "block" : "none";
+  el.style.display = (cloudUser && !driveTokenValid()) ? "block" : "none";
 }
 document.getElementById('efDriveWarning').addEventListener('click', () => {
   // GIS opens a popup rather than navigating away, so the in-progress form survives —
