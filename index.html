@@ -1130,6 +1130,10 @@ function migrateTrip(t){
 // the still-stale cloud copy would silently overwrite the change back to "off". Since
 // it's genuinely which-device-dependent anyway (not trip data), keeping it local-only
 // sidesteps that race entirely rather than trying to win a timing battle against it.
+// The OAuth Client ID is public by design (it's visible in every Google sign-in URL),
+// so it's safe to keep in the code. Keeping it here means it can't be "forgotten" when
+// the browser/PWA clears localStorage. A value typed in settings still overrides it.
+const DEFAULT_GOOGLE_CLIENT_ID = ""; // TODO: fill in the Web client ID
 const DRIVE_SETTINGS_KEY = "tripcost.driveSettings";
 function loadDriveSettings(){
   try{
@@ -1404,7 +1408,7 @@ function requestDriveReauth(){
   // the redirect "completes" but no credential ever comes back. This sidesteps that
   // entirely — no page reload, no storage correlation, just a direct popup response.
   if (!cloudUser){ toast("יש להתחבר קודם"); return; }
-  const clientId = (driveSettings.googleClientId || "").trim();
+  const clientId = (driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "").trim();
   if (!clientId){
     toast("יש להזין קודם Google OAuth Client ID בהגדרות הסנכרון (למטה בתפריט)");
     return;
@@ -1536,7 +1540,7 @@ function renderSyncOverlay(){
   document.getElementById('toggleExistingFolder').checked = !!driveSettings.useExistingDriveFolder;
   document.getElementById('folderIdField').style.display = driveSettings.useExistingDriveFolder ? "block" : "none";
   document.getElementById('driveFolderIdInput').value = driveSettings.driveFolderId || "";
-  document.getElementById('googleClientIdInput').value = driveSettings.googleClientId || "";
+  document.getElementById('googleClientIdInput').value = driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "";
 }
 
 document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
