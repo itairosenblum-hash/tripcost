@@ -509,30 +509,22 @@
 
     #bgPlane{ opacity:.06; }
 
-    /* App-like viewport lock: the page itself doesn't scroll. The sidebar
-       (donut + "שולם עד כה" bar) stays pinned, and only the expenses list
-       scrolls inside its own column. */
+    /* App-like viewport lock: the page itself doesn't scroll. Each column
+       (right: donut + "שולם עד כה", left: expenses) scrolls on its own. */
     body{ overflow:hidden; }
     #app{ height:calc(100vh - 56px); height:calc(100dvh - 56px); min-height:0; }
     main{
-      flex:1; min-height:0; padding-bottom:24px;
+      flex:1; min-height:0; padding-top:0; padding-bottom:0;
       grid-template-rows:minmax(0,1fr); align-items:stretch;
     }
-    #sidebarCol{ min-height:0; display:flex; flex-direction:column; }
-    #ledgerSection{ flex:1; min-height:0; display:flex; flex-direction:column; }
-    /* If the donut + legend is taller than the screen, only that card scrolls —
-       the "שולם עד כה" bar below it is always fully visible. */
-    #categoryDonut{ flex:0 1 auto; min-height:0; display:flex; flex-direction:column; }
-    #categoryDonut .ledger-donut-card{ min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
-    #ledgerBalanceBar{ flex:none; }
-    #sidebarCol .ledger-balance-bar{ position:static; }
-    #mainCol{ min-height:0; display:flex; flex-direction:column; }
-    #expensesSection{ flex:1; min-height:0; display:flex; flex-direction:column; margin-top:0; }
-    #expensesList{
-      flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain;
-      padding-inline-end:6px; margin-inline-end:-6px; padding-bottom:12px;
-      scrollbar-width:thin;
+    #sidebarCol, #mainCol{
+      min-height:0; overflow-y:auto; overscroll-behavior:contain;
+      scrollbar-width:thin; padding-top:8px; padding-bottom:28px;
     }
+    #sidebarCol{ padding-inline:2px; }
+    #sidebarCol .ledger-balance-bar{ top:0; }
+    #mainCol{ padding-inline-end:8px; margin-inline-end:-8px; }
+    #expensesSection{ margin-top:0; }
   }
   @media (min-width: 860px) and (max-width: 1023px){
     main{ grid-template-columns:300px 1fr; }
@@ -2287,8 +2279,8 @@ function renderAll(){
 }
 const WIDE_MQ = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
 function scrollToExpenses(){
-  // Wide layout: page is locked, only the list scrolls — bring the list to its top.
-  if (WIDE_MQ.matches) document.getElementById('expensesList').scrollTo({top:0, behavior:'smooth'});
+  // Wide layout: page is locked, each column scrolls — bring the expenses column to its top.
+  if (WIDE_MQ.matches) document.getElementById('mainCol').scrollTo({top:0, behavior:'smooth'});
   else document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
 }
 function updateHeaderHeightVar(){
@@ -2912,7 +2904,7 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
 window.addEventListener('scroll', () => {
   document.getElementById('topbar').classList.toggle('scrolled', window.scrollY > 4);
 });
-document.getElementById('expensesList').addEventListener('scroll', (e) => {
+document.getElementById('mainCol').addEventListener('scroll', (e) => {
   if (WIDE_MQ.matches) document.getElementById('topbar').classList.toggle('scrolled', e.target.scrollTop > 4);
 }, {passive:true});
 
