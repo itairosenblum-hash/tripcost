@@ -206,6 +206,8 @@
   :root[data-theme="dark"] .ledger-balance-meta .pending-btn{color:var(--amber);}
   .ledger-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 
+  /* ---- Column resizer (wide layout only) ---- */
+  #colResizer{display:none;}
   /* ---- Compact cash row (header) ---- */
   .cash-compact{
     display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -480,8 +482,9 @@
     main{
       padding:8px 36px 48px;
       display:grid;
-      grid-template-columns:360px 1fr;
-      gap:22px;
+      --side-w:420px;
+      grid-template-columns:var(--side-w) 14px 1fr;
+      gap:0 6px;
       align-items:start;
     }
     #sidebarCol section:first-child, #mainCol section:first-child{ margin-top:0; }
@@ -525,16 +528,27 @@
     #sidebarCol .ledger-balance-bar{ top:0; }
     #mainCol{ padding-inline-end:8px; margin-inline-end:-8px; }
     #expensesSection{ margin-top:0; }
+    #colResizer{
+      display:flex; justify-content:center; align-items:center;
+      cursor:col-resize; touch-action:none; user-select:none; margin:8px 0 28px;
+      border-radius:8px;
+    }
+    #colResizer::before{
+      content:""; width:4px; height:44px; border-radius:4px;
+      background:var(--border); transition:background .15s, height .15s;
+    }
+    #colResizer:hover::before, #colResizer.dragging::before{ background:var(--teal); height:72px; }
+    body.col-resizing{ cursor:col-resize; user-select:none; }
   }
   @media (min-width: 860px) and (max-width: 1023px){
-    main{ grid-template-columns:300px 1fr; }
+    main{ --side-w:340px; }
   }
   /* Unfolded-phone tier: same dashboard layout, just tighter — full-bleed
      instead of a floating card, slimmer sidebar and padding. */
   @media (min-width: 600px) and (max-width: 859px) and (min-height: 600px){
     #app{ margin:0; border-radius:0; box-shadow:none; height:100vh; height:100dvh; }
     header.topbar{ padding:18px 20px 10px; }
-    main{ grid-template-columns:minmax(240px, 42%) 1fr; gap:16px; padding:6px 20px 40px; }
+    main{ --side-w:minmax(260px, 48%); gap:0 4px; padding:6px 20px 40px; }
   }
   /* -- date inputs: show dd/mm/yyyy regardless of browser locale -- */
   .date-wrap{position:relative;}
@@ -593,6 +607,8 @@
         <div id="ledgerBalanceBar"></div>
       </section>
     </div>
+
+    <div id="colResizer" role="separator" aria-orientation="vertical" aria-label="שינוי רוחב הטורים" title="גררו לשינוי הרוחב · לחיצה כפולה לאיפוס"></div>
 
     <div id="mainCol">
       <section id="expensesSection">
@@ -2899,6 +2915,46 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
   XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
 });
+
+/* ========================= Column resizer (wide layout) ========================= */
+(function(){
+  const KEY = 'tripcost.sideW';
+  const main = document.getElementById('main');
+  const side = document.getElementById('sidebarCol');
+  const handle = document.getElementById('colResizer');
+  const MIN = 260, MIN_MAIN = 320;
+  const clamp = (w) => {
+    const max = main.clientWidth - MIN_MAIN - 40;
+    return Math.round(Math.max(MIN, Math.min(w, max)));
+  };
+  const apply = (w) => main.style.setProperty('--side-w', clamp(w) + 'px');
+  try { const saved = parseInt(localStorage.getItem(KEY), 10); if (saved) apply(saved); } catch(e){}
+  let dragging = false;
+  handle.addEventListener('pointerdown', (e) => {
+    dragging = true; handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging'); document.body.classList.add('col-resizing');
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    // RTL: the sidebar sits on the right, so its width is right edge − pointer x.
+    apply(side.getBoundingClientRect().right - e.clientX);
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false; handle.classList.remove('dragging'); document.body.classList.remove('col-resizing');
+    try { localStorage.setItem(KEY, parseInt(side.getBoundingClientRect().width, 10)); } catch(e){}
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+  handle.addEventListener('dblclick', () => {
+    main.style.removeProperty('--side-w');
+    try { localStorage.removeItem(KEY); } catch(e){}
+  });
+  window.addEventListener('resize', () => {
+    const w = parseInt(main.style.getPropertyValue('--side-w'), 10);
+    if (w) apply(w);
+  });
+})();
 
 /* ========================= Misc ========================= */
 window.addEventListener('scroll', () => {

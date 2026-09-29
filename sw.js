@@ -2,7 +2,7 @@
 // sw.js's own bytes, which is what makes the browser notice there's an update at
 // all -- a byte-identical sw.js is never re-installed, no matter how much
 // index.html changed on the server.
-const CACHE_NAME = 'tripcost-v4';
+const CACHE_NAME = 'tripcost-v5';
 const SHELL = [
   './',
   './index.html',
