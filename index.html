@@ -508,6 +508,31 @@
     .overlay.show .sheet{ transform:translateY(0); }
 
     #bgPlane{ opacity:.06; }
+
+    /* App-like viewport lock: the page itself doesn't scroll. The sidebar
+       (donut + "שולם עד כה" bar) stays pinned, and only the expenses list
+       scrolls inside its own column. */
+    body{ overflow:hidden; }
+    #app{ height:calc(100vh - 56px); height:calc(100dvh - 56px); min-height:0; }
+    main{
+      flex:1; min-height:0; padding-bottom:24px;
+      grid-template-rows:minmax(0,1fr); align-items:stretch;
+    }
+    #sidebarCol{ min-height:0; display:flex; flex-direction:column; }
+    #ledgerSection{ flex:1; min-height:0; display:flex; flex-direction:column; }
+    /* If the donut + legend is taller than the screen, only that card scrolls —
+       the "שולם עד כה" bar below it is always fully visible. */
+    #categoryDonut{ flex:0 1 auto; min-height:0; display:flex; flex-direction:column; }
+    #categoryDonut .ledger-donut-card{ min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+    #ledgerBalanceBar{ flex:none; }
+    #sidebarCol .ledger-balance-bar{ position:static; }
+    #mainCol{ min-height:0; display:flex; flex-direction:column; }
+    #expensesSection{ flex:1; min-height:0; display:flex; flex-direction:column; margin-top:0; }
+    #expensesList{
+      flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+      padding-inline-end:6px; margin-inline-end:-6px; padding-bottom:12px;
+      scrollbar-width:thin;
+    }
   }
   @media (min-width: 860px) and (max-width: 1023px){
     main{ grid-template-columns:300px 1fr; }
@@ -515,7 +540,7 @@
   /* Unfolded-phone tier: same dashboard layout, just tighter — full-bleed
      instead of a floating card, slimmer sidebar and padding. */
   @media (min-width: 600px) and (max-width: 859px) and (min-height: 600px){
-    #app{ margin:0; border-radius:0; box-shadow:none; min-height:100vh; }
+    #app{ margin:0; border-radius:0; box-shadow:none; height:100vh; height:100dvh; }
     header.topbar{ padding:18px 20px 10px; }
     main{ grid-template-columns:minmax(240px, 42%) 1fr; gap:16px; padding:6px 20px 40px; }
   }
@@ -1776,7 +1801,7 @@ function renderBalanceBar(){
     expenseFilter = { type: 'pending' };
     renderFilterBar();
     renderExpenses();
-    document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
+    scrollToExpenses();
   });
 }
 
@@ -1905,7 +1930,7 @@ function renderCategoryChart(){
     expenseFilter = { type: 'category', value: cat };
     renderFilterBar();
     renderExpenses();
-    document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
+    scrollToExpenses();
   };
   section.querySelectorAll('.donut-slice').forEach(el => el.addEventListener('click', () => onCatClick(el.dataset.cat)));
   section.querySelectorAll('.donut-legend-row').forEach(el => el.addEventListener('click', () => onCatClick(el.dataset.cat)));
@@ -2259,6 +2284,12 @@ function renderAll(){
   renderRates();
   renderExpenses();
   updateHeaderHeightVar();
+}
+const WIDE_MQ = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
+function scrollToExpenses(){
+  // Wide layout: page is locked, only the list scrolls — bring the list to its top.
+  if (WIDE_MQ.matches) document.getElementById('expensesList').scrollTo({top:0, behavior:'smooth'});
+  else document.getElementById('expensesSection').scrollIntoView({behavior:'smooth', block:'start'});
 }
 function updateHeaderHeightVar(){
   const header = document.getElementById('topbar');
@@ -2881,6 +2912,9 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
 window.addEventListener('scroll', () => {
   document.getElementById('topbar').classList.toggle('scrolled', window.scrollY > 4);
 });
+document.getElementById('expensesList').addEventListener('scroll', (e) => {
+  if (WIDE_MQ.matches) document.getElementById('topbar').classList.toggle('scrolled', e.target.scrollTop > 4);
+}, {passive:true});
 
 if ('serviceWorker' in navigator){
   window.addEventListener('load', () => {
