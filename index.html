@@ -246,6 +246,12 @@
   .exp-row-bar{width:6px;height:30px;border-radius:4px;flex:none;}
   .exp-row-name{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .exp-row-sub{font-size:12px;color:var(--ink-soft);}
+  .exp-row-clip{
+    display:inline-flex;align-items:center;gap:2px;flex:none;
+    font-size:11px;font-weight:700;line-height:1;color:var(--teal-dark);
+    background:var(--teal-tint);border-radius:var(--radius-pill);padding:3px 6px;margin-inline-start:6px;
+    vertical-align:middle;
+  }
   .exp-row-amt{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none;margin-right:8px;}
   .exp-row-detail{padding:0 2px 14px 18px;display:flex;flex-direction:column;gap:9px;}
   .exp-row-tags{display:flex;gap:6px;flex-wrap:wrap;}
@@ -2271,13 +2277,14 @@ function renderExpenses(){
     const showOrig = exp.currency !== "שקל";
     const cat = expCategory(exp);
     const expanded = expandedExpenseId === exp.id;
+    const attCount = (exp.attachments || []).length;
     return `
     <div class="exp-row" data-id="${exp.id}">
       <button type="button" class="exp-row-head" data-action="toggle" data-id="${exp.id}">
         <div class="exp-row-main">
           <div class="exp-row-bar" style="background:${CATEGORY_COLOR[cat]};"></div>
           <div style="min-width:0;">
-            <div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>
+            <div style="display:flex;align-items:center;min-width:0;"><div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>${attCount ? `<span class="exp-row-clip" title="${attCount} קבצים מצורפים" aria-label="${attCount} קבצים מצורפים">📎${attCount > 1 ? attCount : ""}</span>` : ""}</div>
             <div class="exp-row-sub">${escapeHtml(cat)} · ${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
           </div>
         </div>
