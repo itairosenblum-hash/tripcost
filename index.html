@@ -180,6 +180,7 @@
   .donut-legend-dot{width:10px;height:10px;border-radius:50%;flex:none;}
   .donut-legend-label{flex:1;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .donut-legend-val{color:var(--ink-soft);font-weight:700;white-space:nowrap;}
+  .donut-mode-seg button{font-size:13px;padding:7px 4px;}
 
   /* ---- Ledger section: donut hero (scrolls away) + sticky balance bar ---- */
   #ledgerSection{margin-top:0;}
@@ -1890,6 +1891,13 @@ function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color, cat){
   return `<path d="${d}" fill="${color}" ${dataAttr} />`;
 }
 
+// Donut view mode: 'all' = every category; 'spend' = everything except flights & hotels
+// (the day-to-day spending on the ground). Remembered per device.
+const DONUT_MODE_KEY = "tripcost.donutMode";
+const DONUT_EXCLUDED_IN_SPEND = ["טיסה","מלונות"];
+let donutMode = 'all';
+try { if (localStorage.getItem(DONUT_MODE_KEY) === 'spend') donutMode = 'spend'; } catch(e){}
+
 function renderCategoryChart(){
   const trip = activeTrip();
   const section = document.getElementById('categoryDonut');
@@ -1898,10 +1906,38 @@ function renderCategoryChart(){
   const byCat = {};
   CATEGORIES.forEach(c => byCat[c] = 0);
   trip.expenses.forEach(e => { byCat[expCategory(e)] += expenseTotalILS(e); });
-  const total = Object.values(byCat).reduce((s,v) => s+v, 0);
-  const entries = CATEGORIES.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const cats = donutMode === 'spend' ? CATEGORIES.filter(c => !DONUT_EXCLUDED_IN_SPEND.includes(c)) : CATEGORIES;
+  const total = cats.reduce((s,c) => s + byCat[c], 0);
+  const entries = cats.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
 
-  if (total <= 0 || entries.length === 0){ section.innerHTML = ""; return; }
+  const modeSeg = `
+      <div class="seg donut-mode-seg" style="margin-bottom:12px;">
+        <button type="button" data-mode="all" class="${donutMode==='all'?'active':''}">הכל</button>
+        <button type="button" data-mode="spend" class="${donutMode==='spend'?'active':''}">בזבוזים (בלי טיסות ומלונות)</button>
+      </div>`;
+  const bindModeSeg = () => {
+    section.querySelectorAll('.donut-mode-seg button').forEach(b => b.addEventListener('click', () => {
+      if (donutMode === b.dataset.mode) return;
+      donutMode = b.dataset.mode;
+      try { localStorage.setItem(DONUT_MODE_KEY, donutMode); } catch(e){}
+      renderCategoryChart();
+    }));
+  };
+
+  if (total <= 0 || entries.length === 0){
+    if (donutMode === 'spend'){
+      section.innerHTML = `
+        <div class="ledger-donut-card">
+          <div class="ledger-donut-title">פילוח הוצאות</div>
+          ${modeSeg}
+          <div style="text-align:center;color:var(--ink-soft);font-size:14px;padding:12px 0;">אין עדיין הוצאות מלבד טיסות ומלונות</div>
+        </div>`;
+      bindModeSeg();
+    } else {
+      section.innerHTML = "";
+    }
+    return;
+  }
 
   const cx = 100, cy = 100, rOuter = 90, rInner = 55;
   let cumulative = 0;
@@ -1924,16 +1960,18 @@ function renderCategoryChart(){
   section.innerHTML = `
     <div class="ledger-donut-card">
       <div class="ledger-donut-title">פילוח הוצאות · לחצו לסינון</div>
+      ${modeSeg}
       <div class="donut-wrap">
         <svg viewBox="0 0 200 200" width="170" height="170" style="cursor:pointer;">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
         <div class="donut-center">
           <div class="donut-center-total tnum">₪${fmtMoney(total)}</div>
-          <div class="donut-center-label">סה״כ</div>
+          <div class="donut-center-label">${donutMode==='spend' ? 'בזבוזים' : 'סה״כ'}</div>
         </div>
       </div>
       <div class="donut-legend">${legend}</div>
     </div>
   `;
+  bindModeSeg();
   const onCatClick = (cat) => {
     expenseFilter = { type: 'category', value: cat };
     renderFilterBar();
