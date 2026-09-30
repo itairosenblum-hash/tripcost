@@ -339,6 +339,9 @@
   /* ---- Toolbar ---- */
   .toolbar{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
   .toolbar::-webkit-scrollbar{display:none;}
+  .attach-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px;}
+  .drive-chip{color:var(--ink-soft);font-weight:600;}
+  .drive-chip.expired{background:var(--amber-tint);border-color:transparent;color:#8a6417;font-weight:700;}
   .tool-btn{
     flex:none;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);
     border-radius:var(--radius-pill);padding:6px 11px;font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;
@@ -879,11 +882,12 @@
     <div class="field">
       <label>קבצים מצורפים (הזמנה, קבלה, שובר וכו׳)</label>
       <div class="exp-attachments" id="efAttachList"></div>
-      <button type="button" class="tool-btn" id="btnAttachFile" style="margin-top:2px;">📎 צירוף קובץ</button>
-      <input type="file" id="efFileInput" accept="image/*,application/pdf" multiple>
-      <div id="efDriveWarning" style="display:none;margin-top:8px;padding:8px 10px;background:var(--amber-tint);border-radius:var(--radius-sm);font-size:13.5px;color:#8a6417;cursor:pointer;">
-        ⚠️ החיבור ל-Drive פג בסשן הזה — הקובץ יישמר רק מקומית. לחצו כאן לחיבור מחדש
+      <div class="attach-row">
+        <button type="button" class="tool-btn" id="btnAttachFile">📎 צירוף קובץ</button>
+        <button type="button" class="tool-btn drive-chip" id="efDriveWarning" style="display:none;"></button>
       </div>
+      <input type="file" id="efFileInput" accept="image/*,application/pdf" multiple>
+      <div id="efDriveHint" class="hint" style="display:none;margin:6px 0 0;">עד לחידוש החיבור, קבצים שתצרפו יישמרו רק במכשיר הזה.</div>
     </div>
 
     <div class="sheet-actions">
@@ -2795,8 +2799,26 @@ function updateDriveWarning(){
   // Only worth flagging when they're actually signed in but this session's Drive
   // token isn't live — if they're not signed in at all, that's communicated
   // elsewhere (the sync status line), not here.
-  el.style.display = (cloudUser && !driveTokenValid()) ? "block" : "none";
+  const hint = document.getElementById('efDriveHint');
+  if (!cloudUser){ el.style.display = "none"; hint.style.display = "none"; return; }
+  const ok = driveTokenValid();
+  el.style.display = "";
+  el.classList.toggle('expired', !ok);
+  hint.style.display = ok ? "none" : "";
+  if (ok){
+    const mins = Math.max(1, Math.round((driveTokenExp - 120000 - Date.now()) / 60000));
+    el.textContent = `☁️ Drive · עוד ${mins} דק׳`;
+    el.title = "Drive מחובר — לחיצה מחדשת את החיבור לשעה נוספת";
+  } else {
+    el.textContent = "🔄 חידוש חיבור ל-Drive";
+    el.title = "החיבור ל-Drive פג — לחצו לחידוש בלי לצאת מהחלון";
+  }
 }
+// Keep the Drive status current while the expense form is open (the token can
+// expire mid-edit).
+setInterval(() => {
+  if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
+}, 30000);
 document.getElementById('efDriveWarning').addEventListener('click', () => {
   // GIS opens a popup rather than navigating away, so the in-progress form survives —
   // no need to close the sheet first the way the old redirect-based flow required.
