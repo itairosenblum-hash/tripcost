@@ -566,6 +566,21 @@
     direction:ltr;pointer-events:none;
   }
   .date-display.empty{color:var(--ink-soft);opacity:.6;}
+
+  /* ---- In-app pull-to-refresh (browsers don't offer it in an installed app,
+     and the wide layout's locked page blocks the native one too) ---- */
+  html, body{overscroll-behavior-y:contain;}
+  #ptr{
+    position:fixed;top:0;left:50%;z-index:60;width:40px;height:40px;margin-left:-20px;
+    border-radius:50%;background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);
+    display:flex;align-items:center;justify-content:center;color:var(--teal);
+    transform:translateY(-60px);opacity:0;pointer-events:none;
+  }
+  #ptr.anim{transition:transform .2s ease, opacity .2s ease;}
+  #ptr svg{transition:transform .15s ease;}
+  #ptr.ready svg{transform:rotate(180deg);}
+  #ptr.loading svg{animation:ptrSpin .8s linear infinite;}
+  @keyframes ptrSpin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -582,6 +597,7 @@
     </g>
   </svg>
 </div>
+<div id="ptr" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v13M6 11l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="app">
 
   <header class="topbar" id="topbar">
@@ -3043,6 +3059,51 @@ renderAll();
 initFirebaseIfConfigured();
 refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app opens
 
+})();
+
+/* ---- Pull-to-refresh: drag down from the top of the page (or the top of a
+   column in the wide layout) and release to reload ---- */
+(function(){
+  const ptr = document.getElementById('ptr');
+  const THRESHOLD = 70, MAX = 110;
+  const WIDE = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
+  let startY = null, pull = 0, scroller = null;
+  const atTop = (el) => el ? el.scrollTop <= 0 : (window.scrollY || document.documentElement.scrollTop) <= 0;
+  const show = (d) => {
+    ptr.style.opacity = Math.min(1, d / 40);
+    ptr.style.transform = `translateY(${Math.min(d, MAX) - 50}px)`;
+    ptr.classList.toggle('ready', d >= THRESHOLD);
+  };
+  const reset = () => {
+    ptr.classList.add('anim'); ptr.classList.remove('ready');
+    ptr.style.opacity = 0; ptr.style.transform = 'translateY(-60px)';
+    setTimeout(() => ptr.classList.remove('anim'), 220);
+  };
+  document.addEventListener('touchstart', (e) => {
+    startY = null; pull = 0;
+    if (e.touches.length !== 1 || document.querySelector('.overlay.show')) return;
+    scroller = WIDE.matches ? e.target.closest('#mainCol, #sidebarCol') : null;
+    if (!atTop(scroller)) return;
+    startY = e.touches[0].clientY;
+  }, {passive:true});
+  document.addEventListener('touchmove', (e) => {
+    if (startY === null) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0 || !atTop(scroller)){ if (pull) reset(); startY = null; pull = 0; return; }
+    pull = dy * 0.5; // resistance
+    if (e.cancelable) e.preventDefault();
+    show(pull);
+  }, {passive:false});
+  document.addEventListener('touchend', () => {
+    if (startY === null) return;
+    startY = null;
+    if (pull >= THRESHOLD){
+      ptr.classList.add('anim','loading'); ptr.classList.remove('ready');
+      ptr.style.opacity = 1; ptr.style.transform = 'translateY(20px)';
+      setTimeout(() => location.reload(), 250);
+    } else if (pull > 0) reset();
+    pull = 0;
+  });
 })();
 </script>
 </body>
