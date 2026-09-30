@@ -97,7 +97,7 @@
   }
   header.topbar.scrolled{border-bottom-color:var(--border);}
   .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-  .brand-left{display:flex;align-items:center;gap:8px;min-width:0;}
+  .brand-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1;}
   .brand{flex:none;}
   /* On a narrow phone the flight details need the room — drop the subtitle. */
   @media (max-width: 599px){ .brand-row.has-flight .brand .sub{display:none;} }
@@ -379,7 +379,8 @@
 
   /* ---- Trip info strip (flight/booking details) ---- */
   .trip-info{
-    display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0;
+    direction:rtl;text-align:right;
+    display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;flex:1;
   }
   .trip-info-row{
     font-size:12px;line-height:1.35;color:var(--ink-soft);display:flex;align-items:center;gap:5px;
@@ -2337,10 +2338,10 @@ function renderTripInfoStrip(){
 
   function legLine(icon, label, flightNum, dateTime){
     const parts = [];
-    if (flightNum) parts.push(`<b>${escapeHtml(flightNum)}</b>`);
+    if (flightNum) parts.push(`<b><bdi dir="ltr">${escapeHtml(flightNum)}</bdi></b>`);
     if (dateTime){
       const d = new Date(dateTime);
-      parts.push(isNaN(d) ? escapeHtml(dateTime) : `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+      parts.push(`<bdi dir="ltr">${isNaN(d) ? escapeHtml(dateTime) : `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`}</bdi>`);
     }
     return parts.length ? `<span title="${label}">${icon}</span> ${parts.join(" · ")}` : null;
   }
@@ -2365,7 +2366,7 @@ function renderTripInfoStrip(){
   }
 
   if (outLine || trip.bookingRef){
-    const booking = trip.bookingRef ? `<span class="trip-info-booking">🔖 ${escapeHtml(trip.bookingRef)}</span>` : "";
+    const booking = trip.bookingRef ? `<span class="trip-info-booking">🔖 <bdi dir="ltr">${escapeHtml(trip.bookingRef)}</bdi></span>` : "";
     rows.push(`<div class="trip-info-row">${outLine || "🛫 הלוך"} ${booking}</div>`);
   }
   if (returnLine) rows.push(`<div class="trip-info-row">${returnLine}</div>`);
@@ -3115,6 +3116,24 @@ refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app o
     } else if (pull > 0) reset();
     pull = 0;
   });
+})();
+
+/* Wide layout: start the flight details exactly on the right edge of the left
+   (expenses) column, following the column when the divider is dragged. */
+(function(){
+  const strip = document.getElementById('tripInfoStrip');
+  const col = document.getElementById('mainCol');
+  const WIDE = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
+  function align(){
+    if (!WIDE.matches){ strip.style.marginInlineStart = ''; return; }
+    const holder = strip.parentElement.getBoundingClientRect();
+    const gap = holder.right - col.getBoundingClientRect().right;
+    strip.style.marginInlineStart = Math.max(0, Math.round(gap)) + 'px';
+  }
+  if (window.ResizeObserver){ const ro = new ResizeObserver(align); ro.observe(col); ro.observe(document.getElementById('topbar')); }
+  window.addEventListener('resize', align);
+  WIDE.addEventListener ? WIDE.addEventListener('change', align) : null;
+  align();
 })();
 </script>
 </body>
