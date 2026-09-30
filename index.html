@@ -421,6 +421,17 @@
     border-radius:var(--radius-sm);padding:11px 12px;font-size:16px;
   }
   .field textarea{resize:vertical;min-height:52px;}
+  #shareEmailInput{
+    border:1px solid var(--border);background:var(--card);color:var(--ink);
+    border-radius:var(--radius-sm);padding:11px 12px;font-size:16px;
+  }
+  #btnAddShare{flex:none;padding:11px 18px;}
+  .share-member{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:9px 12px;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card-2);
+  }
+  .share-member span{direction:ltr;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .share-member button{flex:none;border:none;background:transparent;color:var(--danger);font-weight:700;font-size:14px;cursor:pointer;padding:4px;}
   .seg{display:flex;background:var(--card-2);border-radius:var(--radius-sm);padding:3px;gap:3px;}
   .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
   .cat-chip{
@@ -937,6 +948,19 @@
         <div id="syncStatusDetail" class="hint" style="margin-bottom:6px;"></div>
 
         <div class="divider"></div>
+        <div id="shareOwnerBlock">
+          <div style="font-weight:700;font-size:15px;">שיתוף עם חשבון נוסף</div>
+          <div class="hint" style="margin:2px 0 10px;">חשבון Google שתוסיפו כאן יראה, יוסיף ויערוך את כל הטיולים וההוצאות שלכם — בזמן אמת, בלי לדרוס שינויים של אחרים.</div>
+          <div id="shareMembersList"></div>
+          <div style="display:flex;gap:8px;align-items:stretch;">
+            <input type="email" id="shareEmailInput" placeholder="example@gmail.com" dir="ltr" style="flex:1;min-width:0;">
+            <button class="btn-primary" id="btnAddShare" style="white-space:nowrap;">הוספה</button>
+          </div>
+          <div class="hint" style="margin-top:6px;">הצד השני פותח את האתר ומתחבר עם החשבון הזה. קבצים מצורפים נשמרים ב-Drive של מי שהעלה אותם — כדי ששניכם תראו את כולם, שתפו תיקייה ב-Drive והגדירו אותה למטה אצל שניכם.</div>
+        </div>
+        <div id="shareGuestBlock" class="hint" style="display:none;"></div>
+
+        <div class="divider"></div>
         <div class="field">
           <label>Google OAuth Client ID (לצורך רענון הרשאת Drive)</label>
           <input type="text" id="googleClientIdInput" placeholder="לדוגמה: 123...apps.googleusercontent.com">
@@ -1240,7 +1264,125 @@ let state = loadState();
 state.trips.forEach(migrateTrip);
 migrateGlobalState(state);
 
+/* ========================= Per-item merge (multi-account / multi-device safe sync) =========================
+   The whole state still lives in ONE Firestore doc, but it is never blindly overwritten anymore:
+   - Every trip (its own fields) and every expense carries `_u` = ms timestamp of its last local change.
+     Nobody has to remember to set it: stampLocalChanges() diffs the state against `syncBase` (a
+     fingerprint of what we last saved/received, persisted in localStorage) and stamps whatever changed.
+   - Deletions leave a tombstone in state._tomb {id: deletedAt}; without it a merge can't tell
+     "deleted over there" from "not arrived here yet", and deleted items would come back to life.
+   - Global fields (currency rates etc.) share one stamp: state._metaU.
+   - Pushes run inside a Firestore transaction: read the latest cloud copy → mergeStates → write.
+     Incoming snapshots are merged in the same way instead of replacing local data.
+   Result: two people adding/editing DIFFERENT items at the same time never lose each other's work;
+   only simultaneous edits of the very same item resolve to the later one. activeTripId stays per-device. */
+const SYNC_BASE_KEY = "tripcost.syncBase";
+const SYNC_DOC_KEY  = "tripcost.syncDocPath";     // which cloud doc the local data belongs to
+const TOMB_TTL_MS   = 120 * 24 * 3600 * 1000;      // forget tombstones after ~4 months
+const META_SKIP     = { trips:1, activeTripId:1, _tomb:1, _metaU:1 };
+
+function tripMetaJson(t){ const c = Object.assign({}, t); delete c.expenses; delete c._u; return JSON.stringify(c); }
+function expenseJson(e){ const c = Object.assign({}, e); delete c._u; return JSON.stringify(c); }
+function globalMetaJson(s){
+  const c = {};
+  Object.keys(s).sort().forEach(k => { if (!META_SKIP[k]) c[k] = s[k]; });
+  return JSON.stringify(c);
+}
+function fingerprint(s){
+  const fp = { trips:{}, expenses:{}, meta: globalMetaJson(s) };
+  (s.trips || []).forEach(t => {
+    fp.trips[t.id] = tripMetaJson(t);
+    (t.expenses || []).forEach(e => { fp.expenses[e.id] = expenseJson(e); });
+  });
+  return fp;
+}
+function loadSyncBase(){
+  try{ const raw = localStorage.getItem(SYNC_BASE_KEY); if (raw) return JSON.parse(raw); }catch(e){}
+  return null;
+}
+function saveSyncBase(fp){
+  syncBase = fp;
+  try{ localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(fp)); }catch(e){}
+}
+let syncBase = loadSyncBase();
+if (!syncBase) saveSyncBase(fingerprint(state));   // first run with this version: current data = baseline
+
+// Stamp everything that changed since the last baseline, tombstone what disappeared.
+function stampLocalChanges(){
+  const now = Date.now();
+  const base = syncBase || { trips:{}, expenses:{}, meta:"" };
+  const fp = fingerprint(state);
+  if (!state._tomb || typeof state._tomb !== "object") state._tomb = {};
+  state.trips.forEach(t => {
+    if (base.trips[t.id] !== fp.trips[t.id]) t._u = now;
+    delete state._tomb[t.id];
+    (t.expenses || []).forEach(e => {
+      if (base.expenses[e.id] !== fp.expenses[e.id]) e._u = now;
+      delete state._tomb[e.id];
+    });
+  });
+  Object.keys(base.trips).forEach(id => { if (!(id in fp.trips)) state._tomb[id] = now; });
+  Object.keys(base.expenses).forEach(id => { if (!(id in fp.expenses)) state._tomb[id] = now; });
+  if (base.meta !== fp.meta) state._metaU = now;
+  saveSyncBase(fp);
+}
+
+function pickNewer(local, remote){
+  // tie → remote, so every client resolves the same way
+  return (local._u || 0) > (remote._u || 0) ? local : remote;
+}
+function mergeLists(localList, remoteList, combine, isAlive){
+  const remoteById = new Map((remoteList || []).map(x => [x.id, x]));
+  const seen = new Set();
+  const out = [];
+  (localList || []).forEach(l => {
+    seen.add(l.id);
+    const r = remoteById.get(l.id);
+    out.push(r ? combine(l, r) : l);
+  });
+  (remoteList || []).forEach(r => { if (!seen.has(r.id)) out.push(r); });
+  return out.filter(isAlive);
+}
+// Pure function: returns a new state; local-only fields (activeTripId) come from `local`.
+function mergeStates(local, remote, now){
+  now = now || Date.now();
+  const tomb = {};
+  [local._tomb || {}, remote._tomb || {}].forEach(src => {
+    Object.keys(src).forEach(id => {
+      const ts = src[id];
+      if (typeof ts === "number" && now - ts < TOMB_TTL_MS) tomb[id] = Math.max(tomb[id] || 0, ts);
+    });
+  });
+  const isAlive = item => !(tomb[item.id] && tomb[item.id] >= (item._u || 0));
+  const trips = mergeLists(local.trips, remote.trips, (l, r) => {
+    const base = pickNewer(l, r);
+    return Object.assign({}, base, {
+      expenses: mergeLists(l.expenses, r.expenses, pickNewer, isAlive)
+    });
+  }, isAlive);
+  // re-filter remote-only / local-only trips' expenses against tombstones too
+  trips.forEach(t => { t.expenses = (t.expenses || []).filter(isAlive); });
+
+  const metaSrc = (local._metaU || 0) > (remote._metaU || 0) ? local : remote;
+  const merged = {};
+  Object.keys(metaSrc).forEach(k => { if (!META_SKIP[k]) merged[k] = metaSrc[k]; });
+  merged._metaU = Math.max(local._metaU || 0, remote._metaU || 0);
+  merged._tomb = tomb;
+  merged.trips = trips;
+  merged.activeTripId = trips.some(t => t.id === local.activeTripId) ? local.activeTripId : (trips[0] && trips[0].id);
+  return JSON.parse(JSON.stringify(merged));   // no shared references with either input
+}
+function sameSyncedContent(a, b){
+  const norm = s => {
+    const fp = fingerprint(s);
+    const sortObj = o => Object.keys(o).sort().map(k => [k, o[k]]);
+    return JSON.stringify([sortObj(fp.trips), sortObj(fp.expenses), fp.meta, sortObj(s._tomb || {})]);
+  };
+  return norm(a) === norm(b);
+}
+
 function saveState(){
+  stampLocalChanges();
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }catch(e){
@@ -1391,10 +1533,18 @@ function initFirebaseIfConfigured(){
     fbAuth.onAuthStateChanged(user => {
       if (user){
         cloudUser = user;
-        setSyncStatus('on', `מחובר כ-${user.displayName || user.email || ''}`);
-        startCloudListener(user.uid);
+        setSyncStatus('syncing', 'מתחבר לנתונים...');
+        resolveSyncTarget(user).then(() => {
+          if (cloudUser !== user) return;   // signed out / switched meanwhile
+          setSyncStatus('on', sharedFrom
+            ? `מחובר לנתונים של ${sharedFrom.ownerName || sharedFrom.ownerEmail || 'חשבון משותף'}`
+            : `מחובר כ-${user.displayName || user.email || ''}`);
+          startCloudListener();
+          renderSyncOverlay();
+        });
       } else {
         cloudUser = null;
+        syncRef = null; sharedFrom = null; shareMembers = [];
         clearDriveToken();
         if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
         setSyncStatus('off', 'לחצו כאן להתחברות לסנכרון');
@@ -1407,30 +1557,101 @@ function initFirebaseIfConfigured(){
   }
 }
 
-function startCloudListener(uid){
+/* ---- Which cloud doc to sync with: your own, or the one someone shared with you ----
+   Sharing = the owner adds your email to `members` on their state doc, and writes an
+   invites/{email} doc pointing at their uid so your app knows where to look. */
+let syncRef = null;          // Firestore ref of the state doc this session syncs with
+let sharedFrom = null;       // {ownerUid, ownerEmail, ownerName} when using someone else's data
+let shareMembers = [];       // emails the current doc is shared with (for the owner's UI)
+
+async function resolveSyncTarget(user){
+  let ownerUid = user.uid;
+  sharedFrom = null;
+  if (user.email){
+    try{
+      const inv = await fbDb.collection('invites').doc(user.email.toLowerCase()).get();
+      const d = inv.exists ? inv.data() : null;
+      if (d && d.ownerUid && d.ownerUid !== user.uid){ ownerUid = d.ownerUid; sharedFrom = d; }
+    }catch(e){
+      // e.g. security rules not updated yet — just use your own data
+      console.warn("tripcost: invite lookup failed", e);
+    }
+  }
+  syncRef = fbDb.collection('users').doc(ownerUid).collection('data').doc('state');
+}
+
+function parseRemote(snap){
+  const d = snap.exists ? snap.data() : null;
+  if (!d || !d.payload) return null;
+  try{
+    const s = JSON.parse(d.payload);
+    if (!s || !Array.isArray(s.trips)) return null;
+    s.trips.forEach(migrateTrip);
+    migrateGlobalState(s);
+    return s;
+  }catch(e){ console.error("tripcost: bad remote payload", e); return null; }
+}
+
+// Adopt `newState` as the local state without it counting as a local edit.
+function adoptState(newState){
+  isApplyingRemote = true;
+  try{
+    state = newState;
+    if (!state._tomb) state._tomb = {};
+    saveSyncBase(fingerprint(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderAll();
+  }catch(e){
+    console.error("tripcost: failed applying state", e);
+  }
+  isApplyingRemote = false;
+}
+
+// Merge a cloud copy into local data (local unsynced edits are stamped first, so they survive).
+function mergeRemoteIntoLocal(remote){
+  stampLocalChanges();
+  const merged = mergeStates(state, remote);
+  if (!sameSyncedContent(merged, state) || merged.activeTripId !== state.activeTripId) adoptState(merged);
+  else saveSyncBase(fingerprint(state));
+  return merged;
+}
+
+function startCloudListener(){
   if (cloudUnsub) cloudUnsub();
-  const ref = fbDb.collection('users').doc(uid).collection('data').doc('state');
+  if (!syncRef) return;
+  const ref = syncRef;
+  const docPath = ref.path;
   cloudUnsub = ref.onSnapshot(snap => {
-    if (!snap.exists){
+    const d = snap.exists ? snap.data() : null;
+    shareMembers = (d && Array.isArray(d.members)) ? d.members : [];
+    renderShareSection();
+    if (!snap.exists || !(d && d.payload)){
+      if (sharedFrom){
+        setSyncStatus('err', 'הנתונים המשותפים לא נמצאו');
+        return;
+      }
       // first time this account connects: seed the cloud with whatever is stored locally
+      localStorage.setItem(SYNC_DOC_KEY, docPath);
       pushToCloudNow();
       return;
     }
-    if (snap.metadata.hasPendingWrites) return; // this is the echo of our own write — ignore
-    const remote = snap.data();
-    if (!remote || !remote.payload) return;
-    isApplyingRemote = true;
-    try{
-      state = JSON.parse(remote.payload);
-      state.trips.forEach(migrateTrip);
-      migrateGlobalState(state);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      renderAll();
+    if (snap.metadata.hasPendingWrites) return; // echo of our own write — ignore
+    const remote = parseRemote(snap);
+    if (!remote) return;
+
+    if (localStorage.getItem(SYNC_DOC_KEY) !== docPath){
+      // Local data belongs to another account/doc (or predates this version): take the cloud copy
+      // as-is rather than mixing, e.g., a fresh device's placeholder trip into shared data.
+      localStorage.setItem(SYNC_DOC_KEY, docPath);
+      adoptState(Object.assign(remote, {
+        activeTripId: remote.trips.some(t => t.id === state.activeTripId) ? state.activeTripId : remote.activeTripId
+      }));
       setSyncStatus('on', 'מעודכן מהענן ✓');
-    }catch(e){
-      console.error("tripcost: failed applying remote state", e);
+      return;
     }
-    isApplyingRemote = false;
+    const merged = mergeRemoteIntoLocal(remote);
+    if (!sameSyncedContent(merged, remote)) schedulePushToCloud();   // we have things the cloud lacks
+    else setSyncStatus('on', 'מעודכן מהענן ✓');
   }, err => {
     console.error("tripcost: firestore listener error", err);
     setSyncStatus('err', 'שגיאת סנכרון — ' + (err.code || ''));
@@ -1438,18 +1659,45 @@ function startCloudListener(uid){
 }
 
 function schedulePushToCloud(){
-  if (!cloudUser || isApplyingRemote) return;
+  if (!cloudUser || !syncRef || isApplyingRemote) return;
   setSyncStatus('syncing', 'מסנכרן...');
   clearTimeout(pushTimer);
   pushTimer = setTimeout(pushToCloudNow, 900);
 }
 
-function pushToCloudNow(){
-  if (!cloudUser || !fbDb) return;
-  const ref = fbDb.collection('users').doc(cloudUser.uid).collection('data').doc('state');
-  ref.set({ payload: JSON.stringify(state), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    .then(()=> setSyncStatus('on', 'מעודכן ✓'))
-    .catch(err => { console.error("tripcost: push failed", err); setSyncStatus('err', 'שמירה בענן נכשלה'); });
+let pushInFlight = false, pushAgain = false;
+async function pushToCloudNow(){
+  if (!cloudUser || !fbDb || !syncRef) return;
+  if (pushInFlight){ pushAgain = true; return; }
+  pushInFlight = true;
+  const ref = syncRef;
+  stampLocalChanges();
+  try{
+    let written = null;
+    await fbDb.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const remote = parseRemote(snap);
+      if (!remote && sharedFrom) throw new Error("shared doc missing");
+      const toWrite = remote ? mergeStates(state, remote) : JSON.parse(JSON.stringify(state));
+      if (remote && sameSyncedContent(toWrite, remote)){ written = toWrite; return; }  // nothing new
+      tx.set(ref, {
+        payload: JSON.stringify(toWrite),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });   // merge:true keeps `members` untouched
+      written = toWrite;
+    });
+    if (ref === syncRef && written){
+      localStorage.setItem(SYNC_DOC_KEY, ref.path);
+      mergeRemoteIntoLocal(written);   // pull in anything the other side added meanwhile
+    }
+    setSyncStatus('on', 'מעודכן ✓');
+  }catch(err){
+    console.error("tripcost: push failed", err);
+    setSyncStatus('err', 'שמירה בענן נכשלה' + (err && err.code === 'permission-denied' ? ' (אין הרשאה)' : ''));
+  }finally{
+    pushInFlight = false;
+    if (pushAgain){ pushAgain = false; schedulePushToCloud(); }
+  }
 }
 
 function signInWithGoogle(){
@@ -1525,7 +1773,13 @@ function requestDriveReauth(){
 }
 
 async function ensureDriveFolderId(){
-  if (state.autoDriveFolderId) return state.autoDriveFolderId;
+  // Per Google account (kept on the device, not in the shared data): someone you share with
+  // uploads into THEIR OWN Drive folder, not yours. Losing it is harmless — we find it by name.
+  const folderKey = "tripcost.autoDriveFolder." + (cloudUser ? cloudUser.uid : "local");
+  let cachedFolder = null;
+  try{ cachedFolder = localStorage.getItem(folderKey); }catch(e){}
+  if (!cachedFolder && state.autoDriveFolderId && !sharedFrom) cachedFolder = state.autoDriveFolderId;  // legacy
+  if (cachedFolder) return cachedFolder;
   if (!driveAccessToken) throw new Error("no drive token");
   const q = encodeURIComponent(`name='${DEFAULT_DRIVE_FOLDER_NAME.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
@@ -1542,8 +1796,7 @@ async function ensureDriveFolderId(){
     const createJson = await createRes.json();
     id = createJson.id;
   }
-  state.autoDriveFolderId = id;
-  saveState();
+  try{ localStorage.setItem(folderKey, id); }catch(e){}
   return id;
 }
 
@@ -1608,8 +1861,11 @@ function renderSyncOverlay(){
     document.getElementById('syncUserPhoto').src = cloudUser.photoURL || "";
     document.getElementById('syncUserName').textContent = cloudUser.displayName || "מחובר";
     document.getElementById('syncUserEmail').textContent = cloudUser.email || "";
-    document.getElementById('syncStatusDetail').textContent = "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
+    document.getElementById('syncStatusDetail').textContent = sharedFrom
+      ? "השינויים נשמרים אוטומטית ומסתנכרנים עם כל מי שמשתף את הנתונים האלה."
+      : "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
   }
+  renderShareSection();
   document.getElementById('toggleExistingFolder').checked = !!driveSettings.useExistingDriveFolder;
   document.getElementById('folderIdField').style.display = driveSettings.useExistingDriveFolder ? "block" : "none";
   document.getElementById('driveFolderIdInput').value = driveSettings.driveFolderId || "";
@@ -1617,6 +1873,79 @@ function renderSyncOverlay(){
 }
 
 document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+
+/* ---- Sharing UI (owner adds/removes emails; a guest just sees whose data this is) ---- */
+function renderShareSection(){
+  const ownerBlock = document.getElementById('shareOwnerBlock');
+  const guestBlock = document.getElementById('shareGuestBlock');
+  if (!ownerBlock) return;
+  if (!cloudUser || !syncRef){ ownerBlock.style.display = "none"; guestBlock.style.display = "none"; return; }
+  if (sharedFrom){
+    ownerBlock.style.display = "none";
+    guestBlock.style.display = "block";
+    guestBlock.textContent = `👥 אתם צופים ועורכים את הנתונים של ${sharedFrom.ownerName || ""} ${sharedFrom.ownerEmail ? "(" + sharedFrom.ownerEmail + ")" : ""}. רק הבעלים יכול/ה להסיר את השיתוף.`;
+    return;
+  }
+  guestBlock.style.display = "none";
+  ownerBlock.style.display = "block";
+  document.getElementById('shareMembersList').innerHTML = shareMembers.map(email => `
+    <div class="share-member">
+      <span>${escapeHtml(email)}</span>
+      <button type="button" data-remove-share="${escapeHtml(email)}">הסרה</button>
+    </div>`).join("");
+}
+
+async function addShare(){
+  const input = document.getElementById('shareEmailInput');
+  const email = (input.value || "").trim().toLowerCase();
+  if (!cloudUser || !syncRef || sharedFrom) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast("כתובת המייל לא תקינה"); return; }
+  if (email === (cloudUser.email || "").toLowerCase()){ toast("זה החשבון שלכם 🙂"); return; }
+  if (shareMembers.includes(email)){ toast("כבר משותף עם החשבון הזה"); return; }
+  const btn = document.getElementById('btnAddShare');
+  btn.disabled = true;
+  try{
+    const batch = fbDb.batch();
+    batch.set(fbDb.collection('invites').doc(email), {
+      ownerUid: cloudUser.uid,
+      ownerEmail: (cloudUser.email || "").toLowerCase(),
+      ownerName: cloudUser.displayName || "",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    batch.set(syncRef, { members: firebase.firestore.FieldValue.arrayUnion(email) }, { merge: true });
+    await batch.commit();
+    input.value = "";
+    toast("השיתוף נוסף ✓");
+  }catch(e){
+    console.error("tripcost: add share failed", e);
+    toast(e && e.code === 'permission-denied'
+      ? "אין הרשאה — ודאו שחוקי Firestore עודכנו, או שהחשבון כבר משותף עם מישהו אחר"
+      : "השיתוף נכשל: " + (e.message || e.code || ""));
+  }
+  btn.disabled = false;
+}
+
+async function removeShare(email){
+  if (!cloudUser || !syncRef || sharedFrom) return;
+  if (!confirm(`להסיר את השיתוף עם ${email}?`)) return;
+  try{
+    const batch = fbDb.batch();
+    batch.delete(fbDb.collection('invites').doc(email));
+    batch.set(syncRef, { members: firebase.firestore.FieldValue.arrayRemove(email) }, { merge: true });
+    await batch.commit();
+    toast("השיתוף הוסר");
+  }catch(e){
+    console.error("tripcost: remove share failed", e);
+    toast("ההסרה נכשלה: " + (e.message || e.code || ""));
+  }
+}
+
+document.getElementById('btnAddShare').addEventListener('click', addShare);
+document.getElementById('shareEmailInput').addEventListener('keydown', e => { if (e.key === 'Enter') addShare(); });
+document.getElementById('shareMembersList').addEventListener('click', e => {
+  const b = e.target.closest('[data-remove-share]');
+  if (b) removeShare(b.getAttribute('data-remove-share'));
+});
 document.getElementById('btnCloseSync').addEventListener('click', () => closeOverlay('overlaySync'));
 
 document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () => {

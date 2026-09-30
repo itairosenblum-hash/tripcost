@@ -1,0 +1,40 @@
+rules_version = '2';
+// TripCost — Firestore security rules.
+// Paste into Firebase Console → Firestore Database → Rules → Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function isMember(data) {
+      return request.auth.token.email_verified == true
+        && data.members is list
+        && myEmail() in data.members;
+    }
+
+    // Your own data: full access for the account that owns it.
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // The synced state doc: accounts you shared with can read it and update the data,
+    // but can't change who it's shared with (the `members` list).
+    match /users/{uid}/data/state {
+      allow read: if signedIn() && resource != null && isMember(resource.data);
+      allow update: if signedIn() && isMember(resource.data)
+                    && request.resource.data.members == resource.data.members;
+    }
+
+    // invites/{email} → tells an invited account whose data to open.
+    match /invites/{email} {
+      allow read: if signedIn()
+                  && (myEmail() == email || resource.data.ownerUid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if signedIn()
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn()
+                    && (resource.data.ownerUid == request.auth.uid || myEmail() == email);
+    }
+  }
+}
