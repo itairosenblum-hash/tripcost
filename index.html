@@ -96,7 +96,11 @@
     border-bottom:1px solid transparent;
   }
   header.topbar.scrolled{border-bottom-color:var(--border);}
-  .brand-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .brand-left{display:flex;align-items:center;gap:8px;min-width:0;}
+  .brand{flex:none;}
+  /* On a narrow phone the flight details need the room — drop the subtitle. */
+  @media (max-width: 599px){ .brand-row.has-flight .brand .sub{display:none;} }
   .brand{display:flex;align-items:baseline;gap:8px;}
   .brand .mark{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--teal-dark);letter-spacing:.3px;}
   .brand .sub{font-size:14px;color:var(--ink-soft);}
@@ -375,15 +379,15 @@
 
   /* ---- Trip info strip (flight/booking details) ---- */
   .trip-info{
-    display:flex;flex-direction:column;gap:5px;padding:2px 2px 4px;margin-bottom:2px;
+    display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0;
   }
   .trip-info-row{
-    background:var(--card-2);border-radius:var(--radius-sm);padding:7px 12px;
-    font-size:13.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    font-size:12px;line-height:1.35;color:var(--ink-soft);display:flex;align-items:center;gap:5px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
   }
   .trip-info-row b{color:var(--ink);font-weight:700;}
-  .trip-info-booking{color:var(--ink-soft);font-size:13px;margin-inline-start:auto;}
-  .trip-countdown{background:var(--teal-tint);color:var(--teal-dark);font-weight:700;}
+  .trip-info-booking{color:var(--ink-soft);font-size:11.5px;}
+  .trip-countdown{background:var(--teal-tint);color:var(--teal-dark);font-weight:700;border-radius:var(--radius-pill);padding:1px 8px;}
 
   /* ---- Sheet / modal ---- */
   .overlay{
@@ -586,7 +590,8 @@
         <span class="mark">TripCost</span>
         <span class="sub">מעקב הוצאות טיולים</span>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="brand-left">
+        <div class="trip-info" id="tripInfoStrip"></div>
         <button class="icon-btn" id="btnMenu" aria-label="ניהול טיולים" title="ניהול טיולים">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
@@ -594,7 +599,6 @@
     </div>
     <div id="syncStatusLine"></div>
     <div class="trip-tabs" id="tripTabs"></div>
-    <div class="trip-info" id="tripInfoStrip"></div>
     <div id="cashCompactRow"></div>
     <div class="field" style="margin:10px 0 0;">
       <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
@@ -2300,13 +2304,18 @@ function daysUntil(dateTimeStr){
 function renderTripInfoStrip(){
   const trip = activeTrip();
   const wrap = document.getElementById('tripInfoStrip');
+  const row = document.querySelector('.brand-row');
+  row.classList.remove('has-flight');
   if (!trip){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
 
   function legLine(icon, label, flightNum, dateTime){
     const parts = [];
     if (flightNum) parts.push(`<b>${escapeHtml(flightNum)}</b>`);
-    if (dateTime) parts.push(fmtDateTime(dateTime));
-    return parts.length ? `${icon} ${label}: ${parts.join(" · ")}` : null;
+    if (dateTime){
+      const d = new Date(dateTime);
+      parts.push(isNaN(d) ? escapeHtml(dateTime) : `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+    }
+    return parts.length ? `<span title="${label}">${icon}</span> ${parts.join(" · ")}` : null;
   }
 
   const outLine = legLine("🛫", "הלוך", trip.flightOut, trip.departDateTime);
@@ -2336,6 +2345,7 @@ function renderTripInfoStrip(){
 
   wrap.style.display = "flex";
   wrap.innerHTML = rows.join("");
+  row.classList.add('has-flight');
 }
 
 function renderAll(){
