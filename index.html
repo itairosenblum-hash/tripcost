@@ -101,7 +101,7 @@
   .brand .mark{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--teal-dark);letter-spacing:.3px;}
   .brand .sub{font-size:14px;color:var(--ink-soft);}
   .icon-btn{
-    width:38px;height:38px;border-radius:var(--radius-pill);border:1px solid var(--border);
+    width:34px;height:34px;border-radius:var(--radius-pill);border:1px solid var(--border);
     background:var(--card);display:flex;align-items:center;justify-content:center;
     cursor:pointer;color:var(--ink);flex:none;
   }
@@ -180,7 +180,17 @@
   .donut-legend-dot{width:10px;height:10px;border-radius:50%;flex:none;}
   .donut-legend-label{flex:1;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .donut-legend-val{color:var(--ink-soft);font-weight:700;white-space:nowrap;}
-  .donut-mode-seg button, .donut-cur-seg button{font-size:13px;padding:7px 4px;}
+  .donut-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+  .donut-mode-seg{flex:none;padding:2px;gap:2px;}
+  .donut-mode-seg button{flex:none;font-size:12.5px;padding:5px 12px;border-radius:7px;}
+  .donut-cur-seg{display:flex;gap:6px;}
+  .cur-dot{
+    width:32px;height:32px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);background:var(--card);color:var(--ink-soft);
+    font-size:14px;font-weight:800;cursor:pointer;padding:0;line-height:1;
+  }
+  .cur-dot.active{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .cur-dot:active{transform:scale(.92);}
 
   /* ---- Ledger section: donut hero (scrolls away) + sticky balance bar ---- */
   #ledgerSection{margin-top:0;}
@@ -327,17 +337,17 @@
   .toolbar::-webkit-scrollbar{display:none;}
   .tool-btn{
     flex:none;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);
-    border-radius:var(--radius-pill);padding:9px 14px;font-size:14.5px;font-weight:700;color:var(--ink);cursor:pointer;
+    border-radius:var(--radius-pill);padding:6px 11px;font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;
   }
 
   /* ---- FAB ---- */
   .fab{
-    position:fixed;left:calc(20px + var(--safe-b, 0px));
-    bottom:calc(22px + var(--safe-b));
+    position:fixed;left:18px;
+    bottom:calc(18px + var(--safe-b));
     z-index:30;
   }
   .fab button{
-    width:60px;height:60px;border-radius:50%;
+    width:52px;height:52px;border-radius:50%;
     background:var(--teal);color:#fff;border:none;
     box-shadow:0 10px 26px rgba(30,74,71,.4);
     display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -407,24 +417,24 @@
   .cat-chip .em{font-size:19px;}
   .cat-chip.active{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
   .seg button{
-    flex:1;border:none;background:transparent;padding:9px 4px;border-radius:8px;font-size:15px;
+    flex:1;border:none;background:transparent;padding:7px 4px;border-radius:8px;font-size:14px;
     font-weight:700;color:var(--ink-soft);cursor:pointer;
   }
   .seg button.active{background:var(--teal);color:#fff;}
   .check-row{display:flex;gap:10px;}
   .check-pill{
     flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);
-    border-radius:var(--radius-sm);padding:11px;font-weight:700;font-size:15px;color:var(--ink-soft);cursor:pointer;
+    border-radius:var(--radius-sm);padding:8px;font-weight:700;font-size:14px;color:var(--ink-soft);cursor:pointer;
   }
   .check-pill.on{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
   .sheet-actions{display:flex;gap:10px;margin-top:18px;}
   .btn-primary{
     flex:1;background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
-    padding:14px;font-weight:800;font-size:16px;cursor:pointer;
+    padding:11px;font-weight:800;font-size:15px;cursor:pointer;
   }
   .btn-ghost{
     flex:none;background:transparent;color:var(--ink-soft);border:1px solid var(--border);border-radius:var(--radius-pill);
-    padding:14px 18px;font-weight:700;font-size:15.5px;cursor:pointer;
+    padding:11px 16px;font-weight:700;font-size:14.5px;cursor:pointer;
   }
   .btn-danger-outline{color:var(--danger);border-color:var(--danger-tint);background:var(--danger-tint);}
   .hint{font-size:13.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:14px;}
@@ -452,7 +462,6 @@
     padding:7px 16px;font-weight:800;font-size:14.5px;cursor:pointer;flex:none;
   }
   input[type=file]{display:none;}
-  #btnAddExpenseDesktop{display:none;}
   .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
   a{color:inherit;}
   :focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
@@ -492,16 +501,8 @@
 
     .toolbar{ justify-content:flex-end; }
 
-    /* The floating round FAB makes sense reachable by thumb on a phone; on a
-       wide screen it just floats oddly over content, so swap it for a normal
-       inline button next to the section header instead. */
-    .fab{ display:none; }
-    #btnAddExpenseDesktop{
-      display:flex; align-items:center; gap:8px; background:var(--teal); color:#fff;
-      border:none;border-radius:var(--radius-pill);padding:10px 18px;font-weight:800;
-      font-size:15.5px;cursor:pointer;box-shadow:0 6px 18px rgba(30,74,71,.3);
-    }
-    #btnAddExpenseDesktop:active{ transform:scale(.97); }
+    /* Same floating round "new expense" button as on the phone, bottom-left. */
+    .fab{ left:24px; bottom:24px; }
 
     /* Sheets read as centered dialogs on a website, not phone bottom-sheets. */
     .overlay{ align-items:center; padding:24px; }
@@ -621,10 +622,6 @@
               <option value="date_asc">תאריך: ישן→חדש</option>
               <option value="amount_desc">סכום: גבוה→נמוך</option>
             </select>
-            <button id="btnAddExpenseDesktop" aria-label="הוצאה חדשה">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-              הוצאה חדשה
-            </button>
           </div>
         </div>
         <div id="filterBar" style="display:none;margin-bottom:10px;"></div>
@@ -636,7 +633,7 @@
 
   <div class="fab">
     <button id="btnAddExpense" aria-label="הוצאה חדשה" title="הוצאה חדשה">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
     </button>
   </div>
 
@@ -1016,13 +1013,13 @@ function tripCurrencies(trip){
   }
   return ["שקל", ...CURRENCY_POOL.map(c=>c.name).filter(n => set.has(n))];
 }
-const CATEGORIES = ["טיסה","מלונות","ביטוח","תחבורה","מזון","בגדים","מתנות ומזכרות","אטרקציות","שונות"];
+const CATEGORIES = ["טיסות והשכרת רכב","מלונות","ביטוח","תחבורה","מזון","בגדים","מתנות ומזכרות","אטרקציות","שונות"];
 const CATEGORY_ICON = {
-  "טיסה":"✈️", "מלונות":"🏨", "ביטוח":"🛡️", "תחבורה":"🚕", "מזון":"🍽️",
+  "טיסות והשכרת רכב":"✈️", "מלונות":"🏨", "ביטוח":"🛡️", "תחבורה":"🚕", "מזון":"🍽️",
   "בגדים":"👕", "מתנות ומזכרות":"🎁", "אטרקציות":"🎡", "שונות":"🧾"
 };
 const CATEGORY_COLOR = {
-  "טיסה":"#2F6F6B", "מלונות":"#D9A441", "ביטוח":"#7A6FB0", "תחבורה":"#3D7A52",
+  "טיסות והשכרת רכב":"#2F6F6B", "מלונות":"#D9A441", "ביטוח":"#7A6FB0", "תחבורה":"#3D7A52",
   "מזון":"#B5533C", "בגדים":"#4C8FA3", "מתנות ומזכרות":"#C77DA0", "אטרקציות":"#C98A2E", "שונות":"#8A8578"
 };
 
@@ -1894,7 +1891,7 @@ function donutSlicePath(cx, cy, rOuter, rInner, startDeg, endDeg, color, cat){
 // Donut view mode: 'all' = every category; 'spend' = everything except flights & hotels
 // (the day-to-day spending on the ground). Remembered per device.
 const DONUT_MODE_KEY = "tripcost.donutMode";
-const DONUT_EXCLUDED_IN_SPEND = ["טיסה","מלונות"];
+const DONUT_EXCLUDED_IN_SPEND = ["טיסות והשכרת רכב","מלונות"];
 let donutMode = 'all';
 try { if (localStorage.getItem(DONUT_MODE_KEY) === 'spend') donutMode = 'spend'; } catch(e){}
 const DONUT_CUR_KEY = "tripcost.donutCurrency";
@@ -1914,9 +1911,9 @@ function renderCategoryChart(){
   const entries = cats.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
 
   const modeSeg = `
-      <div class="seg donut-mode-seg" style="margin-bottom:12px;">
+      <div class="seg donut-mode-seg">
         <button type="button" data-mode="all" class="${donutMode==='all'?'active':''}">הכל</button>
-        <button type="button" data-mode="spend" class="${donutMode==='spend'?'active':''}">בזבוזים (בלי טיסות ומלונות)</button>
+        <button type="button" data-mode="spend" title="בלי טיסות, השכרת רכב ומלונות" class="${donutMode==='spend'?'active':''}">בזבוזים</button>
       </div>`;
   const bindModeSeg = () => {
     section.querySelectorAll('.donut-mode-seg button').forEach(b => b.addEventListener('click', () => {
@@ -1940,8 +1937,8 @@ function renderCategoryChart(){
   const curSym = CUR_SYMBOL[cur] || "";
   const money = (ils) => curSym + fmtMoney(ils / rateFor(cur));
   const curSeg = curOptions.length > 1 ? `
-      <div class="seg donut-cur-seg" style="margin-bottom:12px;">
-        ${curOptions.map(c => `<button type="button" data-cur="${escapeHtml(c)}" class="${c===cur?'active':''}">${escapeHtml(CUR_SYMBOL[c]||'')} ${escapeHtml(c)}</button>`).join("")}
+      <div class="donut-cur-seg">
+        ${curOptions.map(c => `<button type="button" data-cur="${escapeHtml(c)}" class="cur-dot ${c===cur?'active':''}" title="${escapeHtml(c)}" aria-label="${escapeHtml(c)}">${escapeHtml(CUR_SYMBOL[c]||'')}</button>`).join("")}
       </div>` : "";
 
   if (total <= 0 || entries.length === 0){
@@ -1949,9 +1946,8 @@ function renderCategoryChart(){
       section.innerHTML = `
         <div class="ledger-donut-card">
           <div class="ledger-donut-title">פילוח הוצאות</div>
-          ${modeSeg}
-          ${curSeg}
-          <div style="text-align:center;color:var(--ink-soft);font-size:14px;padding:12px 0;">אין עדיין הוצאות מלבד טיסות ומלונות</div>
+          <div class="donut-controls">${modeSeg}${curSeg}</div>
+          <div style="text-align:center;color:var(--ink-soft);font-size:14px;padding:12px 0;">אין עדיין הוצאות מלבד טיסות, השכרת רכב ומלונות</div>
         </div>`;
       bindModeSeg();
     } else {
@@ -1981,8 +1977,7 @@ function renderCategoryChart(){
   section.innerHTML = `
     <div class="ledger-donut-card">
       <div class="ledger-donut-title">פילוח הוצאות · לחצו לסינון</div>
-      ${modeSeg}
-      ${curSeg}
+      <div class="donut-controls">${modeSeg}${curSeg}</div>
       <div class="donut-wrap">
         <svg viewBox="0 0 200 200" width="170" height="170" style="cursor:pointer;">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
         <div class="donut-center">
@@ -2525,7 +2520,7 @@ document.getElementById('btnMenu').addEventListener('click', openTripsList);
 
 /* ========================= Expense form ========================= */
 let editingExpenseId = null;
-let expenseFilter = { type: 'all' }; // {type:'all'} | {type:'pending'} | {type:'category', value:'טיסה'}
+let expenseFilter = { type: 'all' }; // {type:'all'} | {type:'pending'} | {type:'category', value:'טיסות והשכרת רכב'}
 let expandedExpenseId = null; // tap-to-expand: which row (if any) currently shows its full detail
 let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
 let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
@@ -2749,8 +2744,12 @@ function setCurrencyGridSelection(selected){
 function getCurrencyGridSelection(){
   return [...document.getElementById('tfCurrencyGrid').querySelectorAll('.cur-chip.active')].map(b => b.dataset.val);
 }
+// Older expenses were saved under the previous category names — map them forward.
+const LEGACY_CATEGORY = { "טיסה": "טיסות והשכרת רכב" };
 function expCategory(exp){
-  return (exp && CATEGORIES.includes(exp.category)) ? exp.category : "שונות";
+  if (!exp) return "שונות";
+  const c = LEGACY_CATEGORY[exp.category] || exp.category;
+  return CATEGORIES.includes(c) ? c : "שונות";
 }
 
 function updateDriveWarning(){
@@ -2811,7 +2810,7 @@ function openEditExpense(id){
   document.getElementById('efItem').value = exp.item || "";
   document.getElementById('efDate').value = exp.date || todayISO();
   setPaymentUI(exp.paymentMethod || "אשראי");
-  setCategoryUI(exp.category);
+  setCategoryUI(expCategory(exp));
   document.getElementById('efAmount').value = exp.amount || "";
   populateCurrencySelect(trip, exp.currency || "שקל");
   document.getElementById('efRateField').style.display = (exp.currency && exp.currency !== "שקל") ? "block" : "none";
@@ -2842,7 +2841,6 @@ function openEditExpense(id){
 }
 
 document.getElementById('btnAddExpense').addEventListener('click', openNewExpense);
-document.getElementById('btnAddExpenseDesktop').addEventListener('click', openNewExpense);
 document.getElementById('btnCancelExpense').addEventListener('click', () => closeOverlay('overlayExpense'));
 
 document.getElementById('btnSaveExpense').addEventListener('click', async () => {
