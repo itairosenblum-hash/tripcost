@@ -180,7 +180,7 @@
   .donut-legend-dot{width:10px;height:10px;border-radius:50%;flex:none;}
   .donut-legend-label{flex:1;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .donut-legend-val{color:var(--ink-soft);font-weight:700;white-space:nowrap;}
-  .donut-mode-seg button{font-size:13px;padding:7px 4px;}
+  .donut-mode-seg button, .donut-cur-seg button{font-size:13px;padding:7px 4px;}
 
   /* ---- Ledger section: donut hero (scrolls away) + sticky balance bar ---- */
   #ledgerSection{margin-top:0;}
@@ -1897,6 +1897,9 @@ const DONUT_MODE_KEY = "tripcost.donutMode";
 const DONUT_EXCLUDED_IN_SPEND = ["טיסה","מלונות"];
 let donutMode = 'all';
 try { if (localStorage.getItem(DONUT_MODE_KEY) === 'spend') donutMode = 'spend'; } catch(e){}
+const DONUT_CUR_KEY = "tripcost.donutCurrency";
+let donutCurrency = "שקל";
+try { donutCurrency = localStorage.getItem(DONUT_CUR_KEY) || "שקל"; } catch(e){}
 
 function renderCategoryChart(){
   const trip = activeTrip();
@@ -1922,7 +1925,24 @@ function renderCategoryChart(){
       try { localStorage.setItem(DONUT_MODE_KEY, donutMode); } catch(e){}
       renderCategoryChart();
     }));
+    section.querySelectorAll('.donut-cur-seg button').forEach(b => b.addEventListener('click', () => {
+      if (donutCurrency === b.dataset.cur) return;
+      donutCurrency = b.dataset.cur;
+      try { localStorage.setItem(DONUT_CUR_KEY, donutCurrency); } catch(e){}
+      renderCategoryChart();
+    }));
   };
+
+  // Display currency: שקל + trip currencies that have a known rate (without a rate
+  // the conversion would silently be 1:1, so those aren't offered).
+  const curOptions = tripCurrencies(trip).filter(c => c === "שקל" || (state.rates[c] || 0) > 0);
+  const cur = curOptions.includes(donutCurrency) ? donutCurrency : "שקל";
+  const curSym = CUR_SYMBOL[cur] || "";
+  const money = (ils) => curSym + fmtMoney(ils / rateFor(cur));
+  const curSeg = curOptions.length > 1 ? `
+      <div class="seg donut-cur-seg" style="margin-bottom:12px;">
+        ${curOptions.map(c => `<button type="button" data-cur="${escapeHtml(c)}" class="${c===cur?'active':''}">${escapeHtml(CUR_SYMBOL[c]||'')} ${escapeHtml(c)}</button>`).join("")}
+      </div>` : "";
 
   if (total <= 0 || entries.length === 0){
     if (donutMode === 'spend'){
@@ -1930,6 +1950,7 @@ function renderCategoryChart(){
         <div class="ledger-donut-card">
           <div class="ledger-donut-title">פילוח הוצאות</div>
           ${modeSeg}
+          ${curSeg}
           <div style="text-align:center;color:var(--ink-soft);font-size:14px;padding:12px 0;">אין עדיין הוצאות מלבד טיסות ומלונות</div>
         </div>`;
       bindModeSeg();
@@ -1953,7 +1974,7 @@ function renderCategoryChart(){
     return `<div class="donut-legend-row" data-cat="${escapeHtml(cat)}" style="cursor:pointer;">
       <span class="donut-legend-dot" style="background:${CATEGORY_COLOR[cat]};"></span>
       <span class="donut-legend-label">${CATEGORY_ICON[cat]} ${escapeHtml(cat)}</span>
-      <span class="donut-legend-val tnum">₪${fmtMoney(val)} · ${pct}%</span>
+      <span class="donut-legend-val tnum">${money(val)} · ${pct}%</span>
     </div>`;
   }).join("");
 
@@ -1961,10 +1982,11 @@ function renderCategoryChart(){
     <div class="ledger-donut-card">
       <div class="ledger-donut-title">פילוח הוצאות · לחצו לסינון</div>
       ${modeSeg}
+      ${curSeg}
       <div class="donut-wrap">
         <svg viewBox="0 0 200 200" width="170" height="170" style="cursor:pointer;">${paths}<circle cx="100" cy="100" r="${rInner-2}" fill="var(--card)" /></svg>
         <div class="donut-center">
-          <div class="donut-center-total tnum">₪${fmtMoney(total)}</div>
+          <div class="donut-center-total tnum">${money(total)}</div>
           <div class="donut-center-label">${donutMode==='spend' ? 'בזבוזים' : 'סה״כ'}</div>
         </div>
       </div>
