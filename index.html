@@ -1702,17 +1702,54 @@ async function pushToCloudNow(){
 
 function signInWithGoogle(){
   if (!fbAuth){ toast("יש לשמור קודם את הגדרות Firebase"); return; }
+  // Primary path: Google Identity Services popup → access token → Firebase signInWithCredential.
+  // Firebase's own signInWithRedirect silently fails on phones: the site (github.io) and Firebase's
+  // auth domain (firebaseapp.com) are different sites, and Safari / modern Chrome block the
+  // cross-site storage the redirect result travels through — you approve at Google, land back
+  // on the page, and nothing happened. GIS returns the token straight to this page instead.
+  const clientId = (driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "").trim();
+  if (clientId && window.google && google.accounts && google.accounts.oauth2){
+    try{
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "openid email profile",
+        callback: (resp) => {
+          if (!resp || !resp.access_token){ toast("ההתחברות לא הושלמה — נסו שוב"); return; }
+          const cred = firebase.auth.GoogleAuthProvider.credential(null, resp.access_token);
+          fbAuth.signInWithCredential(cred)
+            .then(() => toast("ההתחברות הושלמה ✓"))
+            .catch(e => {
+              console.error("tripcost: signInWithCredential failed", e);
+              toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
+            });
+        },
+        error_callback: (err) => {
+          console.error("tripcost: GIS sign-in error", err);
+          if (err && err.type === "popup_failed_to_open") signInWithFirebaseFallback();
+          else if (err && err.type !== "popup_closed") toast("ההתחברות נכשלה: " + (err.type || "שגיאה לא ידועה"));
+        }
+      });
+      client.requestAccessToken({ prompt: "select_account" });
+      return;
+    }catch(e){
+      console.error("tripcost: GIS sign-in init failed", e);
+    }
+  }
+  signInWithFirebaseFallback();
+}
+
+// Used only if the GIS library didn't load or its popup couldn't open.
+function signInWithFirebaseFallback(){
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
-    // No Drive scope requested here — Drive access is handled entirely separately via
-    // Google Identity Services (see requestDriveReauth), decoupled from this sign-in.
-    // Popups are unreliable on mobile browsers (Safari/Chrome on phones block or kill
-    // them far more aggressively than desktop) — a full-page redirect is what Google
-    // itself recommends for mobile sign-in, and it works everywhere popups do too.
-    toast("מעביר להתחברות עם Google...");
-    Promise.resolve(fbAuth.signInWithRedirect(provider)).catch(e => {
+    Promise.resolve(fbAuth.signInWithPopup(provider)).catch(e => {
       console.error(e);
-      toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-environment')){
+        toast("מעביר להתחברות עם Google...");
+        fbAuth.signInWithRedirect(provider);
+      } else if (!(e && e.code === 'auth/popup-closed-by-user')){
+        toast("ההתחברות נכשלה: " + (e.message || e.code || ""));
+      }
     });
   }catch(e){
     console.error(e);
