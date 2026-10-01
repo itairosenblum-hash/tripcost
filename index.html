@@ -727,39 +727,61 @@
 
     <div class="divider"></div>
 
-    <div class="grid2">
-      <div class="field">
-        <label>מספר טיסה — הלוך</label>
-        <input type="text" id="tfFlightOut" placeholder="לדוגמה: LY321">
-      </div>
-      <div class="field">
-        <label>מספר טיסה — חזור</label>
-        <input type="text" id="tfFlightReturn" placeholder="לדוגמה: LY322">
-      </div>
-    </div>
+    <div class="section-title">🛫 טיסת הלוך</div>
     <div class="field">
-      <label>מספר הזמנה</label>
-      <input type="text" id="tfBooking" placeholder="לדוגמה: ABC123">
+      <label>מספר טיסה</label>
+      <input type="text" id="tfFlightOut" placeholder="לדוגמה: LY321">
     </div>
     <div class="grid2">
       <div class="field">
-        <label>יציאה — תאריך</label>
+        <label>המראה — תאריך</label>
         <input type="date" id="tfDepartDate">
       </div>
       <div class="field">
-        <label>יציאה — שעה (24H)</label>
+        <label>המראה — שעה (24H)</label>
         <input type="text" id="tfDepartTime" inputmode="numeric" placeholder="14:30" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
       </div>
     </div>
     <div class="grid2">
       <div class="field">
-        <label>חזרה — תאריך</label>
+        <label>נחיתה — תאריך</label>
+        <input type="date" id="tfDepartLandDate">
+      </div>
+      <div class="field">
+        <label>נחיתה — שעה (24H)</label>
+        <input type="text" id="tfDepartLandTime" inputmode="numeric" placeholder="18:45" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
+      </div>
+    </div>
+
+    <div class="section-title">🛬 טיסת חזור</div>
+    <div class="field">
+      <label>מספר טיסה</label>
+      <input type="text" id="tfFlightReturn" placeholder="לדוגמה: LY322">
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>המראה — תאריך</label>
         <input type="date" id="tfReturnDate">
       </div>
       <div class="field">
-        <label>חזרה — שעה (24H)</label>
+        <label>המראה — שעה (24H)</label>
         <input type="text" id="tfReturnTime" inputmode="numeric" placeholder="22:30" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
       </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>נחיתה — תאריך</label>
+        <input type="date" id="tfReturnLandDate">
+      </div>
+      <div class="field">
+        <label>נחיתה — שעה (24H)</label>
+        <input type="text" id="tfReturnLandTime" inputmode="numeric" placeholder="03:15" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>מספר הזמנה</label>
+      <input type="text" id="tfBooking" placeholder="לדוגמה: ABC123">
     </div>
 
     <div class="divider"></div>
@@ -1193,7 +1215,9 @@ function defaultState(){
     flightReturn: "",
     bookingRef: "",
     departDateTime: "",
+    departLandDateTime: "",
     returnDateTime: "",
+    returnLandDateTime: "",
     expenses: []
   };
   return {
@@ -1215,6 +1239,8 @@ function migrateTrip(t){
   if (typeof t.bookingRef !== "string") t.bookingRef = "";
   if (typeof t.departDateTime !== "string") t.departDateTime = "";
   if (typeof t.returnDateTime !== "string") t.returnDateTime = "";
+  if (typeof t.departLandDateTime !== "string") t.departLandDateTime = "";
+  if (typeof t.returnLandDateTime !== "string") t.returnLandDateTime = "";
   return t;
 }
 
@@ -2053,8 +2079,11 @@ function wireTimeInput(id){
 }
 wireTimeInput('tfDepartTime');
 wireTimeInput('tfReturnTime');
+wireTimeInput('tfDepartLandTime');
+wireTimeInput('tfReturnLandTime');
 
-/* departDateTime/returnDateTime are stored as "YYYY-MM-DDTHH:MM" (same shape a
+/* departDateTime/returnDateTime (takeoff) and departLandDateTime/returnLandDateTime
+   (landing) are stored as "YYYY-MM-DDTHH:MM" (same shape a
    datetime-local input produced before), just assembled from two plain fields now. */
 function splitDateTime(dt){
   if (!dt) return { date: "", time: "" };
@@ -2713,18 +2742,28 @@ function renderTripInfoStrip(){
   row.classList.remove('has-flight');
   if (!trip){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
 
-  function legLine(icon, label, flightNum, dateTime){
+  // "05/10 14:30 → 18:45" — the landing date is shown only when it differs from
+  // the takeoff date (overnight flights); landing alone shows with its date.
+  function legLine(icon, label, flightNum, takeoff, landing){
     const parts = [];
     if (flightNum) parts.push(`<b><bdi dir="ltr">${escapeHtml(flightNum)}</bdi></b>`);
-    if (dateTime){
-      const d = new Date(dateTime);
-      parts.push(`<bdi dir="ltr">${isNaN(d) ? escapeHtml(dateTime) : `${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`}</bdi>`);
+    const t = takeoff ? new Date(takeoff) : null;
+    const l = landing ? new Date(landing) : null;
+    const dm = d => `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}`;
+    const hm = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    let times = "";
+    if (t && !isNaN(t)) times = `${dm(t)} ${hm(t)}`;
+    else if (takeoff) times = escapeHtml(takeoff);
+    if (l && !isNaN(l)){
+      const sameDay = t && !isNaN(t) && dm(t) === dm(l);
+      times += (times ? " → " : "נחיתה ") + (sameDay ? hm(l) : `${dm(l)} ${hm(l)}`);
     }
+    if (times) parts.push(`<bdi dir="ltr">${times}</bdi>`);
     return parts.length ? `<span title="${label}">${icon}</span> ${parts.join(" · ")}` : null;
   }
 
-  const outLine = legLine("🛫", "הלוך", trip.flightOut, trip.departDateTime);
-  const returnLine = legLine("🛬", "חזור", trip.flightReturn, trip.returnDateTime);
+  const outLine = legLine("🛫", "הלוך", trip.flightOut, trip.departDateTime, trip.departLandDateTime);
+  const returnLine = legLine("🛬", "חזור", trip.flightReturn, trip.returnDateTime, trip.returnLandDateTime);
   if (!outLine && !returnLine && !trip.bookingRef){ wrap.style.display = "none"; wrap.innerHTML = ""; return; }
 
   const rows = [];
@@ -2810,6 +2849,7 @@ function openNewTripForm(){
   document.getElementById('tfDepartTime').value = "";
   document.getElementById('tfReturnDate').value = "";
   document.getElementById('tfReturnTime').value = "";
+  ['tfDepartLandDate','tfDepartLandTime','tfReturnLandDate','tfReturnLandTime'].forEach(id => document.getElementById(id).value = "");
   setCurrencyGridSelection(["דולר","יורו"]);
   document.getElementById('tfBudget').value = "";
   document.getElementById('tfFinished').checked = false;
@@ -2837,6 +2877,12 @@ function openEditTripForm(id){
   document.getElementById('tfDepartTime').value = dep.time;
   document.getElementById('tfReturnDate').value = ret.date;
   document.getElementById('tfReturnTime').value = ret.time;
+  const depLand = splitDateTime(t.departLandDateTime);
+  const retLand = splitDateTime(t.returnLandDateTime);
+  document.getElementById('tfDepartLandDate').value = depLand.date;
+  document.getElementById('tfDepartLandTime').value = depLand.time;
+  document.getElementById('tfReturnLandDate').value = retLand.date;
+  document.getElementById('tfReturnLandTime').value = retLand.time;
   setCurrencyGridSelection(t.enabledCurrencies);
   document.getElementById('tfBudget').value = t.budget || "";
   document.getElementById('tfFinished').checked = !!t.finished;
@@ -2857,6 +2903,8 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const bookingRef = document.getElementById('tfBooking').value.trim();
   const departDateTime = joinDateTime(document.getElementById('tfDepartDate').value, document.getElementById('tfDepartTime').value);
   const returnDateTime = joinDateTime(document.getElementById('tfReturnDate').value, document.getElementById('tfReturnTime').value);
+  const departLandDateTime = joinDateTime(document.getElementById('tfDepartLandDate').value, document.getElementById('tfDepartLandTime').value);
+  const returnLandDateTime = joinDateTime(document.getElementById('tfReturnLandDate').value, document.getElementById('tfReturnLandTime').value);
   const finished = document.getElementById('tfFinished').checked;
   const enabledCurrencies = getCurrencyGridSelection();
   const budget = parseFloat(document.getElementById('tfBudget').value) || 0;
@@ -2868,6 +2916,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       t.name = name; t.startDate = start; t.endDate = end;
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
+      t.departLandDateTime = departLandDateTime; t.returnLandDateTime = returnLandDateTime;
       t.finished = finished; t.enabledCurrencies = enabledCurrencies; t.budget = budget;
     }
   } else {
@@ -2875,7 +2924,8 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       id: uid(), name, startDate: start, endDate: end,
       cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 },
       enabledCurrencies, budget,
-      flightOut, flightReturn, bookingRef, departDateTime, returnDateTime, finished,
+      flightOut, flightReturn, bookingRef, departDateTime, returnDateTime,
+      departLandDateTime, returnLandDateTime, finished,
       expenses: []
     };
     state.trips.push(t);
@@ -2901,6 +2951,7 @@ document.getElementById('btnDeleteTrip').addEventListener('click', () => {
       id: uid(), name: "טיול חדש", startDate: "", endDate: "",
       cashInitial: { "שקל": 0, "דולר": 0, "יורו": 0 }, finished: false,
       flightOut: "", flightReturn: "", bookingRef: "", departDateTime: "", returnDateTime: "",
+      departLandDateTime: "", returnLandDateTime: "",
       expenses: []
     };
     state.trips.push(fresh);
