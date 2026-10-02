@@ -452,6 +452,8 @@
     border-radius:var(--radius-sm);padding:8px;font-weight:700;font-size:14px;color:var(--ink-soft);cursor:pointer;
   }
   .check-pill.on{background:var(--teal-tint);border-color:var(--teal);color:var(--teal-dark);}
+  .exp-row.excluded .exp-row-amt{color:var(--ink-soft);text-decoration:line-through;font-weight:600;}
+  .exp-row.excluded .exp-row-name{color:var(--ink-soft);}
   .sheet-actions{display:flex;gap:10px;margin-top:18px;}
   .btn-primary{
     flex:1;background:var(--teal);color:#fff;border:none;border-radius:var(--radius-pill);
@@ -901,6 +903,14 @@
         <div class="check-pill" id="efBookedPill">✓ הוזמן</div>
         <div class="check-pill" id="efPaidPill">✓ שולם</div>
       </div>
+    </div>
+
+    <div class="field">
+      <label>תזרים</label>
+      <div class="check-row">
+        <div class="check-pill on" id="efInTotalPill">✓ נכלל בתזרים הכולל</div>
+      </div>
+      <div class="hint" id="efInTotalHint" style="display:none;margin-top:6px;">ההוצאה תופיע ברשימה אך לא תיספר בסה״כ, בתקציב ובפילוח</div>
     </div>
 
     <div class="field" id="efPaidDateField" style="display:none;">
@@ -2157,6 +2167,16 @@ function rateFor(currency){
   return (state.rates[currency]) || 1;
 }
 
+// Expenses can be kept out of the overall cashflow (totals, budget, donut, export total)
+// while still being listed. Stored as an opt-out flag so older expenses stay included.
+function inTotal(exp){ return !exp.excludeFromTotal; }
+
+function setInTotalUI(on){
+  document.getElementById('efInTotalPill').classList.toggle('on', on);
+  document.getElementById('efInTotalPill').textContent = on ? "✓ נכלל בתזרים הכולל" : "✗ לא נכלל בתזרים הכולל";
+  document.getElementById('efInTotalHint').style.display = on ? "none" : "block";
+}
+
 function expenseTotalILS(exp){
   const rate = (exp.currency === "שקל") ? 1 : (exp.rate || 1);
   return (exp.amount || 0) * rate;
@@ -2195,8 +2215,10 @@ function renderBalanceBar(){
   const el = document.getElementById('ledgerBalanceBar');
   if (!trip){ el.innerHTML = ""; return; }
 
-  const paidExpenses = trip.expenses.filter(e => e.paid);
-  const pendingExpenses = trip.expenses.filter(e => !e.paid);
+  const counted = trip.expenses.filter(inTotal);
+  const excludedCount = trip.expenses.length - counted.length;
+  const paidExpenses = counted.filter(e => e.paid);
+  const pendingExpenses = counted.filter(e => !e.paid);
 
   const totalPaid = paidExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
   const totalPending = pendingExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
@@ -2215,12 +2237,13 @@ function renderBalanceBar(){
     const remaining = trip.budget - totalPaid;
     mainLabel = "יתרה מהתקציב";
     mainValue = `₪${fmtMoney(remaining)}`;
-    metaHtml = `<div>${trip.expenses.length} הוצאות</div><div style="margin-top:2px;">מתוך ₪${fmtMoney(trip.budget)}</div>`;
+    metaHtml = `<div>${counted.length} הוצאות</div><div style="margin-top:2px;">מתוך ₪${fmtMoney(trip.budget)}</div>`;
   } else {
     mainLabel = "שולם עד כה";
     mainValue = `₪${fmtMoney(totalPaid)}`;
-    metaHtml = `<div>${trip.expenses.length} הוצאות</div>`;
+    metaHtml = `<div>${counted.length} הוצאות</div>`;
   }
+  if (excludedCount > 0) metaHtml += `<div style="margin-top:2px;">+${excludedCount} מחוץ לתזרים</div>`;
 
   el.innerHTML = `
     <div class="ledger-balance-bar">
@@ -2338,11 +2361,11 @@ try { donutCurrency = localStorage.getItem(DONUT_CUR_KEY) || "שקל"; } catch(e
 function renderCategoryChart(){
   const trip = activeTrip();
   const section = document.getElementById('categoryDonut');
-  if (!trip || trip.expenses.length === 0){ section.innerHTML = ""; return; }
+  if (!trip || trip.expenses.filter(inTotal).length === 0){ section.innerHTML = ""; return; }
 
   const byCat = {};
   CATEGORIES.forEach(c => byCat[c] = 0);
-  trip.expenses.forEach(e => { byCat[expCategory(e)] += expenseTotalILS(e); });
+  trip.expenses.filter(inTotal).forEach(e => { byCat[expCategory(e)] += expenseTotalILS(e); });
   const cats = donutMode === 'spend' ? CATEGORIES.filter(c => !DONUT_EXCLUDED_IN_SPEND.includes(c)) : CATEGORIES;
   const total = cats.reduce((s,c) => s + byCat[c], 0);
   const entries = cats.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
@@ -2674,13 +2697,13 @@ function renderExpenses(){
     const expanded = expandedExpenseId === exp.id;
     const attCount = (exp.attachments || []).length;
     return `
-    <div class="exp-row" data-id="${exp.id}">
+    <div class="exp-row${inTotal(exp) ? '' : ' excluded'}" data-id="${exp.id}">
       <button type="button" class="exp-row-head" data-action="toggle" data-id="${exp.id}">
         <div class="exp-row-main">
           <div class="exp-row-bar" style="background:${CATEGORY_COLOR[cat]};"></div>
           <div style="min-width:0;">
             <div style="display:flex;align-items:center;min-width:0;"><div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>${attCount ? `<span class="exp-row-clip" title="${attCount} קבצים מצורפים" aria-label="${attCount} קבצים מצורפים">📎${attCount > 1 ? attCount : ""}</span>` : ""}</div>
-            <div class="exp-row-sub">${escapeHtml(cat)} · ${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}</div>
+            <div class="exp-row-sub">${escapeHtml(cat)} · ${fmtDate(exp.date)}${exp.split && exp.split > 1 ? ` · חלוקה ל-${exp.split}` : ""}${inTotal(exp) ? "" : " · מחוץ לתזרים"}</div>
           </div>
         </div>
         <div style="text-align:left;">
@@ -2694,6 +2717,7 @@ function renderExpenses(){
           <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
           <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
           <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
+          ${inTotal(exp) ? "" : `<span class="tag">🚫 לא נכלל בתזרים</span>`}
         </div>
         ${exp.notes ? `<div class="exp-row-note">📝 ${escapeHtml(exp.notes)}</div>` : ""}
         ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
@@ -3069,6 +3093,7 @@ document.getElementById('efAmount').addEventListener('input', updateTotalHint);
 document.getElementById('efRate').addEventListener('input', updateTotalHint);
 
 document.getElementById('efBookedPill').addEventListener('click', function(){ this.classList.toggle('on'); });
+document.getElementById('efInTotalPill').addEventListener('click', function(){ setInTotalUI(!this.classList.contains('on')); });
 
 /* -- paid-date + historical-rate flow -- */
 let pendingPaidDate = "";
@@ -3272,6 +3297,7 @@ function openNewExpense(){
   document.getElementById('efNotes').value = "";
   document.getElementById('efBookedPill').classList.remove('on');
   document.getElementById('efPaidPill').classList.remove('on');
+  setInTotalUI(true);
   document.getElementById('efPaidDateField').style.display = "none";
   pendingPaidDate = "";
   document.getElementById('btnDeleteExpense').style.display = "none";
@@ -3303,6 +3329,7 @@ function openEditExpense(id){
   document.getElementById('efNotes').value = exp.notes || "";
   document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
   document.getElementById('efPaidPill').classList.toggle('on', !!exp.paid);
+  setInTotalUI(inTotal(exp));
   updateDriveWarning();
   pendingPaidDate = exp.paidDate || "";
   const paidDateField = document.getElementById('efPaidDateField');
@@ -3371,6 +3398,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     booked: document.getElementById('efBookedPill').classList.contains('on'),
     paid: document.getElementById('efPaidPill').classList.contains('on'),
     paidDate: document.getElementById('efPaidPill').classList.contains('on') ? (pendingPaidDate || todayISO()) : null,
+    excludeFromTotal: !document.getElementById('efInTotalPill').classList.contains('on'),
     notes: document.getElementById('efNotes').value.trim(),
     attachments: currentAttachments.map(a => ({id:a.id, name:a.name, type:a.type, size:a.size, driveId:a.driveId||null, driveUrl:a.driveUrl||null}))
   };
@@ -3443,16 +3471,16 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   // trip you happen to have selected up top.
   const trip = state.trips.find(t => t.id === editingTripId) || activeTrip();
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
-  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","הוזמן","שולם","הערות","קבצים מצורפים"];
+  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","הוזמן","שולם","נכלל בתזרים","הערות","קבצים מצורפים"];
   const data = [header, ...trip.expenses.map(e => [
     e.item, e.date, e.split, e.paymentMethod, e.amount, e.currency, e.rate,
-    Math.round(expenseTotalILS(e)*100)/100, e.booked ? "V" : "", e.paid ? "V" : "", e.notes,
+    Math.round(expenseTotalILS(e)*100)/100, e.booked ? "V" : "", e.paid ? "V" : "", inTotal(e) ? "V" : "", e.notes,
     (e.attachments||[]).map(a=>a.name).join(", ")
   ])];
   data.push([]);
-  data.push(["", "", "", "", "", "", "סה\"כ", Math.round(trip.expenses.reduce((s,e)=>s+expenseTotalILS(e),0)*100)/100]);
+  data.push(["", "", "", "", "", "", "סה\"כ", Math.round(trip.expenses.filter(inTotal).reduce((s,e)=>s+expenseTotalILS(e),0)*100)/100]);
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:22},{wch:12},{wch:8},{wch:14},{wch:10},{wch:8},{wch:10},{wch:14},{wch:8},{wch:8},{wch:26},{wch:26}];
+  ws['!cols'] = [{wch:22},{wch:12},{wch:8},{wch:14},{wch:10},{wch:8},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:26},{wch:26}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
   XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
