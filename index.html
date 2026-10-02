@@ -898,19 +898,18 @@
     <div class="hint" id="efTotalHint">סה״כ עלות: —</div>
 
     <div class="field">
-      <label>סטטוס</label>
-      <div class="check-row">
-        <div class="check-pill" id="efBookedPill">✓ הוזמן</div>
-        <div class="check-pill" id="efPaidPill">✓ שולם</div>
-      </div>
-    </div>
-
-    <div class="field">
       <label>תזרים</label>
       <div class="check-row">
         <div class="check-pill on" id="efInTotalPill">✓ נכלל בתזרים הכולל</div>
       </div>
       <div class="hint" id="efInTotalHint" style="display:none;margin-top:6px;">ההוצאה תופיע ברשימה אך לא תיספר בסה״כ, בתקציב ובפילוח</div>
+    </div>
+
+    <div class="field">
+      <label>סטטוס</label>
+      <div class="check-row">
+        <div class="check-pill" id="efPaidPill">✓ שולם</div>
+      </div>
     </div>
 
     <div class="field" id="efPaidDateField" style="display:none;">
@@ -2715,8 +2714,7 @@ function renderExpenses(){
       <div class="exp-row-detail">
         <div class="exp-row-tags">
           <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
-          <span class="tag ${exp.booked ? 'on' : 'off'}">${exp.booked ? '✓ הוזמן' : '✗ לא הוזמן'}</span>
-          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : '✗ טרם שולם'}</span>
+          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : 'הוזמן · טרם שולם'}</span>
           ${inTotal(exp) ? "" : `<span class="tag">🚫 לא נכלל בתזרים</span>`}
         </div>
         ${exp.notes ? `<div class="exp-row-note">📝 ${escapeHtml(exp.notes)}</div>` : ""}
@@ -3092,7 +3090,6 @@ document.getElementById('efCurrency').addEventListener('change', updateRateField
 document.getElementById('efAmount').addEventListener('input', updateTotalHint);
 document.getElementById('efRate').addEventListener('input', updateTotalHint);
 
-document.getElementById('efBookedPill').addEventListener('click', function(){ this.classList.toggle('on'); });
 document.getElementById('efInTotalPill').addEventListener('click', function(){ setInTotalUI(!this.classList.contains('on')); });
 
 /* -- paid-date + historical-rate flow -- */
@@ -3295,7 +3292,6 @@ function openNewExpense(){
   document.getElementById('efAmount').value = "";
   populateCurrencySelect(trip, "שקל");
   document.getElementById('efNotes').value = "";
-  document.getElementById('efBookedPill').classList.remove('on');
   document.getElementById('efPaidPill').classList.remove('on');
   setInTotalUI(true);
   document.getElementById('efPaidDateField').style.display = "none";
@@ -3327,7 +3323,6 @@ function openEditExpense(id){
   document.getElementById('efRateDateHint').style.display = "none";
   document.getElementById('efRate').value = exp.rate || rateFor(exp.currency);
   document.getElementById('efNotes').value = exp.notes || "";
-  document.getElementById('efBookedPill').classList.toggle('on', !!exp.booked);
   document.getElementById('efPaidPill').classList.toggle('on', !!exp.paid);
   setInTotalUI(inTotal(exp));
   updateDriveWarning();
@@ -3395,7 +3390,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     amount: parseFloat(document.getElementById('efAmount').value) || 0,
     currency: currency,
     rate: currency === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1),
-    booked: document.getElementById('efBookedPill').classList.contains('on'),
+    booked: true,
     paid: document.getElementById('efPaidPill').classList.contains('on'),
     paidDate: document.getElementById('efPaidPill').classList.contains('on') ? (pendingPaidDate || todayISO()) : null,
     excludeFromTotal: !document.getElementById('efInTotalPill').classList.contains('on'),
@@ -3471,16 +3466,16 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   // trip you happen to have selected up top.
   const trip = state.trips.find(t => t.id === editingTripId) || activeTrip();
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
-  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","הוזמן","שולם","נכלל בתזרים","הערות","קבצים מצורפים"];
+  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים"];
   const data = [header, ...trip.expenses.map(e => [
     e.item, e.date, e.split, e.paymentMethod, e.amount, e.currency, e.rate,
-    Math.round(expenseTotalILS(e)*100)/100, e.booked ? "V" : "", e.paid ? "V" : "", inTotal(e) ? "V" : "", e.notes,
+    Math.round(expenseTotalILS(e)*100)/100, e.paid ? "V" : "", inTotal(e) ? "V" : "", e.notes,
     (e.attachments||[]).map(a=>a.name).join(", ")
   ])];
   data.push([]);
   data.push(["", "", "", "", "", "", "סה\"כ", Math.round(trip.expenses.filter(inTotal).reduce((s,e)=>s+expenseTotalILS(e),0)*100)/100]);
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:22},{wch:12},{wch:8},{wch:14},{wch:10},{wch:8},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:26},{wch:26}];
+  ws['!cols'] = [{wch:22},{wch:12},{wch:8},{wch:14},{wch:10},{wch:8},{wch:10},{wch:14},{wch:8},{wch:12},{wch:26},{wch:26}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
   XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
