@@ -221,6 +221,30 @@
   :root[data-theme="dark"] .ledger-balance-meta .pending-btn{color:var(--amber);}
   .ledger-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 
+  /* ---- Finished-trip summary card ---- */
+  .fin-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);
+    padding:16px;margin-bottom:14px;box-shadow:var(--shadow);
+  }
+  .fin-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;}
+  .fin-title{font-weight:800;font-size:16px;}
+  .fin-sub{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .fin-lock{font-size:12px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);background:var(--card-2);color:var(--ink-soft);white-space:nowrap;}
+  .fin-lock.open{background:var(--amber-tint);color:#8a6417;}
+  .fin-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .fin-stat{background:var(--card-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;min-width:0;}
+  .fin-stat .k{font-size:12px;color:var(--ink-soft);}
+  .fin-stat .v{font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px;overflow-wrap:anywhere;}
+  .fin-stat:last-child:nth-child(odd){grid-column:1/-1;}
+  .fin-stat .v.good{color:var(--teal-dark);}
+  .fin-stat .v.bad{color:var(--danger);}
+  .fin-warn{margin-top:10px;font-size:13px;background:var(--amber-tint);color:#8a6417;border-radius:var(--radius-sm);padding:8px 10px;}
+  .fin-warn button{background:none;border:none;font:inherit;font-weight:800;color:inherit;text-decoration:underline;cursor:pointer;padding:0;}
+  .fin-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .fin-actions .mini-btn{flex:1;min-width:120px;padding:9px 10px;}
+  .trip-list-group{font-size:13px;font-weight:800;color:var(--ink-soft);margin:16px 4px 2px;}
+  .trip-list-group:first-child{margin-top:4px;}
+
   /* ---- Column resizer (wide layout only) ---- */
   #colResizer{display:none;}
   /* ---- Compact cash row (header) ---- */
@@ -657,6 +681,7 @@
 
     <div id="sidebarCol">
       <section id="ledgerSection">
+        <div id="finishedSummary"></div>
         <div id="categoryDonut"></div>
         <div id="ledgerBalanceBar"></div>
       </section>
@@ -807,7 +832,7 @@
     <div class="toggle-row">
       <div>
         <div style="font-weight:700;font-size:15px;">הטיול הסתיים</div>
-        <div class="hint" style="margin:2px 0 0;">טיולים שהסתיימו לא יופיעו בכרטיסיות למעלה</div>
+        <div class="hint" style="margin:2px 0 0;">הטיול יינעל לעריכה, יקבל כרטיס סיכום ויעבור לרשימת "טיולים שהסתיימו"</div>
       </div>
       <label class="switch"><input type="checkbox" id="tfFinished"><span class="track"></span></label>
     </div>
@@ -2181,6 +2206,19 @@ function expenseTotalILS(exp){
   return (exp.amount || 0) * rate;
 }
 
+/* ========================= Finished trips: lock ========================= */
+// A finished trip is read-only so nothing gets added to it by accident (by either
+// account). Unlocking is per-device and per-session on purpose — it lives outside the
+// synced state, so opening it for a late card charge on one phone never leaves it
+// open on the other, and a reload locks it again.
+let unlockedTripId = null;
+function tripLocked(t){ return !!(t && t.finished && unlockedTripId !== t.id); }
+function guardLocked(){
+  if (!tripLocked(activeTrip())) return false;
+  toast("🔒 הטיול הסתיים ונעול. אפשר לפתוח אותו לעריכה מכרטיס הסיכום");
+  return true;
+}
+
 /* ========================= Rendering: Trip tabs ========================= */
 function renderTripTabs(){
   const wrap = document.getElementById('tripTabs');
@@ -2299,6 +2337,7 @@ function cashInputId(currency){ return "cash_" + CURRENCY_CODE[currency]; }
 function openCashSheet(){
   const trip = activeTrip();
   if (!trip) return;
+  if (guardLocked()) return;
   const cash = trip.cashInitial || {};
   const grid = document.getElementById('cashInputsGrid');
   grid.innerHTML = tripCurrencies(trip).map(c => `
@@ -2660,7 +2699,7 @@ function renderExpenses(){
       <div class="empty">
         <div class="big">🧳</div>
         <p><b>עדיין אין הוצאות בטיול הזה</b></p>
-        <p>לחצו על "הוצאה חדשה" כדי להתחיל לתעד</p>
+        <p>${tripLocked(trip) ? "הטיול הסתיים ונעול" : 'לחצו על "הוצאה חדשה" כדי להתחיל לתעד'}</p>
       </div>`;
     return;
   }
@@ -2689,6 +2728,7 @@ function renderExpenses(){
     return;
   }
 
+  const locked = tripLocked(trip);
   list.innerHTML = items.map(exp => {
     const totalIls = expenseTotalILS(exp);
     const showOrig = exp.currency !== "שקל";
@@ -2719,10 +2759,10 @@ function renderExpenses(){
         </div>
         ${exp.notes ? `<div class="exp-row-note">📝 ${escapeHtml(exp.notes)}</div>` : ""}
         ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
-        <div class="exp-actions">
+        ${locked ? "" : `<div class="exp-actions">
           <button class="mini-btn" data-action="edit" data-id="${exp.id}">עריכה</button>
           <button class="mini-btn danger" data-action="delete" data-id="${exp.id}">מחיקה</button>
-        </div>
+        </div>`}
       </div>` : ""}
     </div>`;
   }).join("");
@@ -2814,14 +2854,84 @@ function renderTripInfoStrip(){
   row.classList.add('has-flight');
 }
 
+function renderFinishedSummary(){
+  const trip = activeTrip();
+  const el = document.getElementById('finishedSummary');
+  if (!trip || !trip.finished){ el.innerHTML = ""; return; }
+
+  const counted = trip.expenses.filter(inTotal);
+  const paid = counted.filter(e => e.paid);
+  const pending = counted.filter(e => !e.paid);
+  const total = paid.reduce((s,e)=> s + expenseTotalILS(e), 0);
+
+  let days = 0;
+  if (trip.startDate && trip.endDate) days = daysBetween(trip.startDate, trip.endDate) + 1;
+  if (!(days > 0)){
+    // No trip dates set — fall back to the span of the expenses themselves.
+    const dates = trip.expenses.map(e => e.date).filter(Boolean).sort();
+    if (dates.length) days = daysBetween(dates[0], dates[dates.length-1]) + 1;
+  }
+
+  const byCat = {};
+  paid.forEach(e => { const c = expCategory(e); byCat[c] = (byCat[c]||0) + expenseTotalILS(e); });
+  const topCat = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+
+  const stats = [];
+  stats.push(`<div class="fin-stat"><div class="k">סה"כ עלות</div><div class="v">₪${fmtMoney(total)}</div></div>`);
+  if (days > 0) stats.push(`<div class="fin-stat"><div class="k">ממוצע ליום (${days} ימים)</div><div class="v">₪${fmtMoney(total / days)}</div></div>`);
+  if (trip.budget > 0){
+    const diff = trip.budget - total;
+    stats.push(diff >= 0
+      ? `<div class="fin-stat"><div class="k">מתחת לתקציב</div><div class="v good">₪${fmtMoney(diff)}</div></div>`
+      : `<div class="fin-stat"><div class="k">חריגה מהתקציב</div><div class="v bad">₪${fmtMoney(-diff)}</div></div>`);
+  }
+  if (topCat && total > 0) stats.push(`<div class="fin-stat"><div class="k">הכי הרבה הלך על</div><div class="v">${CATEGORY_ICON[topCat[0]] || ""} ${escapeHtml(topCat[0])} · ${Math.round(topCat[1] / total * 100)}%</div></div>`);
+
+  const locked = tripLocked(trip);
+  const dateRange = (trip.startDate && trip.endDate) ? `${fmtDate(trip.startDate)} – ${fmtDate(trip.endDate)}` : (trip.finishedAt ? `הסתיים ב-${fmtDate(trip.finishedAt)}` : "");
+
+  el.innerHTML = `
+    <div class="fin-card">
+      <div class="fin-head">
+        <div>
+          <div class="fin-title">🏁 סיכום הטיול</div>
+          ${dateRange ? `<div class="fin-sub">${dateRange}</div>` : ""}
+        </div>
+        <span class="fin-lock${locked ? "" : " open"}">${locked ? "🔒 נעול" : "🔓 פתוח לעריכה"}</span>
+      </div>
+      <div class="fin-grid">${stats.join("")}</div>
+      ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+expenseTotalILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
+      <div class="fin-actions">
+        <button type="button" class="mini-btn" id="btnFinLock">${locked ? "🔓 פתח לעריכה" : "🔒 נעל שוב"}</button>
+        ${trip.expenses.length ? `<button type="button" class="mini-btn" id="btnFinExport">📊 ייצוא לאקסל</button>` : ""}
+      </div>
+    </div>`;
+
+  document.getElementById('btnFinLock').addEventListener('click', () => {
+    unlockedTripId = locked ? trip.id : null;
+    if (!locked) expandedExpenseId = null;
+    renderAll();
+    toast(locked ? "🔓 הטיול פתוח לעריכה עד שתנעלו או תרעננו" : "🔒 הטיול ננעל");
+  });
+  const exp = document.getElementById('btnFinExport');
+  if (exp) exp.addEventListener('click', () => exportTripXlsx(trip));
+  const pb = document.getElementById('btnFinPending');
+  if (pb) pb.addEventListener('click', () => {
+    expenseFilter = { type: 'pending' };
+    renderFilterBar(); renderExpenses(); scrollToExpenses();
+  });
+}
+
 function renderAll(){
   renderTripTabs();
+  renderFinishedSummary();
   renderTripInfoStrip();
   renderCashCompact();
   renderCategoryChart();
   renderBalanceBar();
   renderRates();
   renderExpenses();
+  document.querySelector('.fab').style.display = tripLocked(activeTrip()) ? 'none' : '';
   updateHeaderHeightVar();
 }
 const WIDE_MQ = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
@@ -2841,15 +2951,32 @@ let editingTripId = null;
 
 function openTripsList(){
   const wrap = document.getElementById('tripListWrap');
-  wrap.innerHTML = state.trips.map(t => `
+  const tripTotal = t => t.expenses.filter(e => inTotal(e) && e.paid).reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const item = t => `
     <div class="trip-list-item">
-      <div>
-        <div style="font-weight:700;">${escapeHtml(t.name)}${t.finished ? ' <span class="tag" style="vertical-align:middle;">✓ הסתיים</span>' : ''}</div>
-        <div style="font-size:13.5px;color:var(--ink-soft);">${t.expenses.length} הוצאות${t.startDate ? " · " + fmtDate(t.startDate) : ""}</div>
+      <div style="min-width:0;">
+        <div style="font-weight:700;">${escapeHtml(t.name)}</div>
+        <div style="font-size:13.5px;color:var(--ink-soft);">${t.finished ? `₪${fmtMoney(tripTotal(t))} · ` : ""}${t.expenses.length} הוצאות${t.startDate ? " · " + fmtDate(t.startDate) : ""}</div>
       </div>
-      <button class="mini-btn" data-id="${t.id}">עריכה</button>
-    </div>
-  `).join("");
+      <div style="display:flex;gap:6px;flex:none;">
+        ${t.id !== state.activeTripId ? `<button class="mini-btn" data-open-trip="${t.id}">פתיחה</button>` : ""}
+        <button class="mini-btn" data-id="${t.id}">עריכה</button>
+      </div>
+    </div>`;
+  const active = state.trips.filter(t => !t.finished);
+  const done = state.trips.filter(t => t.finished)
+    .sort((a,b) => (b.endDate || b.finishedAt || "").localeCompare(a.endDate || a.finishedAt || ""));
+  wrap.innerHTML =
+    (active.length ? (done.length ? `<div class="trip-list-group">טיולים פעילים</div>` : "") + active.map(item).join("") : "") +
+    (done.length ? `<div class="trip-list-group">🏁 טיולים שהסתיימו</div>` + done.map(item).join("") : "");
+  wrap.querySelectorAll('button[data-open-trip]').forEach(b => b.addEventListener('click', () => {
+    state.activeTripId = b.dataset.openTrip;
+    expenseFilter = { type: 'all' };
+    expandedExpenseId = null;
+    saveState();
+    closeOverlay('overlayTrips');
+    renderAll();
+  }));
   wrap.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', () => {
     closeOverlay('overlayTrips');
     openEditTripForm(b.dataset.id);
@@ -2939,6 +3066,8 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
       t.departLandDateTime = departLandDateTime; t.returnLandDateTime = returnLandDateTime;
+      if (finished && !t.finished){ t.finishedAt = todayISO(); if (unlockedTripId === t.id) unlockedTripId = null; }
+      if (!finished) delete t.finishedAt;
       t.finished = finished; t.enabledCurrencies = enabledCurrencies; t.budget = budget;
     }
   } else {
@@ -2948,6 +3077,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       enabledCurrencies, budget,
       flightOut, flightReturn, bookingRef, departDateTime, returnDateTime,
       departLandDateTime, returnLandDateTime, finished,
+      ...(finished ? { finishedAt: todayISO() } : {}),
       expenses: []
     };
     state.trips.push(t);
@@ -3281,6 +3411,7 @@ function populateCurrencySelect(trip, currentValue){
 function openNewExpense(){
   const trip = activeTrip();
   if (!trip){ toast("יש ליצור טיול קודם"); return; }
+  if (guardLocked()) return;
   editingExpenseId = null;
   currentAttachments = [];
   removedAttachmentIds = [];
@@ -3306,6 +3437,7 @@ function openNewExpense(){
 }
 
 function openEditExpense(id){
+  if (guardLocked()) return;
   const trip = activeTrip();
   const exp = trip.expenses.find(e => e.id === id);
   if (!exp) return;
@@ -3424,6 +3556,7 @@ document.getElementById('btnDeleteExpense').addEventListener('click', () => {
 function deleteExpense(id, fromForm){
   const trip = activeTrip();
   if (!trip) return;
+  if (guardLocked()) return;
   const idx = trip.expenses.findIndex(e => e.id === id);
   if (idx === -1) return;
   const [removed] = trip.expenses.splice(idx, 1);
@@ -3464,7 +3597,9 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   // this button now lives inside trip editing, so it should export whichever trip
   // you're editing even if you got here from the full trip list rather than the
   // trip you happen to have selected up top.
-  const trip = state.trips.find(t => t.id === editingTripId) || activeTrip();
+  exportTripXlsx(state.trips.find(t => t.id === editingTripId) || activeTrip());
+});
+function exportTripXlsx(trip){
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
   const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים"];
   const data = [header, ...trip.expenses.map(e => [
@@ -3479,7 +3614,7 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, trip.name.slice(0,28) || "טיול");
   XLSX.writeFile(wb, `${trip.name || "trip"}.xlsx`);
-});
+}
 
 /* ========================= Column resizer (wide layout) ========================= */
 (function(){
