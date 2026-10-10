@@ -3409,13 +3409,71 @@ function renderAttachChips(){
 }
 
 document.getElementById('btnAttachFile').addEventListener('click', () => document.getElementById('efFileInput').click());
-document.getElementById('efFileInput').addEventListener('change', (e) => {
-  const files = Array.from(e.target.files || []);
-  files.forEach(file => {
-    currentAttachments.push({ id: uid(), name: file.name, type: file.type, size: file.size, file: file, isNew: true });
+/* Every attached photo is turned into a one-page PDF right away, so all attachments
+   (on the device, in Drive and in the viewer) are PDFs. PDFs are kept as they are. */
+async function imageToPdf(file){
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale)), h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);          // transparent PNGs get a white page
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) bitmap.close();
+  const jpegBlob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.85));
+  if (!jpegBlob) throw new Error("jpeg encode failed");
+  const jpeg = new Uint8Array(await jpegBlob.arrayBuffer());
+
+  // Page width = A4 width (595pt), height follows the photo's proportions
+  const pw = 595, ph = Math.round(pw * h / w * 100) / 100;
+  const enc = new TextEncoder();
+  const chunks = [];
+  let length = 0;
+  const offsets = [];
+  const push = (part) => { const b = typeof part === "string" ? enc.encode(part) : part; chunks.push(b); length += b.length; };
+  const obj = (n, body) => { offsets[n] = length; push(`${n} 0 obj\n`); body(); push("\nendobj\n"); };
+  const content = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+  push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  obj(1, () => push("<< /Type /Catalog /Pages 2 0 R >>"));
+  obj(2, () => push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
+  obj(3, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
+  obj(4, () => {
+    push(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+    push(jpeg);
+    push("\nendstream");
   });
-  renderAttachChips();
+  obj(5, () => push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+  const xref = length;
+  let table = "xref\n0 6\n0000000000 65535 f \n";
+  for (let n = 1; n <= 5; n++) table += String(offsets[n]).padStart(10, "0") + " 00000 n \n";
+  push(table + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+
+  const name = (file.name || "תמונה").replace(/\.[^.]+$/, "") + ".pdf";
+  return new File(chunks, name, { type: "application/pdf" });
+}
+
+document.getElementById('efFileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
   e.target.value = "";
+  const btn = document.getElementById('btnAttachFile');
+  const saveBtn = document.getElementById('btnSaveExpense');
+  btn.disabled = true; saveBtn.disabled = true;
+  const label = btn.textContent;
+  let failed = 0;
+  for (const original of files){
+    let file = original;
+    if ((original.type || "").startsWith("image/")){
+      btn.textContent = "⏳ ממיר ל-PDF…";
+      try{ file = await imageToPdf(original); }
+      catch(err){ console.warn("tripcost: pdf conversion failed, keeping the image", err); failed++; }
+    }
+    currentAttachments.push({ id: uid(), name: file.name, type: file.type, size: file.size, file: file, isNew: true });
+    renderAttachChips();
+  }
+  btn.textContent = label;
+  btn.disabled = false; saveBtn.disabled = false;
+  if (failed) toast(failed > 1 ? `${failed} תמונות לא הומרו ל-PDF ונשמרו כתמונה` : "התמונה לא הומרה ל-PDF ונשמרה כתמונה");
 });
 
 function updateRateFieldVisibility(){
