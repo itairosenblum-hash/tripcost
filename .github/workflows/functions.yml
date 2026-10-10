@@ -1,7 +1,7 @@
 name: Deploy Firebase functions
 # פריסה אוטומטית של ה-Cloud Functions (חיבור קבוע לדרייב) בכל שינוי בהן ב-main (גם ידנית: Run workflow).
 # נדרשים Secrets בריפו: FIREBASE_SERVICE_ACCOUNT, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET
-# חוקי Firestore לא נפרסים מכאן — הם ממשיכים להתעדכן ידנית ב-Firebase Console.
+# חוקי Firestore לא נפרסים מכאן, הם ממשיכים להתעדכן ידנית ב-Firebase Console.
 
 on:
   push:
