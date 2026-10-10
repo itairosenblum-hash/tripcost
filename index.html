@@ -404,6 +404,17 @@
   .drive-status.ok .dot{background:var(--teal-dark);}
   .drive-status.bad .dot{background:#d29a2b;}
 
+  /* ---- Upload progress ---- */
+  .progress-overlay{position:fixed;inset:0;z-index:80;background:rgba(20,27,26,.55);display:none;align-items:center;justify-content:center;padding:24px;}
+  .progress-overlay.show{display:flex;}
+  .progress-card{background:var(--bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:360px;padding:22px 20px 18px;box-shadow:0 12px 40px rgba(0,0,0,.25);}
+  .progress-card h3{margin:0 0 4px;font-size:18px;}
+  .progress-status{font-size:14.5px;color:var(--ink-soft);min-height:21px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .progress-track{height:10px;border-radius:99px;background:var(--card-2);border:1px solid var(--border);overflow:hidden;margin:14px 0 8px;}
+  .progress-fill{height:100%;width:0;background:var(--teal-dark);border-radius:99px;transition:width .25s ease;}
+  .progress-meta{display:flex;justify-content:space-between;font-size:13.5px;color:var(--ink-soft);font-weight:700;}
+  .progress-pct{font-size:22px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;}
+
   /* ---- FAB ---- */
   .fab{
     position:fixed;left:18px;
@@ -1067,6 +1078,16 @@
     <a class="viewer-btn" id="viewerDownload" download>⬇︎ הורדה</a>
   </div>
   <div class="viewer-body" id="viewerBody"></div>
+</div>
+
+<div class="progress-overlay" id="uploadProgress" role="dialog" aria-modal="true" aria-live="polite">
+  <div class="progress-card">
+    <h3 id="upTitle">שומר את ההוצאה…</h3>
+    <div class="progress-status" id="upStatus"></div>
+    <div class="progress-track"><div class="progress-fill" id="upFill"></div></div>
+    <div class="progress-meta"><span id="upCount"></span><span class="progress-pct" id="upPct">0%</span></div>
+    <div class="hint" id="upHint" style="margin:10px 0 0;">המסך יישאר דלוק עד שההעלאה תסתיים.</div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -2041,20 +2062,94 @@ async function blobToBase64(blob){
   return btoa(binary);
 }
 
-async function uploadFileToDrive(file, meta){
+/* ---- Progress window + keeping the screen awake while files upload ---- */
+let wakeLock = null, wakeWanted = false;
+async function acquireWakeLock(){
+  wakeWanted = true;
+  try{
+    if ('wakeLock' in navigator && !wakeLock){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  }catch(e){ console.warn("tripcost: wake lock unavailable", e); }
+}
+function releaseWakeLock(){
+  wakeWanted = false;
+  try{ if (wakeLock) wakeLock.release(); }catch(e){}
+  wakeLock = null;
+}
+// The browser drops the lock when the app goes to the background — take it again on return
+document.addEventListener('visibilitychange', () => {
+  if (wakeWanted && document.visibilityState === 'visible') acquireWakeLock();
+});
+
+const uploadUI = {
+  show(title){
+    document.getElementById('upTitle').textContent = title || "שומר את ההוצאה…";
+    this.set(0, "מתחיל…", "");
+    document.getElementById('uploadProgress').classList.add('show');
+    acquireWakeLock();
+  },
+  set(fraction, status, count){
+    const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)));
+    document.getElementById('upFill').style.width = pct + "%";
+    document.getElementById('upPct').textContent = pct + "%";
+    if (status != null) document.getElementById('upStatus').textContent = status;
+    if (count != null) document.getElementById('upCount').textContent = count;
+  },
+  hide(){
+    document.getElementById('uploadProgress').classList.remove('show');
+    releaseWakeLock();
+  }
+};
+
+// Calls a callable function over XHR so the upload reports real progress (httpsCallable can't).
+async function callFnWithProgress(name, data, onUploadProgress, timeout){
+  if (!cloudUser || !fbApp) throw Object.assign(new Error("לא מחובר"), { code: "functions/unauthenticated" });
+  const token = await cloudUser.getIdToken();
+  const url = `https://europe-west1-${fbApp.options.projectId}.cloudfunctions.net/${name}`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("Authorization", "Bearer " + token);
+    xhr.timeout = timeout || 180000;
+    if (onUploadProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onUploadProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body = null;
+      try{ body = JSON.parse(xhr.responseText); }catch(e){}
+      if (xhr.status >= 200 && xhr.status < 300 && body && "result" in body){ resolve({ data: body.result }); return; }
+      const err = (body && body.error) || {};
+      const status = String(err.status || (xhr.status === 404 ? "NOT_FOUND" : "INTERNAL")).toLowerCase().replace(/_/g, "-");
+      reject(Object.assign(new Error(err.message || ""), { code: "functions/" + status }));
+    };
+    xhr.onerror = () => reject(Object.assign(new Error(""), { code: "functions/unavailable" }));
+    xhr.ontimeout = () => reject(Object.assign(new Error(""), { code: "functions/deadline-exceeded" }));
+    xhr.send(JSON.stringify({ data }));
+  });
+}
+
+async function uploadFileToDrive(file, meta, onProgress){
   if (!cloudUser || !fbFunctions) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
   if (driveStatus && !driveStatus.connected && !driveStatus.error) return { ok:false, reason:"הדרייב לא מחובר" };
   try{
+    const report = (f, msg) => { if (onProgress) onProgress(f, msg); };
+    report(0.02, "מכין את הקובץ…");
     const prepared = await prepareUpload(file);
     if (!/^image\/|^application\/pdf$/.test(prepared.type)) return { ok:false, reason:"אפשר להעלות רק תמונות ו-PDF" };
     if (prepared.blob.size > 7 * 1024 * 1024) return { ok:false, reason:"הקובץ גדול מ-7MB" };
-    const res = await callFn("uploadAttachment", 120000)({
+    const payload = {
       data: await blobToBase64(prepared.blob),
       mimeType: prepared.type,
       name: prepared.name,
       tripName: (meta && meta.tripName) || "",
       item: (meta && meta.item) || ""
+    };
+    report(0.08, "מעלה…");
+    const res = await callFnWithProgress("uploadAttachment", payload, (f) => {
+      report(0.08 + f * 0.84, f < 1 ? "מעלה…" : "שומר בדרייב…");
     });
+    report(1, "הועלה ✓");
     return { ok:true, driveId: res.data.driveId, driveUrl: res.data.driveUrl };
   }catch(e){
     console.error("tripcost: drive upload failed", e);
@@ -3632,11 +3727,21 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
   const saveBtn = document.getElementById('btnSaveExpense');
   saveBtn.disabled = true;
   let driveFailures = 0, driveFailReason = "";
+  const toUpload = currentAttachments.filter(a => a.isNew);
+  const showProgress = toUpload.length > 0 && !!cloudUser && !(driveStatus && !driveStatus.connected && !driveStatus.error);
+  if (showProgress) uploadUI.show(toUpload.length > 1 ? `מעלה ${toUpload.length} קבצים…` : "מעלה את הקובץ…");
   try{
+    let idx = 0;
     for (const a of currentAttachments){
       if (a.isNew){
+        const n = idx++;
+        const countText = toUpload.length > 1 ? `קובץ ${n + 1} מתוך ${toUpload.length}` : "";
+        const fileLabel = truncateName(a.name, 26);
+        if (showProgress) uploadUI.set(n / toUpload.length, fileLabel + " · שומר במכשיר…", countText);
         await idbPut({id: a.id, blob: a.file, name: a.name, type: a.type, size: a.size});
-        const driveResult = await uploadFileToDrive(a.file, { tripName: trip.name, item }).catch(e => ({ok:false, reason:(e&&e.message)||"שגיאה"}));
+        const driveResult = await uploadFileToDrive(a.file, { tripName: trip.name, item }, (f, msg) => {
+          if (showProgress) uploadUI.set((n + f) / toUpload.length, fileLabel + " · " + msg, countText);
+        }).catch(e => ({ok:false, reason:(e&&e.message)||"שגיאה"}));
         if (driveResult && driveResult.ok){
           a.driveId = driveResult.driveId; a.driveUrl = driveResult.driveUrl;
         } else if (driveResult && !driveResult.skipped){
@@ -3652,6 +3757,11 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
   }catch(err){
     console.error(err);
     toast("שמירת הקובץ נכשלה — ההוצאה נשמרה בלי הקובץ");
+  }
+  if (showProgress){
+    uploadUI.set(1, driveFailures ? "חלק מהקבצים לא הועלו" : "הסתיים ✓", null);
+    await new Promise(r => setTimeout(r, 350));
+    uploadUI.hide();
   }
   saveBtn.disabled = false;
 
