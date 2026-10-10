@@ -1342,7 +1342,7 @@ async function openAttachment(id, driveUrl, driveId, name){
     viewerMessage(cloudUser ? "הקובץ לא נמצא במכשיר הזה." : "הקובץ לא נמצא במכשיר הזה. התחברו לסנכרון כדי לצפות בו מהדרייב.", driveUrl);
     return;
   }
-  viewerMessage("הקובץ לא נמצא — הוא נשמר רק במכשיר שבו צורף, ולא הועלה לדרייב.");
+  viewerMessage("הקובץ נשמר רק במכשיר שבו צורף ועוד לא הועלה לדרייב. פתחו את האפליקציה במכשיר ההוא (מחוברים לסנכרון) — הקובץ יועלה אוטומטית ויופיע כאן.");
 }
 function deleteAttachmentsOf(exp){
   (exp.attachments || []).forEach(a => idbDelete(a.id));
@@ -1901,6 +1901,7 @@ async function refreshDriveStatus(){
   }
   renderDriveSection();
   if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
+  if (driveStatus && driveStatus.connected) setTimeout(uploadPendingLocalFiles, 1500);
   return driveStatus;
 }
 
@@ -2004,6 +2005,47 @@ async function uploadFileToDrive(file, meta){
     if (e && e.code === "functions/failed-precondition") refreshDriveStatus();
     return { ok:false, reason: fnError(e) };
   }
+}
+
+/* Attachments that were saved only on this device (no Drive copy yet, e.g. added while the old
+   Drive token had expired) are uploaded automatically once Drive is connected. Each device uploads
+   what it holds, so opening the app on the phone where a file was attached recovers it for everyone. */
+let pendingUploadRunning = false;
+async function uploadPendingLocalFiles(){
+  if (pendingUploadRunning || !cloudUser || !driveStatus || !driveStatus.connected) return;
+  pendingUploadRunning = true;
+  let done = 0, failed = 0;
+  try{
+    const pending = [];
+    state.trips.forEach(t => (t.expenses || []).forEach(e => (e.attachments || []).forEach(a => {
+      if (!a.driveId) pending.push({ tripId: t.id, expId: e.id, attId: a.id });
+    })));
+    for (const p of pending){
+      let rec = null;
+      try{ rec = await idbGet(p.attId); }catch(e){}
+      if (!rec || !rec.blob) continue;          // not on this device
+      // look the expense up again — the state may have been replaced by a sync meanwhile
+      const trip = state.trips.find(t => t.id === p.tripId);
+      const exp = trip && (trip.expenses || []).find(e => e.id === p.expId);
+      const att = exp && (exp.attachments || []).find(a => a.id === p.attId);
+      if (!att || att.driveId) continue;
+      const file = new File([rec.blob], rec.name || att.name || "קובץ", { type: rec.type || rec.blob.type || att.type || "" });
+      const res = await uploadFileToDrive(file, { tripName: trip.name, item: exp.item });
+      if (!res.ok){ failed++; if (/לא מחובר/.test(res.reason || "")) break; continue; }
+      const trip2 = state.trips.find(t => t.id === p.tripId);
+      const exp2 = trip2 && (trip2.expenses || []).find(e => e.id === p.expId);
+      const att2 = exp2 && (exp2.attachments || []).find(a => a.id === p.attId);
+      if (!att2) continue;
+      att2.driveId = res.driveId; att2.driveUrl = res.driveUrl;
+      saveState();
+      done++;
+    }
+  }catch(e){
+    console.error("tripcost: pending uploads failed", e);
+  }
+  pendingUploadRunning = false;
+  if (done) { renderAll(); toast(`${done} קבצים שנשמרו רק במכשיר הזה הועלו לדרייב ✓`); }
+  else if (failed) toast("העלאת קבצים ישנים לדרייב נכשלה — ננסה שוב בפתיחה הבאה");
 }
 
 function removeFileFromDrive(driveId){
