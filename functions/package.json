@@ -1,0 +1,15 @@
+{
+  "name": "tripcost-functions",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "@googleapis/drive": "^26.0.2",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0",
+    "google-auth-library": "^11.2.0"
+  }
+}

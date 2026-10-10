@@ -1,0 +1,107 @@
+name: Deploy Firebase functions
+# פריסה אוטומטית של ה-Cloud Functions (חיבור קבוע לדרייב) בכל שינוי בהן ב-main (גם ידנית: Run workflow).
+# נדרשים Secrets בריפו: FIREBASE_SERVICE_ACCOUNT, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET
+# חוקי Firestore לא נפרסים מכאן — הם ממשיכים להתעדכן ידנית ב-Firebase Console.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "firebase.json"
+      - ".github/workflows/functions.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+env:
+  PROJECT: trip-cost-ba9de
+  SERVICES: driveauthurl drivecallback drivestatus uploadattachment getattachment removeattachment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci --prefix functions
+          npm install -g firebase-tools
+
+      - name: Check service account secret
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::error::Missing repo secret FIREBASE_SERVICE_ACCOUNT (see README)"
+            exit 1
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Sync function secrets
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET; do
+            # מסיר רווחים ושורות ריקות שנכנסים בהעתקה מהטלפון
+            value="$(printf '%s' "${!name}" | tr -d '[:space:]')"
+            if [ -z "$value" ]; then
+              echo "::error::Missing repo secret $name (see README)"
+              exit 1
+            fi
+            current="$(firebase functions:secrets:access "$name" --project "$PROJECT" 2>/dev/null || true)"
+            if [ "$current" != "$value" ]; then
+              echo "Updating $name"
+              printf '%s' "$value" | firebase functions:secrets:set "$name" --data-file=- --project "$PROJECT" --non-interactive --force
+            else
+              echo "$name unchanged"
+            fi
+          done
+          # כתיבת גרסאות הסודות לתיקיית הפונקציות מבטיחה פריסה מחדש כשסוד מתעדכן
+          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET; do
+            v="$(gcloud secrets versions list "$name" --project "$PROJECT" --filter='state=ENABLED' --sort-by='~createTime' --limit=1 --format='value(name)')"
+            echo "$name=$v"
+          done > functions/.secret-versions
+
+      - name: Deploy
+        run: |
+          set +e
+          firebase deploy --only functions --project "$PROJECT" --non-interactive --force 2>&1 | tee deploy.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            msg="$( (grep -iE 'error|denied|permission|failed|required|enable|billing|blaze' deploy.log; [ -f firebase-debug.log ] && grep -iE '"message"|error:' firebase-debug.log) | grep -v '^\s*$' | tail -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            echo "::error title=firebase deploy failed::${msg}"
+          fi
+          exit $status
+
+      # הפונקציות בודקות הרשאות בעצמן (Firebase Auth), ולכן חייבות להיות נגישות לקריאה מהדפדפן
+      - name: Ensure public invoker
+        run: |
+          for svc in $SERVICES; do
+            gcloud run services add-iam-policy-binding "$svc" --region europe-west1 --project "$PROJECT" \
+              --member=allUsers --role=roles/run.invoker --quiet --format=none
+            echo "ok $svc"
+          done
+
+      - name: Diagnostics
+        if: always()
+        run: |
+          set +e
+          tail -40 deploy.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}' > tail.txt
+          echo "::notice title=deploy log tail::$(cat tail.txt)"
+          list="$(gcloud functions list --project "$PROJECT" --regions=europe-west1 --format='value(name,state)' 2>&1 | awk '{printf "%s%%0A", $0}')"
+          echo "::notice title=functions::${list}"

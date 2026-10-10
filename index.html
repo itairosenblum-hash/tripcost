@@ -18,6 +18,7 @@
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-functions-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
@@ -376,6 +377,30 @@
     flex:none;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);
     border-radius:var(--radius-pill);padding:6px 11px;font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;
   }
+
+  /* ---- File viewer ---- */
+  .viewer{position:fixed;inset:0;z-index:70;background:#0f1514;display:none;flex-direction:column;}
+  .viewer.show{display:flex;}
+  .viewer-bar{
+    display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;
+    color:#fff;background:rgba(0,0,0,.35);
+  }
+  .viewer-title{flex:1;min-width:0;font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .viewer-btn{
+    flex:none;border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;text-decoration:none;
+    border-radius:var(--radius-pill);padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;
+  }
+  .viewer-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 8px calc(16px + var(--safe-b));}
+  .viewer-body img{max-width:100%;height:auto;touch-action:pinch-zoom;}
+  .viewer-body.zoomed img{max-width:none;width:200%;}
+  .viewer-body canvas{width:100%;max-width:900px;height:auto;background:#fff;border-radius:4px;}
+  .viewer-msg{color:#dfe6e4;text-align:center;margin:auto;padding:20px;font-size:15px;line-height:1.5;}
+  .viewer-spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;animation:vspin .8s linear infinite;margin:auto;}
+  @keyframes vspin{to{transform:rotate(360deg);}}
+  .drive-status{display:flex;align-items:center;gap:8px;font-size:14.5px;margin:4px 0 10px;}
+  .drive-status .dot{width:9px;height:9px;border-radius:50%;background:var(--border);flex:none;}
+  .drive-status.ok .dot{background:var(--teal-dark);}
+  .drive-status.bad .dot{background:#d29a2b;}
 
   /* ---- FAB ---- */
   .fab{
@@ -960,7 +985,7 @@
         <button type="button" class="tool-btn drive-chip" id="efDriveWarning" style="display:none;"></button>
       </div>
       <input type="file" id="efFileInput" accept="image/*,application/pdf" multiple>
-      <div id="efDriveHint" class="hint" style="display:none;margin:6px 0 0;">עד לחידוש החיבור, קבצים שתצרפו יישמרו רק במכשיר הזה.</div>
+      <div id="efDriveHint" class="hint" style="display:none;margin:6px 0 0;">עד לחיבור הדרייב, קבצים שתצרפו יישמרו רק במכשיר הזה.</div>
     </div>
 
     <div class="sheet-actions">
@@ -1012,33 +1037,16 @@
             <input type="email" id="shareEmailInput" placeholder="example@gmail.com" dir="ltr" style="flex:1;min-width:0;">
             <button class="btn-primary" id="btnAddShare" style="white-space:nowrap;">הוספה</button>
           </div>
-          <div class="hint" style="margin-top:6px;">הצד השני פותח את האתר ומתחבר עם החשבון הזה. קבצים מצורפים נשמרים ב-Drive של מי שהעלה אותם — כדי ששניכם תראו את כולם, שתפו תיקייה ב-Drive והגדירו אותה למטה אצל שניכם.</div>
+          <div class="hint" style="margin-top:6px;">הצד השני פותח את האתר ומתחבר עם החשבון הזה. קבצים מצורפים נשמרים בדרייב המחובר, ושניכם רואים את כולם מתוך האפליקציה — בלי לשתף תיקייה.</div>
         </div>
         <div id="shareGuestBlock" class="hint" style="display:none;"></div>
 
         <div class="divider"></div>
-        <div class="field">
-          <label>Google OAuth Client ID (לצורך רענון הרשאת Drive)</label>
-          <input type="text" id="googleClientIdInput" placeholder="לדוגמה: 123...apps.googleusercontent.com">
-          <div class="hint" style="margin-top:6px;">מ-Google Cloud Console → APIs & Services → Credentials → "Web client (auto created by Google Service)". דרוש פעם אחת בלבד.</div>
-        </div>
-
-        <div class="divider"></div>
-        <div class="toggle-row">
-          <div>
-            <div style="font-weight:700;font-size:15px;">שימוש בתיקייה קיימת ב-Drive</div>
-            <div class="hint" style="margin:2px 0 0;">אחרת תיווצר אוטומטית תיקייה בשם "TripCost - קבצים מצורפים"</div>
-          </div>
-          <label class="switch"><input type="checkbox" id="toggleExistingFolder"><span class="track"></span></label>
-        </div>
-        <div class="field" id="folderIdField" style="display:none;">
-          <label>מזהה התיקייה (מהכתובת של התיקייה ב-Drive)</label>
-          <input type="text" id="driveFolderIdInput" placeholder="לדוגמה: 1AbCdEfGhIjKlMnOpQrStUvWxYz">
-        </div>
-
-        <div class="divider"></div>
-        <button class="btn-ghost" style="width:100%;" id="btnRefreshDriveAuth">🔄 רענון הרשאת Drive</button>
-        <div class="hint" style="margin-top:6px;">לחצו כאן אם קבצים לא עולים ל-Drive (למשל אחרי "אין הרשאה" או שההרשאה פגה)</div>
+        <div style="font-weight:700;font-size:15px;">Google Drive לקבצים מצורפים</div>
+        <div class="drive-status" id="driveStatusLine"><span class="dot"></span><span id="driveStatusText">בודק…</span></div>
+        <div class="hint" id="driveStatusHint" style="margin:0 0 10px;">החיבור נשמר בשרת, כך שאין צורך להתחבר מחדש. הקבצים נשמרים בתיקייה "TripCost - קבצים מצורפים".</div>
+        <button class="btn-primary" style="width:100%;display:none;" id="btnDriveConnect">חיבור Google Drive</button>
+        <a class="btn-ghost" style="width:100%;display:none;text-align:center;text-decoration:none;margin-top:8px;box-sizing:border-box;" id="driveFolderLink" target="_blank" rel="noopener">פתיחת התיקייה בדרייב</a>
 
         <div class="divider"></div>
         <button class="btn-ghost btn-danger-outline" style="width:100%;" id="btnSignOut">התנתקות</button>
@@ -1048,6 +1056,15 @@
     <div class="divider"></div>
     <button class="btn-ghost" style="width:100%;" id="btnCloseSync">סגור</button>
   </div>
+</div>
+
+<div class="viewer" id="fileViewer" role="dialog" aria-modal="true">
+  <div class="viewer-bar">
+    <button type="button" class="viewer-btn" id="viewerClose">✕ סגירה</button>
+    <div class="viewer-title" id="viewerTitle"></div>
+    <a class="viewer-btn" id="viewerDownload" download>⬇︎ הורדה</a>
+  </div>
+  <div class="viewer-body" id="viewerBody"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1207,18 +1224,125 @@ function truncateName(name, max){
   const ext = dot > -1 ? name.slice(dot) : "";
   return name.slice(0, max - ext.length - 1) + "…" + ext;
 }
-async function openAttachment(id, driveUrl){
+/* ---- In-app file viewer: local copy first, otherwise from Drive through the server ---- */
+const PDFJS_BASE = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/";
+let pdfjsPromise = null;
+function loadPdfjs(){
+  if (!pdfjsPromise){
+    pdfjsPromise = import(PDFJS_BASE + "pdf.min.mjs").then(lib => {
+      const workerUrl = PDFJS_BASE + "pdf.worker.min.mjs";
+      lib.GlobalWorkerOptions.workerSrc = workerUrl;
+      // the worker must come from this origin — wrap the CDN file in a local module that imports it
+      try{
+        const shim = URL.createObjectURL(new Blob([`import "${workerUrl}";`], { type: "text/javascript" }));
+        lib.GlobalWorkerOptions.workerPort = new Worker(shim, { type: "module" });
+      }catch(e){ console.warn("tripcost: pdf worker fallback", e); }
+      return lib;
+    }).catch(e => { pdfjsPromise = null; throw e; });
+  }
+  return pdfjsPromise;
+}
+// Android browsers can't show a PDF inside a page, so every page is drawn onto a canvas.
+async function renderPdfInto(bytes, container){
+  const lib = await loadPdfjs();
+  const pdf = await lib.getDocument({ data: bytes }).promise;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const width = Math.min(900, Math.max(300, container.clientWidth - 16));
+  for (let n = 1; n <= pdf.numPages; n++){
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: (width * dpr) / base.width });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    container.appendChild(canvas);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  }
+}
+
+let viewerUrl = null, viewerToken = 0;
+function viewerOpen(name){
+  const v = document.getElementById('fileViewer');
+  document.getElementById('viewerTitle').textContent = name || "קובץ";
+  const dl = document.getElementById('viewerDownload');
+  dl.style.visibility = "hidden";
+  const body = document.getElementById('viewerBody');
+  body.classList.remove('zoomed');
+  body.innerHTML = '<div class="viewer-spin"></div>';
+  v.classList.add('show');
+  return ++viewerToken;
+}
+function viewerClose(){
+  viewerToken++;
+  document.getElementById('fileViewer').classList.remove('show');
+  document.getElementById('viewerBody').innerHTML = "";
+  if (viewerUrl){ URL.revokeObjectURL(viewerUrl); viewerUrl = null; }
+}
+function viewerMessage(text, driveUrl){
+  const body = document.getElementById('viewerBody');
+  body.innerHTML = `<div class="viewer-msg">${escapeHtml(text)}${driveUrl ? `<br><br><a class="viewer-btn" href="${escapeHtml(driveUrl)}" target="_blank" rel="noopener">פתיחה ב-Drive</a>` : ""}</div>`;
+}
+async function viewerShow(token, blob, name){
+  if (token !== viewerToken) return;
+  if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+  viewerUrl = URL.createObjectURL(blob);
+  const dl = document.getElementById('viewerDownload');
+  dl.href = viewerUrl; dl.setAttribute("download", name || "file");
+  dl.style.visibility = "visible";
+  const body = document.getElementById('viewerBody');
+  body.innerHTML = "";
+  if (blob.type === "application/pdf"){
+    try{
+      await renderPdfInto(new Uint8Array(await blob.arrayBuffer()), body);
+    }catch(e){
+      console.error("tripcost: pdf render failed", e);
+      if (token === viewerToken) viewerMessage("לא ניתן להציג את הקובץ כאן — אפשר להוריד אותו בכפתור למעלה.");
+    }
+  } else if (blob.type.startsWith("image/")){
+    const img = document.createElement("img");
+    img.src = viewerUrl; img.alt = name || "";
+    body.appendChild(img);
+  } else {
+    viewerMessage("אין תצוגה לסוג הקובץ הזה — אפשר להוריד אותו בכפתור למעלה.");
+  }
+}
+document.getElementById('viewerClose').addEventListener('click', viewerClose);
+document.getElementById('viewerBody').addEventListener('dblclick', (e) => {
+  if (e.target.tagName === "IMG") e.currentTarget.classList.toggle('zoomed');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === "Escape" && document.getElementById('fileViewer').classList.contains('show')) viewerClose();
+});
+
+async function openAttachment(id, driveUrl, driveId, name){
+  const token = viewerOpen(name);
   try{
     const rec = await idbGet(id);
     if (rec && rec.blob){
-      const url = URL.createObjectURL(rec.blob);
-      window.open(url, "_blank");
-      setTimeout(()=> URL.revokeObjectURL(url), 60000);
+      const blob = rec.blob.type ? rec.blob : new Blob([rec.blob], { type: rec.type || "" });
+      await viewerShow(token, blob, rec.name || name);
       return;
     }
   }catch(e){ console.warn("tripcost: local attachment lookup failed", e); }
-  if (driveUrl){ window.open(driveUrl, "_blank"); return; }
-  toast("הקובץ לא נמצא — אולי שוחזר גיבוי ישן בלי הקבצים, וגם לא הועלה ל-Drive");
+  if (driveId && cloudUser && fbFunctions){
+    try{
+      const res = await callFn("getAttachment", 90000)({ driveId });
+      const bytes = Uint8Array.from(atob(res.data.data), c => c.charCodeAt(0));
+      await viewerShow(token, new Blob([bytes], { type: res.data.mimeType || "" }), name || res.data.name);
+      return;
+    }catch(e){
+      console.warn("tripcost: drive fetch failed", e);
+      if (token !== viewerToken) return;
+      // Files uploaded before the server connection may live in another account's Drive
+      viewerMessage("לא ניתן לטעון את הקובץ מהדרייב: " + fnError(e), driveUrl);
+      return;
+    }
+  }
+  if (driveUrl){
+    viewerMessage(cloudUser ? "הקובץ לא נמצא במכשיר הזה." : "הקובץ לא נמצא במכשיר הזה. התחברו לסנכרון כדי לצפות בו מהדרייב.", driveUrl);
+    return;
+  }
+  viewerMessage("הקובץ לא נמצא — הוא נשמר רק במכשיר שבו צורף, ולא הועלה לדרייב.");
 }
 function deleteAttachmentsOf(exp){
   (exp.attachments || []).forEach(a => idbDelete(a.id));
@@ -1278,41 +1402,14 @@ function migrateTrip(t){
   return t;
 }
 
-// These two live in their OWN localStorage entry, deliberately outside the state
-// object that syncs through Firestore. Turning the "use existing folder" toggle on
-// triggers a redirect to Google (needed to grant the broader Drive scope) — a full
-// page reload — and the cloud push of a state change is debounced by ~900ms, so it
-// never gets a chance to fire before the redirect navigates away. If this setting
-// lived in the synced state, the page would come back, reconnect to Firestore, and
-// the still-stale cloud copy would silently overwrite the change back to "off". Since
-// it's genuinely which-device-dependent anyway (not trip data), keeping it local-only
-// sidesteps that race entirely rather than trying to win a timing battle against it.
 // The OAuth Client ID is public by design (it's visible in every Google sign-in URL),
 // so it's safe to keep in the code. Keeping it here means it can't be "forgotten" when
 // the browser/PWA clears localStorage. A value typed in settings still overrides it.
 const DEFAULT_GOOGLE_CLIENT_ID = "1003952566118-l1qq1k3rk16fv3do2gaftc5umdmrdm80.apps.googleusercontent.com";
-const DRIVE_SETTINGS_KEY = "tripcost.driveSettings";
-function loadDriveSettings(){
-  try{
-    const raw = localStorage.getItem(DRIVE_SETTINGS_KEY);
-    if (raw) return Object.assign({ useExistingDriveFolder:false, driveFolderId:"", googleClientId:"" }, JSON.parse(raw));
-  }catch(e){ /* fall through to default */ }
-  return { useExistingDriveFolder:false, driveFolderId:"", googleClientId:"" };
-}
-function saveDriveSettings(s){
-  try{ localStorage.setItem(DRIVE_SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
-}
-let driveSettings = loadDriveSettings();
+// Settings from the old per-device Drive connection (token in the browser) — no longer used.
+["tripcost.driveSettings", "tripcost.driveToken", "tripcost.driveGranted"].forEach(k => { try{ localStorage.removeItem(k); }catch(e){} });
 
-// If a Drive folder ID was entered back when this setting still (incorrectly) lived in
-// the synced state, or before the toggle's own state started persisting at all, treat
-// that as meaning "yes, use it" — a one-time carry-over so nothing has to be re-entered.
 function migrateGlobalState(s){
-  if (!driveSettings.driveFolderId && s.driveFolderId){
-    driveSettings.driveFolderId = s.driveFolderId;
-    driveSettings.useExistingDriveFolder = true;
-    saveDriveSettings(driveSettings);
-  }
   delete s.useExistingDriveFolder;
   delete s.driveFolderId;
   return s;
@@ -1464,9 +1561,6 @@ function activeTrip(){
    document per user, and newly-attached files also upload to Google Drive so other devices (which don't
    have the local IndexedDB copy) can still open them. */
 const FB_CONFIG_KEY = "tripcost.firebaseConfig";
-const DRIVE_SCOPE_FILE = "https://www.googleapis.com/auth/drive.file";
-const DRIVE_SCOPE_FULL = "https://www.googleapis.com/auth/drive";
-const DEFAULT_DRIVE_FOLDER_NAME = "TripCost - קבצים מצורפים";
 
 // Shipped with the app so every device works out of the box with one tap to sign in —
 // no need to re-paste the config per device. Firebase web API keys are meant to be
@@ -1484,45 +1578,8 @@ const DEFAULT_FIREBASE_CONFIG = {
 
 let fbApp = null, fbAuth = null, fbDb = null;
 let cloudUser = null;              // firebase user object once signed in
-let driveAccessToken = null;       // short-lived OAuth token for Drive REST calls (~1 hour)
-let driveTokenExp = 0;             // ms timestamp when driveAccessToken expires
-let driveTokenScope = "";
-const DRIVE_TOKEN_KEY = "tripcost.driveToken";
-// Persist the token so it survives reloads / closing the PWA (it's only valid ~1 hour anyway).
-function saveDriveToken(token, expiresInSec, scope){
-  driveAccessToken = token;
-  driveTokenExp = Date.now() + (Number(expiresInSec) || 3600) * 1000;
-  driveTokenScope = scope || "";
-  try{ localStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify({ token, exp: driveTokenExp, scope: driveTokenScope })); }catch(e){}
-}
-function clearDriveToken(){
-  driveAccessToken = null; driveTokenExp = 0; driveTokenScope = "";
-  try{ localStorage.removeItem(DRIVE_TOKEN_KEY); }catch(e){}
-}
-function wantedDriveScope(){
-  return driveSettings.useExistingDriveFolder ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE;
-}
-// true if we hold a token that is still valid (with a 2-minute safety margin) and has the right scope
-function driveTokenValid(){
-  if (!driveAccessToken) return false;
-  if (Date.now() > driveTokenExp - 120000 || (driveTokenScope && driveTokenScope !== wantedDriveScope())){
-    clearDriveToken();
-    return false;
-  }
-  return true;
-}
-(function restoreDriveToken(){
-  try{
-    const raw = localStorage.getItem(DRIVE_TOKEN_KEY);
-    if (!raw) return;
-    const t = JSON.parse(raw);
-    if (t && t.token && t.exp > Date.now() + 120000){
-      driveAccessToken = t.token; driveTokenExp = t.exp; driveTokenScope = t.scope || "";
-    } else {
-      localStorage.removeItem(DRIVE_TOKEN_KEY);
-    }
-  }catch(e){}
-})();
+let fbFunctions = null;             // Cloud Functions (europe-west1) — Drive uploads/viewing go through the server
+let driveStatus = null;            // {connected, email, isAdmin, folderLink} from the server, null = unknown
 let cloudUnsub = null;             // firestore onSnapshot unsubscribe fn
 let isApplyingRemote = false;      // guards against feedback loops
 let pushTimer = null;
@@ -1577,11 +1634,11 @@ function initFirebaseIfConfigured(){
     fbApp = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(cfg);
     fbAuth = firebase.auth();
     fbDb = firebase.firestore();
+    try{ fbFunctions = fbApp.functions('europe-west1'); }catch(e){ console.warn("tripcost: functions sdk missing", e); }
     setSyncStatus('', 'מתחבר...');
     // Picks up the result when the page reloads after coming back from Google's
-    // sign-in page (this redirect is only for basic Firebase sign-in now — Drive
-    // access is handled separately via requestDriveReauth, which doesn't reload
-    // the page at all, so it isn't affected by whatever this resolves to).
+    // sign-in page (this redirect is only for basic Firebase sign-in — Drive access
+    // lives on the server, see refreshDriveStatus/connectDrive).
     fbAuth.getRedirectResult().then(result => {
       if (result && result.user) toast("ההתחברות הושלמה ✓");
     }).catch(e => {
@@ -1601,11 +1658,12 @@ function initFirebaseIfConfigured(){
             : `מחובר כ-${user.displayName || user.email || ''}`);
           startCloudListener();
           renderSyncOverlay();
+          refreshDriveStatus();
         });
       } else {
         cloudUser = null;
         syncRef = null; sharedFrom = null; shareMembers = [];
-        clearDriveToken();
+        driveStatus = null;
         if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
         setSyncStatus('off', 'לחצו כאן להתחברות לסנכרון');
       }
@@ -1767,7 +1825,7 @@ function signInWithGoogle(){
   // auth domain (firebaseapp.com) are different sites, and Safari / modern Chrome block the
   // cross-site storage the redirect result travels through — you approve at Google, land back
   // on the page, and nothing happened. GIS returns the token straight to this page instead.
-  const clientId = (driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "").trim();
+  const clientId = DEFAULT_GOOGLE_CLIENT_ID;
   if (clientId && window.google && google.accounts && google.accounts.oauth2){
     try{
       const client = google.accounts.oauth2.initTokenClient({
@@ -1817,127 +1875,140 @@ function signInWithFirebaseFallback(){
   }
 }
 
-function requestDriveReauth(){
-  // Uses Google Identity Services (a lightweight popup Google maintains specifically
-  // for API access tokens) instead of Firebase's redirect-based reauthentication.
-  // The redirect approach requires a full page reload to complete, which depends on
-  // browser storage surviving the round trip to Google and back — something Safari's
-  // privacy protections (and installed home-screen PWAs) frequently break, silently:
-  // the redirect "completes" but no credential ever comes back. This sidesteps that
-  // entirely — no page reload, no storage correlation, just a direct popup response.
-  if (!cloudUser){ toast("יש להתחבר קודם"); return; }
-  const clientId = (driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "").trim();
-  if (!clientId){
-    toast("יש להזין קודם Google OAuth Client ID בהגדרות הסנכרון (למטה בתפריט)");
-    return;
-  }
-  if (!window.google || !google.accounts || !google.accounts.oauth2){
-    toast("ספריית ההתחברות של Google עוד לא נטענה — נסו שוב בעוד רגע");
-    return;
-  }
+/* ---- Google Drive through Cloud Functions (same approach as the receipts app) ----
+   The admin connects Drive once; the refresh token stays on the server, so nobody has to
+   reconnect, and everyone the data is shared with can upload and view files. */
+function callFn(name, timeout){
+  if (!fbFunctions) throw new Error("השרת לא זמין — בדקו חיבור לאינטרנט");
+  return fbFunctions.httpsCallable(name, { timeout: timeout || 60000 });
+}
+function fnError(e){
+  const m = (e && e.message) || "";
+  if (e && e.code === "functions/not-found") return "השרת עוד לא הותקן (Cloud Functions)";
+  if (e && (e.code === "functions/unavailable" || e.code === "functions/deadline-exceeded")) return "אין חיבור לשרת — נסו שוב";
+  if (e && e.code === "functions/internal" && (!m || m === "internal")) return "שגיאת שרת";
+  return m || "שגיאה";
+}
+
+async function refreshDriveStatus(){
+  if (!cloudUser || !fbFunctions){ driveStatus = null; renderDriveSection(); return null; }
   try{
-    const wantsExisting = document.getElementById('toggleExistingFolder').checked;
-    const scope = wantsExisting ? DRIVE_SCOPE_FULL : DRIVE_SCOPE_FILE;
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: scope,
-      // pre-select the account that's signed in to sync, so Google can skip the account picker
-      login_hint: (cloudUser && cloudUser.email) || undefined,
-      callback: (resp) => {
-        if (resp && resp.access_token){
-          saveDriveToken(resp.access_token, resp.expires_in, scope);
-          try{ localStorage.setItem("tripcost.driveGranted", scope); }catch(e){}
-          toast("ההרשאה ל-Drive עודכנה ✓");
-          if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
-        } else {
-          toast("ההרשאה לא התקבלה — נסו שוב");
-        }
-      },
-      error_callback: (err) => {
-        console.error("tripcost: GIS token error", err);
-        toast("ההתחברות נכשלה: " + ((err && err.type) || "שגיאה לא ידועה"));
-      }
-    });
-    // Once consent was given for this scope, prompt:'' lets Google close the popup by itself
-    // without showing the consent screen again — a quick flash instead of a full sign-in.
-    let granted = "";
-    try{ granted = localStorage.getItem("tripcost.driveGranted") || ""; }catch(e){}
-    client.requestAccessToken({ prompt: granted === scope ? "" : "consent" });
+    const res = await callFn("driveStatus", 20000)();
+    driveStatus = res.data || null;
   }catch(e){
-    console.error(e);
-    toast("הפעולה נכשלה: " + (e.message || e.code || ""));
+    console.warn("tripcost: drive status failed", e);
+    driveStatus = { connected:false, error: fnError(e) };
   }
+  renderDriveSection();
+  if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
+  return driveStatus;
 }
 
-async function ensureDriveFolderId(){
-  // Per Google account (kept on the device, not in the shared data): someone you share with
-  // uploads into THEIR OWN Drive folder, not yours. Losing it is harmless — we find it by name.
-  const folderKey = "tripcost.autoDriveFolder." + (cloudUser ? cloudUser.uid : "local");
-  let cachedFolder = null;
-  try{ cachedFolder = localStorage.getItem(folderKey); }catch(e){}
-  if (!cachedFolder && state.autoDriveFolderId && !sharedFrom) cachedFolder = state.autoDriveFolderId;  // legacy
-  if (cachedFolder) return cachedFolder;
-  if (!driveAccessToken) throw new Error("no drive token");
-  const q = encodeURIComponent(`name='${DEFAULT_DRIVE_FOLDER_NAME.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
-    headers: { Authorization: "Bearer " + driveAccessToken }
-  });
-  const searchJson = await searchRes.json();
-  let id = (searchJson.files && searchJson.files[0] && searchJson.files[0].id) || null;
-  if (!id){
-    const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + driveAccessToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: DEFAULT_DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
-    });
-    const createJson = await createRes.json();
-    id = createJson.id;
-  }
-  try{ localStorage.setItem(folderKey, id); }catch(e){}
-  return id;
+function renderDriveSection(){
+  const line = document.getElementById('driveStatusLine');
+  if (!line) return;
+  const text = document.getElementById('driveStatusText');
+  const btn = document.getElementById('btnDriveConnect');
+  const link = document.getElementById('driveFolderLink');
+  const st = driveStatus;
+  line.classList.toggle('ok', !!(st && st.connected));
+  line.classList.toggle('bad', !!(st && !st.connected));
+  if (!st) text.textContent = "בודק…";
+  else if (st.error) text.textContent = "לא ניתן לבדוק: " + st.error;
+  else if (st.connected) text.textContent = "מחובר" + (st.email ? " · " + st.email : "");
+  else text.textContent = st.isAdmin ? "לא מחובר" : "לא מחובר — מנהל החשבון צריך לחבר את הדרייב";
+  btn.style.display = (st && st.isAdmin) ? "block" : "none";
+  btn.textContent = (st && st.connected) ? "חיבור מחדש" : "חיבור Google Drive";
+  btn.className = (st && st.connected) ? "btn-ghost" : "btn-primary";
+  link.style.display = (st && st.connected && st.folderLink) ? "block" : "none";
+  if (st && st.folderLink) link.href = st.folderLink;
 }
 
-async function uploadFileToDrive(file){
-  if (!cloudUser) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
-  // Read the "use existing folder" choice from persisted state, not the checkbox's live
-  // DOM value — the checkbox itself doesn't survive a page reload (and a reload now
-  // happens on every sign-in, since that's a redirect), so relying on it silently sent
-  // uploads to the auto-created default folder instead of the one actually configured.
-  const useExisting = !!driveSettings.useExistingDriveFolder;
-  const explicitFolder = (driveSettings.driveFolderId || "").trim();
-  // Deliberately never pops up a sign-in/consent window from here: this runs deep inside
-  // an async save flow, well past the moment of the user's tap, so browsers block a popup
-  // triggered here anyway (that's exactly what produced the old "no permission" error).
-  // Getting/refreshing the token only happens from a direct click in the sync menu.
-  if (!driveTokenValid()){
-    return { ok:false, reason:"אין הרשאת Drive פעילה — פתחו את תפריט הסנכרון והתחברו מחדש" };
-  }
+async function connectDrive(){
+  const btn = document.getElementById('btnDriveConnect');
+  btn.disabled = true;
   try{
-    const folderId = (useExisting && explicitFolder) ? explicitFolder : await ensureDriveFolderId();
-    const metadata = { name: file.name, mimeType: file.type || "application/octet-stream", parents: [folderId] };
-    const form = new FormData();
-    form.append("metadata", new Blob([JSON.stringify(metadata)], {type:"application/json"}));
-    form.append("file", file);
-    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + driveAccessToken },
-      body: form
+    const res = await callFn("driveAuthUrl", 30000)({ returnUrl: location.origin + location.pathname });
+    location.href = res.data.url;
+  }catch(e){
+    btn.disabled = false;
+    toast("החיבור נכשל: " + fnError(e));
+  }
+}
+
+const DRIVE_RESULTS = {
+  connected: "הדרייב חובר ✓ מעכשיו אין צורך להתחבר מחדש",
+  cancelled: "החיבור לדרייב בוטל",
+  expired: "פג תוקף הבקשה — נסו שוב",
+  "wrong-account": "יש להתחבר לדרייב עם חשבון המנהל",
+  "no-refresh-token": "Google לא החזיר הרשאה קבועה — נסו שוב",
+  "missing-scope": "לא אושרה גישה לדרייב — יש לסמן את תיבת ההרשאה בזמן החיבור",
+  error: "החיבור לדרייב נכשל"
+};
+// Coming back from Google after connecting: #drive=<status>
+(function handleDriveReturn(){
+  const m = /[#&]drive=([\w-]+)/.exec(location.hash || "");
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  setTimeout(() => {
+    toast(DRIVE_RESULTS[m[1]] || DRIVE_RESULTS.error);
+    if (m[1] !== "connected"){ renderSyncOverlay(); showOverlay('overlaySync'); }
+  }, 600);
+})();
+
+// Shrinks big photos (max 2000px, JPEG) so uploads stay fast and under the 7MB limit. PDFs stay as they are.
+async function prepareUpload(file){
+  let blob = file, type = file.type || "", name = file.name || "קובץ";
+  if (!type && /\.pdf$/i.test(name)) type = "application/pdf";
+  if (type.startsWith("image/") && type !== "image/gif" && (file.size > 1.5 * 1024 * 1024 || /heic|heif/.test(type))){
+    try{
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      if (bitmap.close) bitmap.close();
+      const jpeg = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.85));
+      if (jpeg && (jpeg.size < file.size || /heic|heif/.test(type))){
+        blob = jpeg; type = "image/jpeg"; name = name.replace(/\.[^.]+$/, "") + ".jpg";
+      }
+    }catch(e){ console.warn("tripcost: image compression skipped", e); }
+  }
+  return { blob, type, name };
+}
+async function blobToBase64(blob){
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+async function uploadFileToDrive(file, meta){
+  if (!cloudUser || !fbFunctions) return { ok:false, skipped:true }; // sync not connected — attachment stays local-only (IndexedDB)
+  if (driveStatus && !driveStatus.connected && !driveStatus.error) return { ok:false, reason:"הדרייב לא מחובר" };
+  try{
+    const prepared = await prepareUpload(file);
+    if (!/^image\/|^application\/pdf$/.test(prepared.type)) return { ok:false, reason:"אפשר להעלות רק תמונות ו-PDF" };
+    if (prepared.blob.size > 7 * 1024 * 1024) return { ok:false, reason:"הקובץ גדול מ-7MB" };
+    const res = await callFn("uploadAttachment", 120000)({
+      data: await blobToBase64(prepared.blob),
+      mimeType: prepared.type,
+      name: prepared.name,
+      tripName: (meta && meta.tripName) || "",
+      item: (meta && meta.item) || ""
     });
-    if (res.status === 401){
-      clearDriveToken(); // stale — next attempt will ask for a fresh sign-in instead of guessing
-      return { ok:false, reason:"ההרשאה ל-Drive פגה — פתחו את תפריט הסנכרון והתחברו מחדש" };
-    }
-    if (!res.ok){
-      let detail = "שגיאת שרת " + res.status;
-      try{ const errJson = await res.json(); if (errJson.error && errJson.error.message) detail = errJson.error.message; }catch(_e){}
-      return { ok:false, reason: detail };
-    }
-    const json = await res.json();
-    return { ok:true, driveId: json.id, driveUrl: json.webViewLink };
+    return { ok:true, driveId: res.data.driveId, driveUrl: res.data.driveUrl };
   }catch(e){
     console.error("tripcost: drive upload failed", e);
-    return { ok:false, reason: (e && e.message) || "שגיאת רשת" };
+    if (e && e.code === "functions/failed-precondition") refreshDriveStatus();
+    return { ok:false, reason: fnError(e) };
   }
+}
+
+function removeFileFromDrive(driveId){
+  if (!driveId || !cloudUser || !fbFunctions) return;
+  callFn("removeAttachment", 30000)({ driveId }).catch(e => console.warn("tripcost: drive remove failed", e));
 }
 
 function signOutCloud(){
@@ -1963,13 +2034,13 @@ function renderSyncOverlay(){
       : "השינויים נשמרים אוטומטית ומסתנכרנים בין המכשירים שמחוברים לאותו חשבון Google.";
   }
   renderShareSection();
-  document.getElementById('toggleExistingFolder').checked = !!driveSettings.useExistingDriveFolder;
-  document.getElementById('folderIdField').style.display = driveSettings.useExistingDriveFolder ? "block" : "none";
-  document.getElementById('driveFolderIdInput').value = driveSettings.driveFolderId || "";
-  document.getElementById('googleClientIdInput').value = driveSettings.googleClientId || DEFAULT_GOOGLE_CLIENT_ID || "";
+  renderDriveSection();
 }
 
-document.getElementById('syncStatusLine').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+document.getElementById('syncStatusLine').addEventListener('click', () => {
+  renderSyncOverlay(); showOverlay('overlaySync');
+  if (cloudUser) refreshDriveStatus();
+});
 
 /* ---- Sharing UI (owner adds/removes emails; a guest just sees whose data this is) ---- */
 function renderShareSection(){
@@ -2060,29 +2131,10 @@ document.getElementById('btnSaveFirebaseConfig').addEventListener('click', () =>
 });
 
 document.getElementById('btnGoogleSignIn').addEventListener('click', signInWithGoogle);
-document.getElementById('btnRefreshDriveAuth').addEventListener('click', requestDriveReauth);
+document.getElementById('btnDriveConnect').addEventListener('click', connectDrive);
 document.getElementById('btnSignOut').addEventListener('click', () => {
   if (!confirm("להתנתק מהסנכרון? הנתונים המקומיים במכשיר הזה יישארו.")) return;
   signOutCloud();
-});
-document.getElementById('toggleExistingFolder').addEventListener('change', (e) => {
-  document.getElementById('folderIdField').style.display = e.target.checked ? "block" : "none";
-  driveSettings.useExistingDriveFolder = e.target.checked;
-  saveDriveSettings(driveSettings);
-  // Drive scope is chosen at sign-in time — flipping this after already being signed in
-  // means the cached token still only has the old (narrower) scope. Send them to grant
-  // the broader one right away so uploads to an existing folder don't silently fail.
-  if (e.target.checked && cloudUser){
-    requestDriveReauth();
-  }
-});
-document.getElementById('driveFolderIdInput').addEventListener('change', (e) => {
-  driveSettings.driveFolderId = e.target.value.trim();
-  saveDriveSettings(driveSettings);
-});
-document.getElementById('googleClientIdInput').addEventListener('change', (e) => {
-  driveSettings.googleClientId = e.target.value.trim();
-  saveDriveSettings(driveSettings);
 });
 document.getElementById('overlaySync').addEventListener('click', (e) => { if (e.target.id === 'overlaySync') closeOverlay('overlaySync'); });
 
@@ -2758,7 +2810,7 @@ function renderExpenses(){
           ${inTotal(exp) ? "" : `<span class="tag">🚫 לא נכלל בתזרים</span>`}
         </div>
         ${exp.notes ? `<div class="exp-row-note">📝 ${escapeHtml(exp.notes)}</div>` : ""}
-        ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
+        ${exp.attachments && exp.attachments.length ? `<div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl||'')}" data-driveid="${escapeHtml(a.driveId||'')}" data-name="${escapeHtml(a.name||'')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div>` : ""}
         ${locked ? "" : `<div class="exp-actions">
           <button class="mini-btn" data-action="edit" data-id="${exp.id}">עריכה</button>
           <button class="mini-btn danger" data-action="delete" data-id="${exp.id}">מחיקה</button>
@@ -2773,7 +2825,7 @@ function renderExpenses(){
   }));
   list.querySelectorAll('[data-action="edit"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openEditExpense(b.dataset.id); }));
   list.querySelectorAll('[data-action="delete"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); deleteExpense(b.dataset.id); }));
-  list.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openAttachment(b.dataset.open, b.dataset.driveurl); }));
+  list.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openAttachment(b.dataset.open, b.dataset.driveurl, b.dataset.driveid, b.dataset.name); }));
 }
 
 function escapeHtml(s){
@@ -3142,6 +3194,7 @@ let expenseFilter = { type: 'all' }; // {type:'all'} | {type:'pending'} | {type:
 let expandedExpenseId = null; // tap-to-expand: which row (if any) currently shows its full detail
 let currentAttachments = [];      // [{id, name, type, size, file?, isNew?}]
 let removedAttachmentIds = [];    // ids to purge from IndexedDB on save
+let removedDriveIds = [];         // Drive files to move to the trash on save
 
 function renderAttachChips(){
   const wrap = document.getElementById('efAttachList');
@@ -3155,7 +3208,7 @@ function renderAttachChips(){
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.remove);
       const a = currentAttachments[idx];
-      if (a && !a.isNew) removedAttachmentIds.push(a.id);
+      if (a && !a.isNew){ removedAttachmentIds.push(a.id); if (a.driveId) removedDriveIds.push(a.driveId); }
       currentAttachments.splice(idx,1);
       renderAttachChips();
     });
@@ -3372,33 +3425,20 @@ function expCategory(exp){
 
 function updateDriveWarning(){
   const el = document.getElementById('efDriveWarning');
-  // Only worth flagging when they're actually signed in but this session's Drive
-  // token isn't live — if they're not signed in at all, that's communicated
-  // elsewhere (the sync status line), not here.
   const hint = document.getElementById('efDriveHint');
-  if (!cloudUser){ el.style.display = "none"; hint.style.display = "none"; return; }
-  const ok = driveTokenValid();
-  el.style.display = "";
-  el.classList.toggle('expired', !ok);
-  hint.style.display = ok ? "none" : "";
-  if (ok){
-    const mins = Math.max(1, Math.round((driveTokenExp - 120000 - Date.now()) / 60000));
-    el.textContent = `☁️ Drive · עוד ${mins} דק׳`;
-    el.title = "Drive מחובר — לחיצה מחדשת את החיבור לשעה נוספת";
-  } else {
-    el.textContent = "🔄 חידוש חיבור ל-Drive";
-    el.title = "החיבור ל-Drive פג — לחצו לחידוש בלי לצאת מהחלון";
+  // Only flagged when signed in and the server says Drive isn't connected — otherwise
+  // uploads just work, with no timers or reconnects.
+  const bad = !!(cloudUser && driveStatus && !driveStatus.connected && !driveStatus.error);
+  el.style.display = bad ? "" : "none";
+  hint.style.display = bad ? "" : "none";
+  if (bad){
+    el.classList.add('expired');
+    el.textContent = driveStatus.isAdmin ? "☁️ חיבור Google Drive" : "☁️ הדרייב לא מחובר";
+    el.title = "קבצים יישמרו רק במכשיר הזה עד שהדרייב יחובר";
   }
 }
-// Keep the Drive status current while the expense form is open (the token can
-// expire mid-edit).
-setInterval(() => {
-  if (document.getElementById('overlayExpense').classList.contains('show')) updateDriveWarning();
-}, 30000);
 document.getElementById('efDriveWarning').addEventListener('click', () => {
-  // GIS opens a popup rather than navigating away, so the in-progress form survives —
-  // no need to close the sheet first the way the old redirect-based flow required.
-  requestDriveReauth();
+  renderSyncOverlay(); showOverlay('overlaySync'); refreshDriveStatus();
 });
 
 function populateCurrencySelect(trip, currentValue){
@@ -3415,6 +3455,7 @@ function openNewExpense(){
   editingExpenseId = null;
   currentAttachments = [];
   removedAttachmentIds = [];
+  removedDriveIds = [];
   document.getElementById('expFormTitle').textContent = "הוצאה חדשה";
   document.getElementById('efItem').value = "";
   document.getElementById('efDate').value = todayISO();
@@ -3444,6 +3485,7 @@ function openEditExpense(id){
   editingExpenseId = id;
   currentAttachments = (exp.attachments || []).map(a => Object.assign({}, a, {isNew:false}));
   removedAttachmentIds = [];
+  removedDriveIds = [];
   document.getElementById('expFormTitle').textContent = "עריכת הוצאה";
   document.getElementById('efItem').value = exp.item || "";
   document.getElementById('efDate').value = exp.date || todayISO();
@@ -3496,7 +3538,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     for (const a of currentAttachments){
       if (a.isNew){
         await idbPut({id: a.id, blob: a.file, name: a.name, type: a.type, size: a.size});
-        const driveResult = await uploadFileToDrive(a.file).catch(e => ({ok:false, reason:(e&&e.message)||"שגיאה"}));
+        const driveResult = await uploadFileToDrive(a.file, { tripName: trip.name, item }).catch(e => ({ok:false, reason:(e&&e.message)||"שגיאה"}));
         if (driveResult && driveResult.ok){
           a.driveId = driveResult.driveId; a.driveUrl = driveResult.driveUrl;
         } else if (driveResult && !driveResult.skipped){
@@ -3507,6 +3549,8 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     for (const id of removedAttachmentIds){
       await idbDelete(id);
     }
+    removedDriveIds.forEach(removeFileFromDrive);
+    removedDriveIds = [];
   }catch(err){
     console.error(err);
     toast("שמירת הקובץ נכשלה — ההוצאה נשמרה בלי הקובץ");
