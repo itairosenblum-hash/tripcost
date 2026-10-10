@@ -390,10 +390,12 @@
     flex:none;border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;text-decoration:none;
     border-radius:var(--radius-pill);padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;
   }
-  .viewer-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 8px calc(16px + var(--safe-b));}
-  .viewer-body img{max-width:100%;height:auto;touch-action:pinch-zoom;}
-  .viewer-body.zoomed img{max-width:none;width:200%;}
-  .viewer-body canvas{width:100%;max-width:900px;height:auto;background:#fff;border-radius:4px;}
+  /* min-height:0 lets the body scroll inside the flex column; pinch is handled in JS (touch-action) */
+  .viewer-body{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-x pan-y;display:flex;flex-direction:column;padding:10px 8px calc(16px + var(--safe-b));direction:ltr;}
+  .zoom-stage{width:100%;max-width:900px;margin:0 auto;flex:none;display:flex;flex-direction:column;gap:10px;}
+  .zoom-stage.zoomed{max-width:none;}
+  .zoom-stage img{display:block;width:100%;height:auto;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  .zoom-stage canvas{display:block;width:100%;height:auto;background:#fff;border-radius:4px;}
   .viewer-msg{color:#dfe6e4;text-align:center;margin:auto;padding:20px;font-size:15px;line-height:1.5;}
   .viewer-spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;animation:vspin .8s linear infinite;margin:auto;}
   @keyframes vspin{to{transform:rotate(360deg);}}
@@ -1267,7 +1269,6 @@ function viewerOpen(name){
   const dl = document.getElementById('viewerDownload');
   dl.style.visibility = "hidden";
   const body = document.getElementById('viewerBody');
-  body.classList.remove('zoomed');
   body.innerHTML = '<div class="viewer-spin"></div>';
   v.classList.add('show');
   return ++viewerToken;
@@ -1291,9 +1292,14 @@ async function viewerShow(token, blob, name){
   dl.style.visibility = "visible";
   const body = document.getElementById('viewerBody');
   body.innerHTML = "";
+  body.scrollTop = 0; body.scrollLeft = 0;
+  const stage = document.createElement("div");
+  stage.className = "zoom-stage";
+  viewerZoom.reset(stage);
   if (blob.type === "application/pdf"){
+    body.appendChild(stage);
     try{
-      await renderPdfInto(new Uint8Array(await blob.arrayBuffer()), body);
+      await renderPdfInto(new Uint8Array(await blob.arrayBuffer()), stage);
     }catch(e){
       console.error("tripcost: pdf render failed", e);
       if (token === viewerToken) viewerMessage("לא ניתן להציג את הקובץ כאן — אפשר להוריד אותו בכפתור למעלה.");
@@ -1301,15 +1307,65 @@ async function viewerShow(token, blob, name){
   } else if (blob.type.startsWith("image/")){
     const img = document.createElement("img");
     img.src = viewerUrl; img.alt = name || "";
-    body.appendChild(img);
+    img.draggable = false;
+    stage.appendChild(img);
+    body.appendChild(stage);
   } else {
     viewerMessage("אין תצוגה לסוג הקובץ הזה — אפשר להוריד אותו בכפתור למעלה.");
   }
 }
 document.getElementById('viewerClose').addEventListener('click', viewerClose);
-document.getElementById('viewerBody').addEventListener('dblclick', (e) => {
-  if (e.target.tagName === "IMG") e.currentTarget.classList.toggle('zoomed');
-});
+/* Zoom inside the viewer: pinch with two fingers, double-tap (or double-click) to toggle,
+   Ctrl+wheel on desktop. The stage gets wider and the viewer scrolls — the page itself never zooms. */
+const viewerZoom = (() => {
+  const body = document.getElementById('viewerBody');
+  let stage = null, scale = 1, pinch = null, lastTap = 0;
+  const MIN = 1, MAX = 5;
+  function setScale(next, cx, cy){
+    if (!stage) return;
+    next = Math.min(MAX, Math.max(MIN, next));
+    const rect = body.getBoundingClientRect();
+    const px = (cx == null ? rect.width / 2 : cx - rect.left);
+    const py = (cy == null ? rect.height / 2 : cy - rect.top);
+    // keep the point under the fingers in place while the stage grows/shrinks
+    const fx = (body.scrollLeft + px) / Math.max(1, body.scrollWidth);
+    const fy = (body.scrollTop + py) / Math.max(1, body.scrollHeight);
+    scale = next;
+    stage.classList.toggle('zoomed', scale > 1.01);
+    stage.style.width = scale > 1.01 ? (scale * 100) + "%" : "";
+    body.scrollLeft = fx * body.scrollWidth - px;
+    body.scrollTop = fy * body.scrollHeight - py;
+  }
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  body.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2){
+      pinch = { d: dist(e.touches), s: scale };
+    } else if (e.touches.length === 1){
+      const now = Date.now();
+      if (now - lastTap < 300){
+        e.preventDefault();
+        const t = e.touches[0];
+        setScale(scale > 1.01 ? 1 : 2.5, t.clientX, t.clientY);
+        lastTap = 0;
+      } else lastTap = now;
+    }
+  }, { passive: false });
+  body.addEventListener('touchmove', (e) => {
+    if (pinch && e.touches.length === 2){
+      e.preventDefault();
+      const t = e.touches;
+      setScale(pinch.s * dist(t) / pinch.d, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2);
+    }
+  }, { passive: false });
+  body.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+  body.addEventListener('dblclick', (e) => setScale(scale > 1.01 ? 1 : 2.5, e.clientX, e.clientY));
+  body.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setScale(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+  }, { passive: false });
+  return { reset(el){ stage = el; scale = 1; pinch = null; lastTap = 0; } };
+})();
 document.addEventListener('keydown', (e) => {
   if (e.key === "Escape" && document.getElementById('fileViewer').classList.contains('show')) viewerClose();
 });
