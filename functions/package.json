@@ -7,6 +7,7 @@
     "node": "22"
   },
   "dependencies": {
+    "@google/genai": "^2.28.0",
     "@googleapis/drive": "^26.0.2",
     "firebase-admin": "^14.5.0",
     "firebase-functions": "^7.4.0",

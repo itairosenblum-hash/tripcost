@@ -10,6 +10,14 @@
 ב-`functions/`, ולכן לא צריך להתחבר מחדש, וכל מי שהנתונים משותפים איתו רואה את כל הקבצים.
 הקבצים נשמרים בתיקייה "TripCost - קבצים מצורפים" (הרשאה מצומצמת `drive.file`).
 
+## סריקת קבלות
+
+בטופס ההוצאה יש כפתור **סריקת קבלה**: מצלמים או בוחרים קובץ (תמונה או PDF), והפונקציה `scanReceipt`
+שולחת אותו ל-Gemini (כמו בפרויקטים shopping ו-crane) ומחזירה: פריט/חברה, תאריך, מועד חיוב, סכום, מטבע,
+שער (רק אם מודפס על הקבלה, או מחושב מסכום החיוב בש״ח), קטגוריה, אופן תשלום והערות. הקבלה מצורפת להוצאה אוטומטית.
+כשאין שער על הקבלה, האפליקציה מביאה את השער ההיסטורי למועד החיוב. שדות שה-AI לא בטוח בהם מסומנים בכתום.
+הפונקציה לא שומרת כלום בעצמה. נדרש Secret בריפו בשם `GEMINI_API_KEY` (אותו מפתח של shopping, מ-[Google AI Studio](https://aistudio.google.com/apikey)).
+
 ## הגדרה חד-פעמית (אפשר מהטלפון, ב"גרסת מחשב")
 
 1. **Blaze:** [Firebase Console](https://console.firebase.google.com/project/trip-cost-ba9de/usage/details) ← Modify plan ← Blaze. נדרש ל-Cloud Functions; בשימוש כזה זה בפועל בחינם.
@@ -25,6 +33,7 @@
    | `FIREBASE_SERVICE_ACCOUNT` | כל התוכן של קובץ ה-JSON משלב 4 |
    | `GOOGLE_OAUTH_CLIENT_ID` | Client ID משלב 3 |
    | `GOOGLE_OAUTH_CLIENT_SECRET` | Client secret משלב 3 |
+   | `GEMINI_API_KEY` | מפתח Gemini לסריקת קבלות |
 
 6. **פריסה:** Actions ← **Deploy Firebase functions** ← Run workflow. מכאן והלאה כל שינוי ב-`functions/` נפרס אוטומטית.
 7. **חיבור הדרייב:** באפליקציה ← תפריט הסנכרון ← **חיבור Google Drive**, עם החשבון itai.rosenblum@gmail.com, ולאשר את ההרשאה לדרייב.

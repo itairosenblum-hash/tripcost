@@ -11,6 +11,7 @@ import { OAuth2Client } from "google-auth-library";
 import { drive as driveApi } from "@googleapis/drive";
 import crypto from "node:crypto";
 import { Readable } from "node:stream";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 initializeApp();
 const db = getFirestore();
@@ -22,6 +23,11 @@ const CLIENT_ID = defineSecret("GOOGLE_OAUTH_CLIENT_ID");
 const CLIENT_SECRET = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 const APP_URL = defineString("APP_URL", { default: "https://itairosenblum-hash.github.io/tripcost/" });
 const SECRETS = [CLIENT_ID, CLIENT_SECRET];
+// קריאת קבלות עם Gemini (כמו בפרויקטים shopping ו-crane)
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+const GEMINI_MODEL = defineString("GEMINI_MODEL", { default: "gemini-3.8-flash" });
+// מודל גיבוי כשהמודל הראשי עמוס (שגיאת 503)
+const GEMINI_FALLBACK_MODEL = defineString("GEMINI_FALLBACK_MODEL", { default: "gemini-flash-latest" });
 
 const ADMIN_EMAIL = "itai.rosenblum@gmail.com";
 // אותו שם כמו התיקייה שהאפליקציה יצרה עד היום, כדי שהקבצים הקיימים יישארו במקום אחד
@@ -247,4 +253,173 @@ export const removeAttachment = onCall({ secrets: SECRETS }, async (request) => 
   } catch (e) {
     throw driveError(e, "מחיקת הקובץ נכשלה");
   }
+});
+
+/* ---------- receipt scanning (Gemini) ---------- */
+// הפונקציה רק קוראת את הקבלה ומחזירה שדות לטופס ההוצאה — לא שומרת כלום.
+// הקובץ עצמו נשמר בדרייב כרגיל דרך uploadAttachment כשהמשתמש שומר את ההוצאה.
+
+const SCAN_INSTRUCTIONS = `You extract structured data from a receipt, invoice, booking confirmation or card-charge slip for a family trip expense tracker.
+Documents may be in any language (Hebrew, English, German, Italian, Thai, Japanese...). Write Hebrew output text, keeping brand and place names in their original Latin letters.
+Rules:
+- vendor: the business / company name as printed (hotel, airline, restaurant, shop, car rental). Drop legal suffixes like GmbH, Ltd, בע"מ, S.p.A. unless part of the brand.
+- description: 2-5 Hebrew words saying what was bought, only if it adds something beyond the vendor (for example "3 לילות", "השכרת רכב", "ארוחת ערב", "כרטיסי כניסה"). null otherwise.
+- amount: the total actually paid / charged including tax and tip, in the document's own currency, as a number. Ignore subtotals and VAT lines.
+- currency: ISO 4217 code of that amount. € = EUR, $ = USD (unless the country makes it clearly CAD/AUD), £ = GBP, ₪ / ש"ח / NIS = ILS, ¥ = JPY, ฿ = THB, ₺ = TRY, CHF / Fr = CHF.
+- date: the purchase / transaction date, YYYY-MM-DD. For a hotel use the stay's check-in date. Many countries print day first (DD/MM/YY, DD.MM.YYYY); US documents print month first.
+- chargeDate: YYYY-MM-DD of the actual card charge (מועד חיוב / תאריך חיוב / charge date / debit date) ONLY if printed separately from the purchase date, else null.
+- paymentMethod: "card" for a credit/debit card or Apple/Google Pay, "cash" for cash, "other" for bank transfer, Bit, PayPal and the like, null if not shown.
+- paid: true if the document shows the amount was paid (a receipt, a charge slip, "paid", "שולם"). false for a quote, a reservation without payment, or "pay at property". null if unclear.
+- chargedAmountILS: if the document also shows the amount charged in Israeli shekels (an Israeli card slip, a dynamic currency conversion line, "סכום חיוב בש\"ח"), that ILS number, else null.
+- exchangeRate: ONLY a conversion rate to ILS explicitly printed on the document (שער / exchange rate / Kurs), else null. Never use your own knowledge of exchange rates.
+- categoryId: exactly one of the category ids given, by what was bought. Flights and car rentals share one category. Taxis, trains, fuel, parking and public transport go under transport. Restaurants, cafes and supermarkets go under food.
+- notes: one short Hebrew line with details worth keeping (number of nights, number of people, reservation or order number), or null.
+- Use null for anything not on the document. Never invent dates or amounts.
+- confidence: 0 to 1 per field, honest. Use below 0.7 when the text is blurry, cut off, handwritten or ambiguous.`;
+
+const SCAN_FIELDS = ["vendor", "description", "amount", "currency", "date", "chargeDate", "paymentMethod", "paid",
+  "chargedAmountILS", "exchangeRate", "categoryId", "notes"];
+
+const SCAN_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    vendor: { type: Type.STRING, nullable: true },
+    description: { type: Type.STRING, nullable: true },
+    amount: { type: Type.NUMBER, nullable: true },
+    currency: { type: Type.STRING, nullable: true },
+    date: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+    chargeDate: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+    paymentMethod: { type: Type.STRING, nullable: true, enum: ["card", "cash", "other"] },
+    paid: { type: Type.BOOLEAN, nullable: true },
+    chargedAmountILS: { type: Type.NUMBER, nullable: true },
+    exchangeRate: { type: Type.NUMBER, nullable: true },
+    categoryId: { type: Type.STRING },
+    notes: { type: Type.STRING, nullable: true },
+    confidence: {
+      type: Type.OBJECT,
+      properties: Object.fromEntries(["vendor", "amount", "currency", "date", "categoryId"].map((f) => [f, { type: Type.NUMBER }]))
+    }
+  },
+  required: [...SCAN_FIELDS, "confidence"],
+  propertyOrdering: [...SCAN_FIELDS, "confidence"]
+};
+
+const validDate = (v) => {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = Date.parse(s + "T00:00:00Z");
+  return Number.isFinite(t) ? s : null;
+};
+const posNum = (v, max = 1e8) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < max ? v : null);
+const cleanStr = (v, max = 120) => {
+  if (v == null) return null;
+  const s = String(v).replace(/\s+/g, " ").trim();
+  return s && s !== "null" ? s.slice(0, max) : null;
+};
+
+export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  await requireAllowed(request);
+  const { data, mimeType, categories, tripName, tripStart } = request.data || {};
+  const type = String(mimeType || "");
+  if (!isAllowedType(type)) throw new HttpsError("invalid-argument", `סוג קובץ לא נתמך: ${type}`);
+  const buffer = Buffer.from(String(data || ""), "base64");
+  if (buffer.length < 100) throw new HttpsError("invalid-argument", "הקובץ ריק");
+  if (buffer.length > MAX_BYTES) throw new HttpsError("invalid-argument", "הקובץ גדול מדי (עד 7MB)");
+
+  // הקטגוריות מגיעות מהאפליקציה כדי שהתשובה תתאים בדיוק לרשימה שלה
+  const cats = (Array.isArray(categories) ? categories : []).map((c) => cleanStr(c, 40)).filter(Boolean).slice(0, 30);
+  if (!cats.length) cats.push("שונות");
+  const ids = cats.map((_, i) => `c${i}`);
+  const context = [
+    "Categories (id: name):",
+    ...cats.map((c, i) => `- c${i}: ${c}`),
+    tripName ? `\nTrip: ${cleanStr(tripName, 60)}` : "",
+    validDate(tripStart) ? `Trip starts ${tripStart}. Use it to resolve ambiguous or two-digit years.` : "",
+    `Today is ${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" })}.`
+  ].filter(Boolean).join("\n");
+
+  const schema = structuredClone(SCAN_SCHEMA);
+  schema.properties.categoryId.enum = ids;
+
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.value(), httpOptions: { timeout: 120000 } });
+  const ask = (model) => ai.models.generateContent({
+    model,
+    contents: [{ role: "user", parts: [
+      { inlineData: { mimeType: type, data: buffer.toString("base64") } },
+      { text: context }
+    ] }],
+    config: {
+      systemInstruction: SCAN_INSTRUCTIONS,
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      temperature: 0,
+      // קריאת קבלה לא דורשת חשיבה ארוכה; ברירת המחדל של המודל איטית מדי
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+    }
+  });
+
+  // עומס זמני אצל Gemini (503/429) — מנסים שוב, ואז עוברים למודל הגיבוי. מכסה שנגמרה — אין טעם לנסות שוב
+  const quota = (e) => /exceeded your current quota|billing/i.test(String(e?.message || ""));
+  const busy = (e) => !quota(e) && /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand/i.test(String(e?.status || "") + " " + String(e?.message || ""));
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const primary = GEMINI_MODEL.value();
+  const fallback = GEMINI_FALLBACK_MODEL.value();
+  const plan = [[primary, 0], [primary, 2000], [primary, 5000], [fallback, 0], [fallback, 4000]];
+  let r, usedModel, lastErr;
+  for (let i = 0; i < plan.length; i++) {
+    const [model, wait] = plan[i];
+    if (wait) await sleep(wait);
+    try {
+      r = JSON.parse((await ask(model)).text);
+      usedModel = model;
+      break;
+    } catch (e) {
+      lastErr = e;
+      logger.warn("gemini attempt failed", { model, message: String(e?.message || e).slice(0, 300) });
+      if (quota(e)) break;
+      if (!busy(e) && model === primary) i = plan.findIndex(([m]) => m === fallback) - 1;
+    }
+  }
+  if (!r) {
+    logger.error("gemini receipt scan failed", lastErr?.message || lastErr);
+    const msg = String(lastErr?.message || lastErr?.cause?.message || "");
+    if (quota(lastErr)) throw new HttpsError("resource-exhausted", "מכסת השימוש ב-AI נגמרה. בינתיים אפשר למלא ידנית.");
+    throw new HttpsError("unavailable", busy(lastErr)
+      ? "שירות ה-AI עמוס כרגע. נסו שוב בעוד דקה או מלאו ידנית."
+      : /timeout|aborted/i.test(msg) ? "הסריקה לקחה יותר מדי זמן. נסו שוב או מלאו ידנית." : "הסריקה נכשלה. אפשר למלא את הפרטים ידנית.");
+  }
+
+  // ניקוי ובדיקות סבירות
+  const currency = typeof r.currency === "string" && /^[A-Z]{3}$/.test(r.currency.trim().toUpperCase()) ? r.currency.trim().toUpperCase() : null;
+  const amount = posNum(r.amount);
+  const chargedAmountILS = posNum(r.chargedAmountILS);
+  let exchangeRate = posNum(r.exchangeRate, 1000);
+  // שער שלא הודפס אבל אפשר לחשב: סכום בש"ח חלקי הסכום במטבע המקורי
+  let rateSource = exchangeRate ? "printed" : null;
+  if (!exchangeRate && currency && currency !== "ILS" && amount && chargedAmountILS) {
+    exchangeRate = Math.round((chargedAmountILS / amount) * 10000) / 10000;
+    rateSource = "computed";
+  }
+  if (currency === "ILS") { exchangeRate = null; rateSource = null; }
+  const vendor = cleanStr(r.vendor, 60);
+  const description = cleanStr(r.description, 40);
+  const catIndex = ids.indexOf(r.categoryId);
+
+  return {
+    model: usedModel,
+    vendor,
+    item: [vendor, description].filter(Boolean).join(" · ") || null,
+    amount,
+    currency,
+    date: validDate(r.date),
+    chargeDate: validDate(r.chargeDate),
+    paymentMethod: ["card", "cash", "other"].includes(r.paymentMethod) ? r.paymentMethod : null,
+    paid: typeof r.paid === "boolean" ? r.paid : null,
+    chargedAmountILS,
+    exchangeRate,
+    rateSource,
+    category: catIndex >= 0 ? cats[catIndex] : null,
+    notes: cleanStr(r.notes, 160),
+    confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
+  };
 });

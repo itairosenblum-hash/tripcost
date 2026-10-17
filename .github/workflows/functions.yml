@@ -1,6 +1,6 @@
 name: Deploy Firebase functions
 # פריסה אוטומטית של ה-Cloud Functions (חיבור קבוע לדרייב) בכל שינוי בהן ב-main (גם ידנית: Run workflow).
-# נדרשים Secrets בריפו: FIREBASE_SERVICE_ACCOUNT, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET
+# נדרשים Secrets בריפו: FIREBASE_SERVICE_ACCOUNT, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GEMINI_API_KEY (סריקת קבלות)
 # חוקי Firestore לא נפרסים מכאן, הם ממשיכים להתעדכן ידנית ב-Firebase Console.
 
 on:
@@ -18,7 +18,7 @@ concurrency:
 
 env:
   PROJECT: trip-cost-ba9de
-  SERVICES: driveauthurl drivecallback drivestatus uploadattachment getattachment removeattachment
+  SERVICES: driveauthurl drivecallback drivestatus uploadattachment getattachment removeattachment scanreceipt
 
 jobs:
   deploy:
@@ -54,9 +54,10 @@ jobs:
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -euo pipefail
-          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET; do
+          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GEMINI_API_KEY; do
             # מסיר רווחים ושורות ריקות שנכנסים בהעתקה מהטלפון
             value="$(printf '%s' "${!name}" | tr -d '[:space:]')"
             if [ -z "$value" ]; then
@@ -72,7 +73,7 @@ jobs:
             fi
           done
           # כתיבת גרסאות הסודות לתיקיית הפונקציות מבטיחה פריסה מחדש כשסוד מתעדכן
-          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET; do
+          for name in GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET GEMINI_API_KEY; do
             v="$(gcloud secrets versions list "$name" --project "$PROJECT" --filter='state=ENABLED' --sort-by='~createTime' --limit=1 --format='value(name)')"
             echo "$name=$v"
           done > functions/.secret-versions

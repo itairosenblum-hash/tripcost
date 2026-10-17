@@ -527,6 +527,30 @@
   }
   .btn-danger-outline{color:var(--danger);border-color:var(--danger-tint);background:var(--danger-tint);}
   .hint{font-size:13.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:14px;}
+
+  /* ---- Receipt scanning ---- */
+  .scan-box{margin-bottom:16px;}
+  .scan-btn{
+    width:100%;display:flex;align-items:center;gap:12px;text-align:start;cursor:pointer;
+    background:var(--teal-tint);color:var(--teal-dark);border:1.5px dashed var(--teal);
+    border-radius:var(--radius-sm);padding:11px 14px;font:inherit;
+  }
+  .scan-btn:disabled{opacity:.55;cursor:wait;}
+  .scan-em{font-size:24px;line-height:1;}
+  .scan-txt{display:flex;flex-direction:column;gap:2px;}
+  .scan-txt b{font-size:15.5px;}
+  .scan-txt small{font-size:12.5px;color:var(--ink-soft);font-weight:500;}
+  .scan-status{display:flex;align-items:center;gap:8px;margin-top:8px;border-radius:var(--radius-sm);padding:8px 11px;
+    font-size:13.5px;font-weight:600;background:var(--teal-tint);color:var(--teal-dark);}
+  .scan-status[hidden]{display:none;}
+  .scan-status.error{background:var(--amber-tint);color:#8a6417;}
+  .scan-spin{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:spin .8s linear infinite;}
+  .scan-spin[hidden]{display:none;}
+  .field.uncertain input,.field.uncertain select{border:2px solid var(--amber) !important;}
+  .field.uncertain .cat-grid{outline:2px solid var(--amber);outline-offset:4px;border-radius:var(--radius-sm);}
+  .field.uncertain::after{content:"לא זוהה בוודאות — כדאי לבדוק מול הקבלה";display:block;font-size:12px;color:#8a6417;margin-top:4px;}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .field.uncertain::after,:root:not([data-theme="light"]) .scan-status.error{color:var(--amber);}}
+  :root[data-theme="dark"] .field.uncertain::after,:root[data-theme="dark"] .scan-status.error{color:var(--amber);}
   .divider{height:1px;background:var(--border);margin:18px 0;}
   .trip-list-item{
     display:flex;align-items:center;justify-content:space-between;padding:12px 4px;border-bottom:1px solid var(--border);
@@ -909,17 +933,29 @@
     <div class="sheet-handle"></div>
     <h2 id="expFormTitle">הוצאה חדשה</h2>
 
-    <div class="field">
+    <div class="scan-box">
+      <button type="button" class="scan-btn" id="btnScanReceipt">
+        <span class="scan-em">🧾</span>
+        <span class="scan-txt"><b>סריקת קבלה</b><small>צילום או קובץ — הפרטים ימולאו אוטומטית</small></span>
+      </button>
+      <input type="file" id="efScanInput" accept="image/*,application/pdf" hidden>
+      <div class="scan-status" id="efScanStatus" hidden>
+        <span class="scan-spin" id="efScanSpin"></span>
+        <span id="efScanText"></span>
+      </div>
+    </div>
+
+    <div class="field" id="efItemField">
       <label>פריט</label>
       <input type="text" id="efItem" placeholder="לדוגמה: מלון בזלצבורג">
     </div>
 
-    <div class="field">
+    <div class="field" id="efCategoryField">
       <label>קטגוריה</label>
       <div class="cat-grid" id="efCategoryGrid"></div>
     </div>
 
-    <div class="field">
+    <div class="field" id="efDateField">
       <label>תאריך</label>
       <input type="date" id="efDate">
     </div>
@@ -938,11 +974,11 @@
     </div>
 
     <div class="grid2">
-      <div class="field">
+      <div class="field" id="efAmountField">
         <label>סכום</label>
         <input type="number" id="efAmount" inputmode="decimal" step="0.01" placeholder="0">
       </div>
-      <div class="field">
+      <div class="field" id="efCurrencyField">
         <label>מטבע</label>
         <select id="efCurrency">
           <option value="שקל">שקל ₪</option>
@@ -3491,11 +3527,22 @@ function updateRateFieldVisibility(){
   updateTotalHint();
 }
 
+// A rate printed on a scanned receipt wins over the automatic historical lookups.
+let scanRateLock = null; // {currency, rate} | null
+function showLockedRate(hint, currency){
+  if (!scanRateLock || scanRateLock.currency !== currency) return false;
+  document.getElementById('efRate').value = scanRateLock.rate;
+  updateTotalHint();
+  hint.style.display = "block";
+  hint.textContent = `שער ${currency}→שקל ${scanRateLock.label}: ${scanRateLock.rate} (אפשר לערוך ידנית)`;
+  return true;
+}
 async function applyExpenseDateRate(){
   const currency = document.getElementById('efCurrency').value;
   if (currency === "שקל") return;
   const dateVal = document.getElementById('efDate').value;
   const hint = document.getElementById('efRateDateHint');
+  if (showLockedRate(hint, currency)) return;
   if (!dateVal){ hint.style.display = "none"; return; }
   hint.style.display = "block";
   hint.textContent = "מחפש את שער " + currency + " ליום " + fmtDate(dateVal) + "...";
@@ -3503,6 +3550,7 @@ async function applyExpenseDateRate(){
   // The date/currency may have changed again while this was in flight — only apply
   // if the form still matches what we looked up.
   if (document.getElementById('efCurrency').value !== currency || document.getElementById('efDate').value !== dateVal) return;
+  if (showLockedRate(hint, currency)) return;
   if (rate){
     document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
     updateTotalHint();
@@ -3520,9 +3568,9 @@ function updateTotalHint(){
   document.getElementById('efTotalHint').textContent = "סה״כ עלות: ₪" + fmtMoney(amount * rate);
 }
 
-document.getElementById('efCurrency').addEventListener('change', updateRateFieldVisibility);
+document.getElementById('efCurrency').addEventListener('change', () => { scanRateLock = null; updateRateFieldVisibility(); });
 document.getElementById('efAmount').addEventListener('input', updateTotalHint);
-document.getElementById('efRate').addEventListener('input', updateTotalHint);
+document.getElementById('efRate').addEventListener('input', () => { scanRateLock = null; updateTotalHint(); });
 
 document.getElementById('efInTotalPill').addEventListener('click', function(){ setInTotalUI(!this.classList.contains('on')); });
 
@@ -3548,9 +3596,11 @@ async function applyPaidDate(iso){
   const hint = document.getElementById('efPaidRateHint');
   const currency = document.getElementById('efCurrency').value;
   if (currency === "שקל"){ hint.style.display = "none"; return; }
+  if (showLockedRate(hint, currency)) return;
   hint.style.display = "block";
   hint.textContent = "מחפש את שער " + currency + " ליום " + fmtDate(iso) + "...";
   const rate = await fetchHistoricalRate(currency, iso);
+  if (showLockedRate(hint, currency)) return;
   if (rate){
     document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
     updateTotalHint();
@@ -3704,6 +3754,7 @@ function openNewExpense(){
   if (!trip){ toast("יש ליצור טיול קודם"); return; }
   if (guardLocked()) return;
   editingExpenseId = null;
+  resetScanUI();
   currentAttachments = [];
   removedAttachmentIds = [];
   removedDriveIds = [];
@@ -3734,6 +3785,7 @@ function openEditExpense(id){
   const exp = trip.expenses.find(e => e.id === id);
   if (!exp) return;
   editingExpenseId = id;
+  resetScanUI();
   currentAttachments = (exp.attachments || []).map(a => Object.assign({}, a, {isNew:false}));
   removedAttachmentIds = [];
   removedDriveIds = [];
@@ -3769,6 +3821,183 @@ function openEditExpense(id){
   renderAttachChips();
   updateTotalHint();
   showOverlay('overlayExpense');
+}
+
+/* -- receipt scanning (Gemini through the scanReceipt Cloud Function, like the shopping & crane apps) -- */
+let scanSeq = 0;          // bumps on every scan and whenever the sheet reopens, so stale results are dropped
+let scanAttachId = null;  // the attachment the last scan added (replaced on rescan, not duplicated)
+
+function scanStatus(state, text){
+  const box = document.getElementById('efScanStatus');
+  box.hidden = !state;
+  box.classList.toggle('error', state === 'error');
+  document.getElementById('efScanSpin').hidden = state !== 'busy';
+  document.getElementById('efScanText').textContent = text || "";
+}
+function resetScanUI(){
+  scanSeq++;
+  scanAttachId = null;
+  scanRateLock = null;
+  scanStatus(null);
+  const btn = document.getElementById('btnScanReceipt');
+  btn.disabled = false;
+  document.querySelectorAll('#overlayExpense .field.uncertain').forEach(f => f.classList.remove('uncertain'));
+}
+// Any manual edit clears the "not sure" mark on that field.
+document.getElementById('overlayExpense').addEventListener('input', (e) => {
+  const f = e.target.closest && e.target.closest('.field');
+  if (f) f.classList.remove('uncertain');
+});
+document.getElementById('efCategoryGrid').addEventListener('click', () => document.getElementById('efCategoryField').classList.remove('uncertain'));
+
+document.getElementById('btnScanReceipt').addEventListener('click', () => {
+  if (!cloudUser || !fbFunctions){ toast("סריקת קבלה זמינה אחרי כניסה עם Google (תפריט הסנכרון)"); return; }
+  document.getElementById('efScanInput').click();
+});
+document.getElementById('efScanInput').addEventListener('change', async (e) => {
+  const original = (e.target.files || [])[0];
+  e.target.value = "";
+  if (!original) return;
+  const trip = activeTrip();
+  if (!trip) return;
+  const seq = ++scanSeq;
+  const btn = document.getElementById('btnScanReceipt');
+  const saveBtn = document.getElementById('btnSaveExpense');
+  btn.disabled = true; saveBtn.disabled = true;
+  scanStatus('busy', "קורא את הקבלה…");
+
+  // The receipt is attached to the expense whether or not the reading succeeds.
+  let attachFile = original;
+  if ((original.type || "").startsWith("image/")){
+    try{ attachFile = await imageToPdf(original); }catch(err){ console.warn("tripcost: pdf conversion failed, keeping the image", err); }
+  }
+
+  let result = null, error = "";
+  try{
+    const prepared = await prepareUpload(original);
+    if (!/^image\/|^application\/pdf$/.test(prepared.type)) throw new Error("אפשר לסרוק רק תמונה או PDF");
+    if (prepared.blob.size > 7 * 1024 * 1024) throw new Error("הקובץ גדול מ-7MB");
+    const res = await callFn("scanReceipt", 200000)({
+      data: await blobToBase64(prepared.blob),
+      mimeType: prepared.type,
+      categories: CATEGORIES,
+      tripName: trip.name || "",
+      tripStart: trip.startDate || ""
+    });
+    result = res.data;
+  }catch(err){
+    console.warn("tripcost: receipt scan failed", err);
+    error = fnError(err);
+  }
+  if (seq !== scanSeq) return; // the sheet was closed / reopened meanwhile
+
+  if (scanAttachId){
+    currentAttachments = currentAttachments.filter(a => !(a.id === scanAttachId && a.isNew));
+  }
+  scanAttachId = uid();
+  currentAttachments.push({ id: scanAttachId, name: attachFile.name || "קבלה.pdf", type: attachFile.type, size: attachFile.size, file: attachFile, isNew: true });
+  renderAttachChips();
+
+  if (result){
+    const unsupported = await applyScan(result, trip);
+    if (seq !== scanSeq) return;
+    scanStatus(unsupported ? 'error' : 'done', unsupported
+      ? `המטבע ${unsupported} לא נתמך — הסכום נכתב בהערות. הקבלה צורפה.`
+      : "הפרטים מולאו מהקבלה והיא צורפה להוצאה. בדקו לפני השמירה ✓");
+  } else {
+    scanStatus('error', (error || "הסריקה נכשלה") + " — הקבלה צורפה, אפשר למלא ידנית.");
+  }
+  btn.disabled = false; saveBtn.disabled = false;
+});
+
+// Fills the expense form from a scan result. Returns the ISO code of an unsupported currency, if any.
+async function applyScan(d, trip){
+  const conf = d.confidence || {};
+  const low = (k) => typeof conf[k] === "number" && conf[k] < 0.7;
+  const mark = (id, on) => { if (on) document.getElementById(id).classList.add('uncertain'); };
+  document.querySelectorAll('#overlayExpense .field.uncertain').forEach(f => f.classList.remove('uncertain'));
+  const notesEl = document.getElementById('efNotes');
+  const addNote = (t) => { if (t && !notesEl.value.includes(t)) notesEl.value = notesEl.value.trim() ? notesEl.value.trim() + " · " + t : t; };
+
+  if (d.item) document.getElementById('efItem').value = d.item;
+  mark('efItemField', !d.item || low('vendor'));
+
+  if (d.category) setCategoryUI(d.category);
+  mark('efCategoryField', !d.category || low('categoryId'));
+
+  if (d.date) document.getElementById('efDate').value = d.date;
+  mark('efDateField', !d.date || low('date'));
+
+  if (d.paymentMethod === "card") setPaymentUI("אשראי");
+  else if (d.paymentMethod === "cash") setPaymentUI("מזומן");
+  else if (d.paymentMethod === "other"){ setPaymentUI("אחר"); document.getElementById('efPaymentOther').value = ""; }
+
+  // Currency + amount
+  const sel = document.getElementById('efCurrency');
+  const amountEl = document.getElementById('efAmount');
+  const curName = d.currency ? Object.keys(CURRENCY_CODE).find(n => CURRENCY_CODE[n] === d.currency) : null;
+  let unsupported = null;
+  scanRateLock = null;
+  if (curName){
+    if (![...sel.options].some(o => o.value === curName)){
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(curName)}">${escapeHtml(curName)} ${CUR_SYMBOL[curName]}</option>`);
+    }
+    sel.value = curName;
+    if (d.amount) amountEl.value = d.amount;
+    if (curName !== "שקל" && d.exchangeRate){
+      scanRateLock = { currency: curName, rate: d.exchangeRate, label: d.rateSource === "computed" ? "לפי סכום החיוב בש״ח" : "מהקבלה" };
+    }
+  } else if (d.currency && d.chargedAmountILS){
+    // A currency the app doesn't track, but the receipt shows what was charged in shekels.
+    sel.value = "שקל";
+    amountEl.value = d.chargedAmountILS;
+    if (d.amount) addNote(`סכום מקורי: ${d.amount} ${d.currency}`);
+  } else {
+    if (d.amount) amountEl.value = d.amount;
+    if (d.currency){ unsupported = d.currency; amountEl.value = ""; if (d.amount) addNote(`סכום בקבלה: ${d.amount} ${d.currency}`); }
+  }
+  mark('efAmountField', !amountEl.value || low('amount'));
+  mark('efCurrencyField', !!unsupported || (!d.currency) || low('currency'));
+
+  addNote(d.notes);
+
+  // Paid + charge date (מועד חיוב)
+  const paidPill = document.getElementById('efPaidPill');
+  const paid = d.paid === true || (d.paid == null && !!d.chargeDate);
+  let paidDate = "";
+  if (paid){
+    paidDate = d.chargeDate || d.date || todayISO();
+    paidPill.classList.add('on');
+    pendingPaidDate = paidDate;
+    document.getElementById('efPaidDateField').style.display = "block";
+    const isToday = paidDate === todayISO();
+    document.getElementById('efPaidDateSeg').querySelectorAll('button').forEach(b =>
+      b.classList.toggle('active', isToday ? b.dataset.val === 'today' : b.dataset.val === 'other'));
+    const di = document.getElementById('efPaidDateInput');
+    di.style.display = isToday ? "none" : "block";
+    di.value = paidDate;
+  } else if (d.paid === false){
+    paidPill.classList.remove('on');
+    document.getElementById('efPaidDateField').style.display = "none";
+    pendingPaidDate = "";
+  }
+
+  // Rate: printed on the receipt → use it; otherwise the rate on the charge date (or purchase date).
+  const cur = sel.value;
+  const rateField = document.getElementById('efRateField');
+  document.getElementById('efRateDateHint').style.display = "none";
+  document.getElementById('efPaidRateHint').style.display = "none";
+  if (cur === "שקל"){
+    rateField.style.display = "none";
+    document.getElementById('efRate').value = 1;
+  } else {
+    rateField.style.display = "block";
+    document.getElementById('efRate').value = rateFor(cur);
+    if (paid) await applyPaidDate(paidDate);
+    else await applyExpenseDateRate();
+  }
+  updateTotalHint();
+  return unsupported;
 }
 
 document.getElementById('btnAddExpense').addEventListener('click', openNewExpense);
