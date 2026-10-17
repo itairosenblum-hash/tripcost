@@ -256,6 +256,7 @@ export const removeAttachment = onCall({ secrets: SECRETS }, async (request) => 
 });
 
 /* ---------- receipt scanning (Gemini) ---------- */
+// (GEMINI_API_KEY מגיע מ-Secret בריפו ומסונכרן בפריסה)
 // הפונקציה רק קוראת את הקבלה ומחזירה שדות לטופס ההוצאה — לא שומרת כלום.
 // הקובץ עצמו נשמר בדרייב כרגיל דרך uploadAttachment כשהמשתמש שומר את ההוצאה.
 
