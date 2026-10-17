@@ -528,6 +528,10 @@
   .btn-danger-outline{color:var(--danger);border-color:var(--danger-tint);background:var(--danger-tint);}
   .hint{font-size:13.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:14px;}
 
+  /* ---- Version footer (like matlam): when this page was published, plus a hint if GitHub has a newer one ---- */
+  #versionFooter{text-align:center;font-size:12px;color:var(--ink-soft);padding:18px 10px 96px;}
+  #versionFooter a{color:var(--teal-dark);font-weight:700;}
+
   /* ---- Receipt scanning ---- */
   .scan-box{margin-bottom:16px;}
   .scan-btn{
@@ -768,6 +772,7 @@
       </section>
     </div>
 
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:00</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -4202,6 +4207,40 @@ window.addEventListener('scroll', () => {
 document.getElementById('mainCol').addEventListener('scroll', (e) => {
   if (WIDE_MQ.matches) document.getElementById('topbar').classList.toggle('scrolled', e.target.scrollTop > 4);
 }, {passive:true});
+
+/* ---- Version check (same as matlam) ----
+   BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
+   newer commit of index.html than the one loaded, the footer offers a refresh. */
+const BUILD_STAMP = '17/10/2026 22:00';
+const BUILD_EPOCH = 1792263612698; // ms — when this exact file was pushed
+async function reloadFresh(){
+  try{
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update().catch(() => {});
+    if ('caches' in window){ const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+  }catch(e){}
+  location.reload();
+}
+function checkForNewVersion(){
+  fetch('https://api.github.com/repos/itairosenblum-hash/tripcost/commits?sha=main&path=index.html&per_page=1', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(list => {
+      const c = Array.isArray(list) ? list[0] : null;
+      const commitMs = c && c.commit && c.commit.committer ? Date.parse(c.commit.committer.date) : 0;
+      if (!commitMs || commitMs <= BUILD_EPOCH + 2 * 60 * 1000) return; // 2-min push tolerance
+      const hint = document.getElementById('versionUpdateHint');
+      if (hint && !hint.firstChild){
+        hint.append(" · ");
+        const a = document.createElement('a');
+        a.href = "#"; a.textContent = "🔄 גרסה חדשה זמינה — רענון";
+        a.addEventListener('click', (e) => { e.preventDefault(); reloadFresh(); });
+        hint.append(a);
+      }
+    })
+    .catch(() => {}); // quiet when offline
+}
+checkForNewVersion();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewVersion(); });
 
 if ('serviceWorker' in navigator){
   window.addEventListener('load', () => {

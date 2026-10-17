@@ -40,5 +40,6 @@
 
 ## פריסת האתר
 
-`index.html` ו-`sw.js` מוגשים מ-GitHub Pages מהענף `main`. בכל שינוי בקבצי האתר מעלים את `CACHE_NAME` ב-`sw.js`.
+`index.html` ו-`sw.js` מוגשים מ-GitHub Pages מהענף `main`. בכל שינוי בקבצי האתר מעלים את `CACHE_NAME` ב-`sw.js`,
+ומעדכנים ב-`index.html` את `BUILD_STAMP`, `BUILD_EPOCH` ואת `versionStamp` בתחתית הדף (כמו ב-matlam). כשב-GitHub יש גרסה חדשה יותר מזו שנטענה, מופיע בתחתית קישור "גרסה חדשה זמינה — רענון".
 חוקי Firestore (`firestore.rules`) מתעדכנים ידנית ב-Firebase Console.
