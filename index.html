@@ -565,7 +565,13 @@
     background:var(--teal-tint);color:var(--teal-dark);border:1.5px dashed var(--teal);
     border-radius:var(--radius-sm);padding:11px 14px;font:inherit;
   }
-  .scan-btn:disabled{opacity:.55;cursor:wait;}
+  .scan-btn{cursor:default;}
+  .scan-btn.busy{opacity:.55;pointer-events:none;}
+  .scan-txt{flex:1;min-width:0;}
+  .scan-actions{display:flex;gap:6px;flex:none;}
+  .scan-pick{font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;white-space:nowrap;padding:8px 11px;border-radius:var(--radius-pill);
+    background:var(--card);color:var(--teal-dark);border:1px solid var(--teal);}
+  .scan-pick:active{transform:scale(.97);}
   .scan-em{font-size:24px;line-height:1;}
   .scan-txt{display:flex;flex-direction:column;gap:2px;}
   .scan-txt b{font-size:15.5px;}
@@ -798,7 +804,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:06</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:11</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -965,10 +971,15 @@
     <h2 id="expFormTitle">הוצאה חדשה</h2>
 
     <div class="scan-box">
-      <button type="button" class="scan-btn" id="btnScanReceipt">
+      <div class="scan-btn" id="btnScanReceipt">
         <span class="scan-em">🧾</span>
-        <span class="scan-txt"><b>סריקת קבלה</b><small>צילום או קובץ — הפרטים ימולאו אוטומטית</small></span>
-      </button>
+        <span class="scan-txt"><b>סריקת קבלה</b><small>הפרטים ימולאו אוטומטית</small></span>
+        <span class="scan-actions">
+          <button type="button" class="scan-pick" id="btnScanCamera">📷 צילום</button>
+          <button type="button" class="scan-pick" id="btnScanFile">📁 קובץ</button>
+        </span>
+      </div>
+      <input type="file" id="efScanCamera" accept="image/*" capture="environment" hidden>
       <input type="file" id="efScanInput" accept="image/*,application/pdf" hidden>
       <div class="scan-status" id="efScanStatus" hidden>
         <span class="scan-spin" id="efScanSpin"></span>
@@ -3918,8 +3929,7 @@ function resetScanUI(){
   scanAttachId = null;
   scanRateLock = null;
   scanStatus(null);
-  const btn = document.getElementById('btnScanReceipt');
-  btn.disabled = false;
+  document.getElementById('btnScanReceipt').classList.remove('busy');
   document.querySelectorAll('#overlayExpense .field.uncertain').forEach(f => f.classList.remove('uncertain'));
 }
 // Any manual edit clears the "not sure" mark on that field.
@@ -3929,11 +3939,16 @@ document.getElementById('overlayExpense').addEventListener('input', (e) => {
 });
 document.getElementById('efCategoryGrid').addEventListener('click', () => document.getElementById('efCategoryField').classList.remove('uncertain'));
 
-document.getElementById('btnScanReceipt').addEventListener('click', () => {
-  if (!cloudUser || !fbFunctions){ toast("סריקת קבלה זמינה אחרי כניסה עם Google (תפריט הסנכרון)"); return; }
-  document.getElementById('efScanInput').click();
+// 📷 opens the rear camera directly; 📁 picks an existing photo or PDF
+[['btnScanCamera', 'efScanCamera'], ['btnScanFile', 'efScanInput']].forEach(([btnId, inputId]) => {
+  document.getElementById(btnId).addEventListener('click', () => {
+    if (!cloudUser || !fbFunctions){ toast("סריקת קבלה זמינה אחרי כניסה עם Google (תפריט הסנכרון)"); return; }
+    document.getElementById(inputId).click();
+  });
 });
-document.getElementById('efScanInput').addEventListener('change', async (e) => {
+document.getElementById('efScanCamera').addEventListener('change', onScanPicked);
+document.getElementById('efScanInput').addEventListener('change', onScanPicked);
+async function onScanPicked(e){
   const original = (e.target.files || [])[0];
   e.target.value = "";
   if (!original) return;
@@ -3942,8 +3957,8 @@ document.getElementById('efScanInput').addEventListener('change', async (e) => {
   const seq = ++scanSeq;
   const btn = document.getElementById('btnScanReceipt');
   const saveBtn = document.getElementById('btnSaveExpense');
-  const restore = () => { btn.disabled = false; saveBtn.disabled = false; };
-  btn.disabled = true; saveBtn.disabled = true;
+  const restore = () => { btn.classList.remove('busy'); saveBtn.disabled = false; };
+  btn.classList.add('busy'); saveBtn.disabled = true;
   scanStatus('busy', "קורא את הקבלה…");
   uploadUI.show("סורק את הקבלה…", {
     from: "🧾", to: "👛",
@@ -4009,7 +4024,7 @@ document.getElementById('efScanInput').addEventListener('change', async (e) => {
     scanStatus('error', (error || "הסריקה נכשלה") + " — הקבלה צורפה, אפשר למלא ידנית.");
   }
   restore();
-});
+}
 
 // Fills the expense form from a scan result. Returns the ISO code of an unsupported currency, if any.
 async function applyScan(d, trip){
@@ -4311,8 +4326,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '17/10/2026 22:06';
-const BUILD_EPOCH = 1792263993537; // ms — when this exact file was pushed
+const BUILD_STAMP = '17/10/2026 22:11';
+const BUILD_EPOCH = 1792264275041; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
