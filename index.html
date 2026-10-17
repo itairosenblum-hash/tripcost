@@ -414,6 +414,32 @@
   .progress-fill{height:100%;width:0;background:var(--teal-dark);border-radius:99px;transition:width .25s ease;}
   .progress-meta{display:flex;justify-content:space-between;font-size:13.5px;color:var(--ink-soft);font-weight:700;}
   .progress-pct{font-size:22px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .progress-card h3{text-align:center;}
+  .progress-status{text-align:center;}
+  .up-cancel{width:100%;margin-top:12px;}
+  .up-cancel[hidden]{display:none;}
+
+  /* Money-transfer animation: coins (₪ $ €) fly in an arc from the source to the destination */
+  .money-flight{position:relative;direction:ltr;width:220px;height:78px;margin:0 auto 10px;}
+  .mf-end{position:absolute;top:22px;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    font-size:26px;background:var(--teal-tint);border:1px solid var(--border);}
+  .mf-from{right:0;}
+  .mf-to{left:0;animation:mfCatch 1.5s ease-in-out infinite;}
+  .mf-coin{position:absolute;right:26px;top:34px;width:24px;height:24px;animation:mfX 1.5s linear infinite;opacity:0;}
+  .mf-coin i{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;
+    font-style:normal;font-size:12.5px;font-weight:800;color:#6b4c0f;background:radial-gradient(circle at 35% 30%,#F6D88E,var(--amber) 70%);
+    box-shadow:0 1px 3px rgba(0,0,0,.25);animation:mfY 1.5s ease-in-out infinite;}
+  .mf-coin:nth-of-type(2),.mf-coin:nth-of-type(2) i{animation-delay:-1s;}
+  .mf-coin:nth-of-type(3),.mf-coin:nth-of-type(3) i{animation-delay:-.5s;}
+  @keyframes mfX{0%{transform:translateX(0);opacity:0;}12%{opacity:1;}85%{opacity:1;}100%{transform:translateX(-148px);opacity:0;}}
+  @keyframes mfY{0%{transform:translateY(0) rotate(15deg);}50%{transform:translateY(-34px) rotate(-15deg);}100%{transform:translateY(0) rotate(15deg);}}
+  @keyframes mfCatch{0%,70%,100%{transform:scale(1);}85%{transform:scale(1.12);}}
+  .mf-done{position:absolute;left:50%;top:20px;width:48px;height:48px;margin-left:-24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:26px;font-weight:800;color:#fff;background:var(--teal);transform:scale(0);opacity:0;transition:transform .3s cubic-bezier(.3,1.6,.5,1),opacity .2s;}
+  .progress-overlay.done .mf-coin,.progress-overlay.done .mf-end{opacity:0;transition:opacity .2s;animation:none;}
+  .progress-overlay.done .mf-done{transform:scale(1);opacity:1;}
+  .progress-overlay.done .progress-fill{background:var(--teal);}
+  @media (prefers-reduced-motion: reduce){.mf-coin,.mf-coin i,.mf-to{animation:none;}.mf-coin{opacity:0;}}
 
   /* ---- FAB ---- */
   .fab{
@@ -772,7 +798,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:00</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:06</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1123,11 +1149,20 @@
 
 <div class="progress-overlay" id="uploadProgress" role="dialog" aria-modal="true" aria-live="polite">
   <div class="progress-card">
+    <div class="money-flight" aria-hidden="true">
+      <span class="mf-end mf-from" id="upFrom">📱</span>
+      <span class="mf-coin"><i>₪</i></span>
+      <span class="mf-coin"><i>$</i></span>
+      <span class="mf-coin"><i>€</i></span>
+      <span class="mf-end mf-to" id="upTo">☁️</span>
+      <span class="mf-done">✓</span>
+    </div>
     <h3 id="upTitle">שומר את ההוצאה…</h3>
     <div class="progress-status" id="upStatus"></div>
     <div class="progress-track"><div class="progress-fill" id="upFill"></div></div>
     <div class="progress-meta"><span id="upCount"></span><span class="progress-pct" id="upPct">0%</span></div>
     <div class="hint" id="upHint" style="margin:10px 0 0;">המסך יישאר דלוק עד שההעלאה תסתיים.</div>
+    <button type="button" class="btn-ghost up-cancel" id="upCancel" hidden>ביטול</button>
   </div>
 </div>
 
@@ -2125,13 +2160,49 @@ document.addEventListener('visibilitychange', () => {
 });
 
 const uploadUI = {
-  show(title){
+  // opts: {from, to} emoji at the ends of the money-transfer animation, hint text, onCancel
+  show(title, opts){
+    opts = opts || {};
+    const ov = document.getElementById('uploadProgress');
+    ov.classList.remove('done');
     document.getElementById('upTitle').textContent = title || "שומר את ההוצאה…";
+    document.getElementById('upFrom').textContent = opts.from || "📱";
+    document.getElementById('upTo').textContent = opts.to || "☁️";
+    document.getElementById('upHint').textContent = opts.hint || "המסך יישאר דלוק עד שההעלאה תסתיים.";
+    const cancel = document.getElementById('upCancel');
+    cancel.hidden = !opts.onCancel;
+    cancel.onclick = opts.onCancel ? () => { this.hide(); opts.onCancel(); } : null;
+    this.shown = 0;
     this.set(0, "מתחיל…", "");
-    document.getElementById('uploadProgress').classList.add('show');
+    ov.classList.add('show');
     acquireWakeLock();
   },
+  // A slow tick that creeps toward `to` while waiting on the server, with rotating status lines.
+  crawl(from, to, statuses, seconds){
+    this.stopCrawl();
+    const start = Date.now(), dur = (seconds || 15) * 1000;
+    let i = -1;
+    this._crawl = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 2.2);
+      const step = Math.min(statuses.length - 1, Math.floor(t * statuses.length));
+      this.set(from + (to - from) * eased, step !== i ? statuses[(i = step)] : null);
+    }, 120);
+  },
+  stopCrawl(){ if (this._crawl){ clearInterval(this._crawl); this._crawl = null; } },
+  async done(status){
+    this.stopCrawl();
+    this.set(1, "");
+    document.getElementById('upTitle').textContent = status || "הסתיים ✓";
+    document.getElementById('upCancel').hidden = true;
+    document.getElementById('uploadProgress').classList.add('done');
+    await new Promise(r => setTimeout(r, 650));
+    this.hide();
+  },
   set(fraction, status, count){
+    // never move backwards (several phases report into one bar)
+    fraction = Math.max(fraction, this.shown || 0);
+    this.shown = fraction;
     const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)));
     document.getElementById('upFill').style.width = pct + "%";
     document.getElementById('upPct').textContent = pct + "%";
@@ -2139,7 +2210,9 @@ const uploadUI = {
     if (count != null) document.getElementById('upCount').textContent = count;
   },
   hide(){
-    document.getElementById('uploadProgress').classList.remove('show');
+    this.stopCrawl();
+    document.getElementById('upCancel').onclick = null;
+    document.getElementById('uploadProgress').classList.remove('show', 'done');
     releaseWakeLock();
   }
 };
@@ -3840,6 +3913,7 @@ function scanStatus(state, text){
   document.getElementById('efScanText').textContent = text || "";
 }
 function resetScanUI(){
+  if (document.getElementById('upCancel').onclick) uploadUI.hide(); // a scan was in progress
   scanSeq++;
   scanAttachId = null;
   scanRateLock = null;
@@ -3868,33 +3942,55 @@ document.getElementById('efScanInput').addEventListener('change', async (e) => {
   const seq = ++scanSeq;
   const btn = document.getElementById('btnScanReceipt');
   const saveBtn = document.getElementById('btnSaveExpense');
+  const restore = () => { btn.disabled = false; saveBtn.disabled = false; };
   btn.disabled = true; saveBtn.disabled = true;
   scanStatus('busy', "קורא את הקבלה…");
+  uploadUI.show("סורק את הקבלה…", {
+    from: "🧾", to: "👛",
+    hint: "זה לוקח בדרך כלל כמה שניות.",
+    onCancel: () => { scanSeq++; restore(); scanStatus('error', "הסריקה בוטלה"); }
+  });
 
   // The receipt is attached to the expense whether or not the reading succeeds.
   let attachFile = original;
   if ((original.type || "").startsWith("image/")){
+    uploadUI.set(0.03, "ממיר את התמונה ל-PDF…");
     try{ attachFile = await imageToPdf(original); }catch(err){ console.warn("tripcost: pdf conversion failed, keeping the image", err); }
   }
+  if (seq !== scanSeq) return;
 
   let result = null, error = "";
   try{
+    uploadUI.set(0.08, "מכין את הקובץ…");
     const prepared = await prepareUpload(original);
     if (!/^image\/|^application\/pdf$/.test(prepared.type)) throw new Error("אפשר לסרוק רק תמונה או PDF");
     if (prepared.blob.size > 7 * 1024 * 1024) throw new Error("הקובץ גדול מ-7MB");
-    const res = await callFn("scanReceipt", 200000)({
+    const payload = {
       data: await blobToBase64(prepared.blob),
       mimeType: prepared.type,
       categories: CATEGORIES,
       tripName: trip.name || "",
       tripStart: trip.startDate || ""
-    });
+    };
+    if (seq !== scanSeq) return;
+    uploadUI.set(0.12, "שולח את הקבלה…");
+    let crawling = false;
+    const res = await callFnWithProgress("scanReceipt", payload, (f) => {
+      if (seq !== scanSeq || crawling) return;
+      if (f < 1){ uploadUI.set(0.12 + f * 0.33, "שולח את הקבלה…"); return; }
+      // Upload finished — the AI is reading; real progress isn't available, so move steadily.
+      crawling = true;
+      uploadUI.crawl(0.45, 0.95, ["מזהה את החברה…", "קורא סכום ומטבע…", "מאתר תאריך ומועד חיוב…", "בודק שער המרה…", "בוחר קטגוריה…", "עוד רגע…"], 14);
+    }, 200000);
     result = res.data;
   }catch(err){
     console.warn("tripcost: receipt scan failed", err);
     error = fnError(err);
   }
-  if (seq !== scanSeq) return; // the sheet was closed / reopened meanwhile
+  if (seq !== scanSeq) return; // cancelled, or the sheet was closed / reopened meanwhile
+  if (result) await uploadUI.done("הפרטים נקראו ✓");
+  else uploadUI.hide();
+  if (seq !== scanSeq) return;
 
   if (scanAttachId){
     currentAttachments = currentAttachments.filter(a => !(a.id === scanAttachId && a.isNew));
@@ -3912,7 +4008,7 @@ document.getElementById('efScanInput').addEventListener('change', async (e) => {
   } else {
     scanStatus('error', (error || "הסריקה נכשלה") + " — הקבלה צורפה, אפשר למלא ידנית.");
   }
-  btn.disabled = false; saveBtn.disabled = false;
+  restore();
 });
 
 // Fills the expense form from a scan result. Returns the ISO code of an unsupported currency, if any.
@@ -4051,9 +4147,13 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     toast("שמירת הקובץ נכשלה — ההוצאה נשמרה בלי הקובץ");
   }
   if (showProgress){
-    uploadUI.set(1, driveFailures ? "חלק מהקבצים לא הועלו" : "הסתיים ✓", null);
-    await new Promise(r => setTimeout(r, 350));
-    uploadUI.hide();
+    if (driveFailures){
+      uploadUI.set(1, "חלק מהקבצים לא הועלו", null);
+      await new Promise(r => setTimeout(r, 350));
+      uploadUI.hide();
+    } else {
+      await uploadUI.done("נשמר בדרייב ✓");
+    }
   }
   saveBtn.disabled = false;
 
@@ -4211,8 +4311,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '17/10/2026 22:00';
-const BUILD_EPOCH = 1792263612698; // ms — when this exact file was pushed
+const BUILD_STAMP = '17/10/2026 22:06';
+const BUILD_EPOCH = 1792263993537; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
