@@ -700,6 +700,12 @@
     #app{ margin:0; border-radius:0; box-shadow:none; height:100vh; height:100dvh; }
     header.topbar{ padding:18px 20px 10px; }
     main{ --side-w:minmax(260px, 48%); gap:0 4px; padding:6px 20px 40px; }
+    /* No viewport lock here: the header eats half the screen on an unfolded
+       phone, so the whole page scrolls normally instead of each column. */
+    body{ overflow:auto; }
+    #app{ height:auto; min-height:100vh; min-height:100dvh; }
+    main{ grid-template-rows:auto; align-items:start; }
+    #sidebarCol, #mainCol{ overflow:visible; min-height:auto; }
   }
   /* -- date inputs: show dd/mm/yyyy regardless of browser locale -- */
   .date-wrap{position:relative;}
