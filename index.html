@@ -587,6 +587,7 @@
   .field.uncertain::after{content:"לא זוהה בוודאות — כדאי לבדוק מול הקבלה";display:block;font-size:12px;color:#8a6417;margin-top:4px;}
   @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .field.uncertain::after,:root:not([data-theme="light"]) .scan-status.error{color:var(--amber);}}
   :root[data-theme="dark"] .field.uncertain::after,:root[data-theme="dark"] .scan-status.error{color:var(--amber);}
+  #overlayTripForm .field.uncertain::after{content:"לא זוהה בוודאות — כדאי לבדוק מול הכרטיס";}
   .divider{height:1px;background:var(--border);margin:18px 0;}
   .trip-list-item{
     display:flex;align-items:center;justify-content:space-between;padding:12px 4px;border-bottom:1px solid var(--border);
@@ -811,7 +812,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">17/10/2026 22:11</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">01/11/2026 23:09</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -843,6 +844,24 @@
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="tripFormTitle">טיול חדש</h2>
+
+    <div class="scan-box">
+      <div class="scan-btn" id="btnScanTickets">
+        <span class="scan-em">🎫</span>
+        <span class="scan-txt"><b>העלאת כרטיסי טיסה</b><small>מועדים, שעות ומספר הזמנה ימולאו לבד</small></span>
+        <span class="scan-actions">
+          <button type="button" class="scan-pick" id="btnTicketCamera">📷 צילום</button>
+          <button type="button" class="scan-pick" id="btnTicketFile">📁 קבצים</button>
+        </span>
+      </div>
+      <input type="file" id="tfTicketCamera" accept="image/*" capture="environment" hidden>
+      <input type="file" id="tfTicketInput" accept="image/*,application/pdf" multiple hidden>
+      <div class="scan-status" id="tfScanStatus" hidden>
+        <span class="scan-spin" id="tfScanSpin"></span>
+        <span id="tfScanText"></span>
+      </div>
+    </div>
+
     <div class="field">
       <label>שם הטיול</label>
       <input type="text" id="tfName" placeholder="לדוגמה: אוסטריה 2026">
@@ -3364,6 +3383,7 @@ function openTripsList(){
 
 function openNewTripForm(){
   editingTripId = null;
+  resetTicketScanUI();
   document.getElementById('tripFormTitle').textContent = "טיול חדש";
   document.getElementById('tfName').value = "";
   document.getElementById('tfStart').value = "";
@@ -3390,6 +3410,7 @@ function openEditTripForm(id){
   const t = state.trips.find(x => x.id === id);
   if (!t) return;
   editingTripId = id;
+  resetTicketScanUI();
   document.getElementById('tripFormTitle').textContent = "עריכת טיול";
   document.getElementById('tfName').value = t.name || "";
   document.getElementById('tfStart').value = t.startDate || "";
@@ -3418,6 +3439,156 @@ function openEditTripForm(id){
   document.getElementById('btnDeleteTrip').style.display = "block";
   document.getElementById('deleteTripDivider').style.display = "block";
   showOverlay('overlayTripForm');
+}
+
+/* -- flight ticket scanning (Gemini through the scanTickets Cloud Function) --
+   Pick one or more tickets / booking confirmations (photos or PDFs); the flight numbers,
+   takeoff and landing dates and times and the booking reference are filled into this form. */
+let ticketSeq = 0;
+function ticketStatus(st, text){
+  const box = document.getElementById('tfScanStatus');
+  box.hidden = !st;
+  box.classList.toggle('error', st === 'error');
+  document.getElementById('tfScanSpin').hidden = st !== 'busy';
+  document.getElementById('tfScanText').textContent = text || "";
+}
+function resetTicketScanUI(){
+  if (document.getElementById('btnScanTickets').classList.contains('busy')) uploadUI.hide(); // a scan was in progress
+  ticketSeq++;
+  ticketStatus(null);
+  document.getElementById('btnScanTickets').classList.remove('busy');
+  document.getElementById('btnSaveTrip').disabled = false;
+  document.querySelectorAll('#overlayTripForm .field.uncertain').forEach(f => f.classList.remove('uncertain'));
+}
+document.getElementById('overlayTripForm').addEventListener('input', (e) => {
+  const f = e.target.closest && e.target.closest('.field');
+  if (f) f.classList.remove('uncertain');
+});
+[['btnTicketCamera', 'tfTicketCamera'], ['btnTicketFile', 'tfTicketInput']].forEach(([btnId, inputId]) => {
+  document.getElementById(btnId).addEventListener('click', () => {
+    if (!cloudUser || !fbFunctions){ toast("העלאת כרטיסים זמינה אחרי כניסה עם Google (תפריט הסנכרון)"); return; }
+    document.getElementById(inputId).click();
+  });
+});
+document.getElementById('tfTicketCamera').addEventListener('change', onTicketsPicked);
+document.getElementById('tfTicketInput').addEventListener('change', onTicketsPicked);
+
+async function onTicketsPicked(e){
+  const picked = [...(e.target.files || [])];
+  e.target.value = "";
+  if (!picked.length) return;
+  if (picked.length > 4){ toast("אפשר עד 4 קבצים בכל פעם — נלקחו הראשונים"); picked.length = 4; }
+  const seq = ++ticketSeq;
+  const btn = document.getElementById('btnScanTickets');
+  const saveBtn = document.getElementById('btnSaveTrip');
+  const restore = () => { btn.classList.remove('busy'); saveBtn.disabled = false; };
+  btn.classList.add('busy'); saveBtn.disabled = true;
+  const many = picked.length > 1;
+  ticketStatus('busy', many ? `קורא ${picked.length} כרטיסים…` : "קורא את הכרטיס…");
+  uploadUI.show(many ? "סורק את הכרטיסים…" : "סורק את הכרטיס…", {
+    from: "🎫", to: "✈️",
+    hint: "זה לוקח בדרך כלל כמה שניות.",
+    onCancel: () => { ticketSeq++; restore(); ticketStatus('error', "הסריקה בוטלה"); }
+  });
+
+  let result = null, error = "";
+  try{
+    uploadUI.set(0.05, "מכין את הקבצים…");
+    const files = [];
+    let total = 0;
+    for (const f of picked){
+      const prepared = await prepareUpload(f);
+      if (!/^image\/|^application\/pdf$/.test(prepared.type)) throw new Error("אפשר לסרוק רק תמונות או PDF");
+      if (prepared.blob.size > 7 * 1024 * 1024) throw new Error(`הקובץ ${f.name || ""} גדול מ-7MB`);
+      total += prepared.blob.size;
+      files.push({ data: await blobToBase64(prepared.blob), mimeType: prepared.type });
+      if (seq !== ticketSeq) return;
+    }
+    if (total > 14 * 1024 * 1024) throw new Error("הקבצים יחד גדולים מ-14MB");
+    uploadUI.set(0.12, "שולח…");
+    let crawling = false;
+    const res = await callFnWithProgress("scanTickets", { files, tripName: document.getElementById('tfName').value.trim() }, (f) => {
+      if (seq !== ticketSeq || crawling) return;
+      if (f < 1){ uploadUI.set(0.12 + f * 0.33, "שולח…"); return; }
+      crawling = true;
+      uploadUI.crawl(0.45, 0.95, ["מזהה את הטיסות…", "קורא מועדי המראה ונחיתה…", "מאתר מספר הזמנה…", "מסדר הלוך וחזור…", "עוד רגע…"], 16);
+    }, 200000);
+    result = res.data;
+  }catch(err){
+    console.warn("tripcost: ticket scan failed", err);
+    error = fnError(err);
+  }
+  if (seq !== ticketSeq) return;
+  if (result) await uploadUI.done("הפרטים נקראו ✓");
+  else uploadUI.hide();
+  if (seq !== ticketSeq) return;
+
+  if (result){
+    const filled = applyTicketScan(result);
+    ticketStatus(filled ? 'done' : 'error', filled
+      ? "פרטי הטיסות מולאו מהכרטיסים. בדקו לפני השמירה ✓"
+      : "לא נמצאו פרטי טיסה בקבצים — אפשר למלא ידנית.");
+  } else {
+    ticketStatus('error', (error || "הסריקה נכשלה") + " — אפשר למלא ידנית.");
+  }
+  restore();
+}
+
+// Fills the trip form from a scanTickets result. Returns true if anything was filled.
+function applyTicketScan(d){
+  const conf = d.confidence || {};
+  const low = (k) => typeof conf[k] === "number" && conf[k] < 0.7;
+  const el = (id) => document.getElementById(id);
+  const mark = (ids, on) => { if (on) ids.forEach(id => { const f = el(id).closest('.field'); if (f) f.classList.add('uncertain'); }); };
+  document.querySelectorAll('#overlayTripForm .field.uncertain').forEach(f => f.classList.remove('uncertain'));
+  let filled = false;
+  const set = (id, v) => { if (v){ el(id).value = v; filled = true; } };
+
+  const legs = [
+    [d.outbound, 'outbound', 'tfFlightOut', 'tfDepartDate', 'tfDepartTime', 'tfDepartLandDate', 'tfDepartLandTime'],
+    [d.return, 'return', 'tfFlightReturn', 'tfReturnDate', 'tfReturnTime', 'tfReturnLandDate', 'tfReturnLandTime']
+  ];
+  for (const [leg, key, fNum, fDepD, fDepT, fArrD, fArrT] of legs){
+    if (!leg) continue;
+    set(fNum, leg.flightNumber);
+    set(fDepD, leg.departDate); set(fDepT, leg.departTime);
+    // Landing with only a time is the same day as takeoff unless the time is earlier (past midnight)
+    let arrD = leg.arriveDate;
+    if (!arrD && leg.arriveTime && leg.departDate){
+      arrD = leg.departTime && leg.arriveTime < leg.departTime ? addDaysISO(leg.departDate, 1) : leg.departDate;
+    }
+    set(fArrD, arrD); set(fArrT, leg.arriveTime);
+    mark([fNum], low(key + 'Flight'));
+    mark([fDepD, fDepT], (leg.departDate && !leg.departTime) || low(key + 'Depart'));
+    mark([fArrD, fArrT], (arrD && !leg.arriveTime) || (!leg.arriveDate && arrD !== leg.departDate) || low(key + 'Arrive'));
+  }
+
+  set('tfBooking', d.bookingRef);
+  mark(['tfBooking'], d.bookingRef && low('bookingRef'));
+
+  // Trip dates: from the outbound takeoff to the return landing — only where still empty or
+  // still matching the old flights, so dates the user set on purpose are kept.
+  const start = d.outbound && d.outbound.departDate;
+  const end = d.return && (el('tfReturnLandDate').value || d.return.departDate);
+  if (start && !el('tfStart').value) set('tfStart', start);
+  if (end && !el('tfEnd').value) set('tfEnd', end);
+  if (start && end && el('tfStart').value > el('tfEnd').value){ el('tfStart').value = start; el('tfEnd').value = end; }
+
+  // Name only for a brand-new trip whose name is still empty: "לרנקה נובמבר 2026"
+  if (!editingTripId && !el('tfName').value.trim() && d.destination){
+    let name = d.destination;
+    if (start){
+      const dt = new Date(start + "T00:00:00");
+      name += " " + dt.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+    }
+    set('tfName', name);
+  }
+  return filled;
+}
+function addDaysISO(iso, n){
+  const dt = new Date(iso + "T00:00:00Z");
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
 }
 
 document.getElementById('btnSaveTrip').addEventListener('click', () => {
@@ -4333,8 +4504,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '17/10/2026 22:11';
-const BUILD_EPOCH = 1792264275041; // ms — when this exact file was pushed
+const BUILD_STAMP = '01/11/2026 23:09';
+const BUILD_EPOCH = 1793567393168; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();

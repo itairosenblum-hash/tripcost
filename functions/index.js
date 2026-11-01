@@ -255,6 +255,51 @@ export const removeAttachment = onCall({ secrets: SECRETS }, async (request) => 
   }
 });
 
+/* ---------- Gemini call with retries (shared by receipt and ticket scanning) ---------- */
+// עומס זמני אצל Gemini (503/429) — מנסים שוב, ואז עוברים למודל הגיבוי. מכסה שנגמרה — אין טעם לנסות שוב
+async function askGemini({ parts, instructions, schema, what }) {
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.value(), httpOptions: { timeout: 120000 } });
+  const ask = (model) => ai.models.generateContent({
+    model,
+    contents: [{ role: "user", parts }],
+    config: {
+      systemInstruction: instructions,
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      temperature: 0,
+      // קריאת מסמך לא דורשת חשיבה ארוכה; ברירת המחדל של המודל איטית מדי
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+    }
+  });
+  const quota = (e) => /exceeded your current quota|billing/i.test(String(e?.message || ""));
+  const busy = (e) => !quota(e) && /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand/i.test(String(e?.status || "") + " " + String(e?.message || ""));
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const primary = GEMINI_MODEL.value();
+  const fallback = GEMINI_FALLBACK_MODEL.value();
+  const plan = [[primary, 0], [primary, 2000], [primary, 5000], [fallback, 0], [fallback, 4000]];
+  let lastErr;
+  for (let i = 0; i < plan.length; i++) {
+    const [model, wait] = plan[i];
+    if (wait) await sleep(wait);
+    try {
+      const r = JSON.parse((await ask(model)).text);
+      Object.defineProperty(r, "__model", { value: model, enumerable: false });
+      return r;
+    } catch (e) {
+      lastErr = e;
+      logger.warn("gemini attempt failed", { what, model, message: String(e?.message || e).slice(0, 300) });
+      if (quota(e)) break;
+      if (!busy(e) && model === primary) i = plan.findIndex(([m]) => m === fallback) - 1;
+    }
+  }
+  logger.error(`gemini ${what} scan failed`, lastErr?.message || lastErr);
+  const msg = String(lastErr?.message || lastErr?.cause?.message || "");
+  if (quota(lastErr)) throw new HttpsError("resource-exhausted", "מכסת השימוש ב-AI נגמרה. בינתיים אפשר למלא ידנית.");
+  throw new HttpsError("unavailable", busy(lastErr)
+    ? "שירות ה-AI עמוס כרגע. נסו שוב בעוד דקה או מלאו ידנית."
+    : /timeout|aborted/i.test(msg) ? "הסריקה לקחה יותר מדי זמן. נסו שוב או מלאו ידנית." : "הסריקה נכשלה. אפשר למלא את הפרטים ידנית.");
+}
+
 /* ---------- receipt scanning (Gemini) ---------- */
 // (GEMINI_API_KEY מגיע מ-Secret בריפו ומסונכרן בפריסה)
 // הפונקציה רק קוראת את הקבלה ומחזירה שדות לטופס ההוצאה — לא שומרת כלום.
@@ -342,53 +387,13 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
   const schema = structuredClone(SCAN_SCHEMA);
   schema.properties.categoryId.enum = ids;
 
-  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.value(), httpOptions: { timeout: 120000 } });
-  const ask = (model) => ai.models.generateContent({
-    model,
-    contents: [{ role: "user", parts: [
-      { inlineData: { mimeType: type, data: buffer.toString("base64") } },
-      { text: context }
-    ] }],
-    config: {
-      systemInstruction: SCAN_INSTRUCTIONS,
-      responseMimeType: "application/json",
-      responseSchema: schema,
-      temperature: 0,
-      // קריאת קבלה לא דורשת חשיבה ארוכה; ברירת המחדל של המודל איטית מדי
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
-    }
+  const r = await askGemini({
+    parts: [{ inlineData: { mimeType: type, data: buffer.toString("base64") } }, { text: context }],
+    instructions: SCAN_INSTRUCTIONS,
+    schema,
+    what: "receipt"
   });
-
-  // עומס זמני אצל Gemini (503/429) — מנסים שוב, ואז עוברים למודל הגיבוי. מכסה שנגמרה — אין טעם לנסות שוב
-  const quota = (e) => /exceeded your current quota|billing/i.test(String(e?.message || ""));
-  const busy = (e) => !quota(e) && /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand/i.test(String(e?.status || "") + " " + String(e?.message || ""));
-  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
-  const primary = GEMINI_MODEL.value();
-  const fallback = GEMINI_FALLBACK_MODEL.value();
-  const plan = [[primary, 0], [primary, 2000], [primary, 5000], [fallback, 0], [fallback, 4000]];
-  let r, usedModel, lastErr;
-  for (let i = 0; i < plan.length; i++) {
-    const [model, wait] = plan[i];
-    if (wait) await sleep(wait);
-    try {
-      r = JSON.parse((await ask(model)).text);
-      usedModel = model;
-      break;
-    } catch (e) {
-      lastErr = e;
-      logger.warn("gemini attempt failed", { model, message: String(e?.message || e).slice(0, 300) });
-      if (quota(e)) break;
-      if (!busy(e) && model === primary) i = plan.findIndex(([m]) => m === fallback) - 1;
-    }
-  }
-  if (!r) {
-    logger.error("gemini receipt scan failed", lastErr?.message || lastErr);
-    const msg = String(lastErr?.message || lastErr?.cause?.message || "");
-    if (quota(lastErr)) throw new HttpsError("resource-exhausted", "מכסת השימוש ב-AI נגמרה. בינתיים אפשר למלא ידנית.");
-    throw new HttpsError("unavailable", busy(lastErr)
-      ? "שירות ה-AI עמוס כרגע. נסו שוב בעוד דקה או מלאו ידנית."
-      : /timeout|aborted/i.test(msg) ? "הסריקה לקחה יותר מדי זמן. נסו שוב או מלאו ידנית." : "הסריקה נכשלה. אפשר למלא את הפרטים ידנית.");
-  }
+  const usedModel = r.__model;
 
   // ניקוי ובדיקות סבירות
   const currency = typeof r.currency === "string" && /^[A-Z]{3}$/.test(r.currency.trim().toUpperCase()) ? r.currency.trim().toUpperCase() : null;
@@ -421,6 +426,128 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
     rateSource,
     category: catIndex >= 0 ? cats[catIndex] : null,
     notes: cleanStr(r.notes, 160),
+    confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
+  };
+});
+
+/* ---------- flight ticket scanning (Gemini) ---------- */
+// בפתיחת טיול: מעלים כרטיסי טיסה / אישור הזמנה (אחד או כמה קבצים), ומקבלים מספרי טיסה, תאריכים ושעות
+// הלוך וחזור ומספר הזמנה, למילוי טופס הטיול. גם כאן לא נשמר כלום בשרת.
+
+const TICKET_INSTRUCTIONS = `You read airline tickets, e-tickets, boarding passes and flight booking confirmations for a family trip planner.
+You may get several files that belong to the same trip (for example a separate ticket for each direction, or one per passenger). Combine them into one round trip.
+Documents may be in any language. Write Hebrew output text, keeping airline, city and airport names in their original Latin letters.
+Rules:
+- outbound: the flight(s) leaving home at the start of the trip; return: the flight(s) coming back home at the end. Home is usually Israel (TLV / Tel Aviv / Ben Gurion). If the itinerary is one-way, return is null.
+- flightNumber: airline code + number with no space, like LY321, W62327, 6H895. For a connection list every leg in order joined with " + " (LY5 + A3 900).
+- departDate / departTime: the takeoff of the FIRST leg of that direction. arriveDate / arriveTime: the landing of the LAST leg of that direction.
+- Times are the LOCAL times printed on the document at that airport, 24-hour HH:MM. Convert 2:30 PM to 14:30. Never convert between time zones.
+- Dates YYYY-MM-DD. Many documents print day first (05/11/26, 05NOV); US documents print month first. If the landing is marked +1 or is past midnight, the arrival date is the next day.
+- from / to: IATA airport codes of the first departure and the final arrival of that direction (TLV, LCA, TBS...).
+- bookingRef: the reservation / booking / PNR / confirmation code (usually 5-7 letters and digits, called מספר הזמנה, Booking reference, PNR, Record locator, Confirmation number). NOT the 13-digit e-ticket number. If the two directions have different codes, join them with " / " in outbound-then-return order.
+- destination: the main destination city or country in Hebrew (לרנקה, טביליסי, יוון), from where the outbound flight lands.
+- passengers: number of distinct passenger names seen, or null.
+- Use null for anything not on the documents. Never invent flight numbers, dates or times.
+- confidence: 0 to 1 per field, honest. Below 0.7 when the text is blurry, cut off or ambiguous.`;
+
+const LEG_SCHEMA = {
+  type: Type.OBJECT,
+  nullable: true,
+  properties: {
+    flightNumber: { type: Type.STRING, nullable: true },
+    departDate: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+    departTime: { type: Type.STRING, nullable: true, description: "HH:MM 24h local" },
+    arriveDate: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+    arriveTime: { type: Type.STRING, nullable: true, description: "HH:MM 24h local" },
+    from: { type: Type.STRING, nullable: true },
+    to: { type: Type.STRING, nullable: true }
+  },
+  required: ["flightNumber", "departDate", "departTime", "arriveDate", "arriveTime", "from", "to"],
+  propertyOrdering: ["flightNumber", "departDate", "departTime", "arriveDate", "arriveTime", "from", "to"]
+};
+const CONF_FIELDS = ["outboundFlight", "outboundDepart", "outboundArrive", "returnFlight", "returnDepart", "returnArrive", "bookingRef"];
+const TICKET_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    outbound: LEG_SCHEMA,
+    return: LEG_SCHEMA,
+    bookingRef: { type: Type.STRING, nullable: true },
+    destination: { type: Type.STRING, nullable: true },
+    airline: { type: Type.STRING, nullable: true },
+    passengers: { type: Type.INTEGER, nullable: true },
+    confidence: {
+      type: Type.OBJECT,
+      properties: Object.fromEntries(CONF_FIELDS.map((f) => [f, { type: Type.NUMBER }]))
+    }
+  },
+  required: ["outbound", "return", "bookingRef", "destination", "airline", "passengers", "confidence"],
+  propertyOrdering: ["outbound", "return", "bookingRef", "destination", "airline", "passengers", "confidence"]
+};
+
+const validTime = (v) => {
+  const m = typeof v === "string" ? v.trim().match(/^(\d{1,2}):(\d{2})$/) : null;
+  if (!m || +m[1] > 23 || +m[2] > 59) return null;
+  return m[1].padStart(2, "0") + ":" + m[2];
+};
+const cleanFlight = (v) => {
+  const s = cleanStr(v, 60);
+  return s ? s.toUpperCase().replace(/\s*\+\s*/g, " + ").replace(/\s*\/\s*/g, " / ") : null;
+};
+const cleanIata = (v) => (typeof v === "string" && /^[A-Za-z]{3}$/.test(v.trim()) ? v.trim().toUpperCase() : null);
+const cleanLeg = (l) => {
+  if (!l || typeof l !== "object") return null;
+  const leg = {
+    flightNumber: cleanFlight(l.flightNumber),
+    departDate: validDate(l.departDate),
+    departTime: validTime(l.departTime),
+    arriveDate: validDate(l.arriveDate),
+    arriveTime: validTime(l.arriveTime),
+    from: cleanIata(l.from),
+    to: cleanIata(l.to)
+  };
+  // נחיתה "לפני" ההמראה באותו יום בלי תאריך נפרד = כנראה מעבר חצות; משאירים לאדם לבדוק
+  return Object.values(leg).some(Boolean) ? leg : null;
+};
+
+const MAX_TICKET_FILES = 4;
+const MAX_TICKET_TOTAL = 14 * 1024 * 1024;
+
+export const scanTickets = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
+  await requireAllowed(request);
+  const { files, tripName } = request.data || {};
+  const list = Array.isArray(files) ? files.slice(0, MAX_TICKET_FILES) : [];
+  if (!list.length) throw new HttpsError("invalid-argument", "לא נבחרו קבצים");
+  let total = 0;
+  const parts = list.map((f, i) => {
+    const type = String(f?.mimeType || "");
+    if (!isAllowedType(type)) throw new HttpsError("invalid-argument", `סוג קובץ לא נתמך: ${type}`);
+    const buffer = Buffer.from(String(f?.data || ""), "base64");
+    if (buffer.length < 100) throw new HttpsError("invalid-argument", `קובץ ${i + 1} ריק`);
+    if (buffer.length > MAX_BYTES) throw new HttpsError("invalid-argument", `קובץ ${i + 1} גדול מדי (עד 7MB)`);
+    total += buffer.length;
+    return { inlineData: { mimeType: type, data: buffer.toString("base64") } };
+  });
+  if (total > MAX_TICKET_TOTAL) throw new HttpsError("invalid-argument", "הקבצים יחד גדולים מדי (עד 14MB)");
+
+  const context = [
+    `${parts.length} file(s) attached.`,
+    tripName ? `Trip name so far: ${cleanStr(tripName, 60)}` : "",
+    `Today is ${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" })}. Use it to resolve two-digit or missing years (flights are usually in the future).`
+  ].filter(Boolean).join("\n");
+
+  const r = await askGemini({ parts: [...parts, { text: context }], instructions: TICKET_INSTRUCTIONS, schema: TICKET_SCHEMA, what: "ticket" });
+
+  const outbound = cleanLeg(r.outbound);
+  const ret = cleanLeg(r.return);
+  const bookingRef = cleanStr(r.bookingRef, 40);
+  return {
+    model: r.__model,
+    outbound,
+    return: ret,
+    bookingRef: bookingRef ? bookingRef.toUpperCase() : null,
+    destination: cleanStr(r.destination, 30),
+    airline: cleanStr(r.airline, 40),
+    passengers: Number.isInteger(r.passengers) && r.passengers > 0 && r.passengers < 20 ? r.passengers : null,
     confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
   };
 });

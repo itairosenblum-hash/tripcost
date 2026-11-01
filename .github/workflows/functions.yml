@@ -18,7 +18,7 @@ concurrency:
 
 env:
   PROJECT: trip-cost-ba9de
-  SERVICES: driveauthurl drivecallback drivestatus uploadattachment getattachment removeattachment scanreceipt
+  SERVICES: driveauthurl drivecallback drivestatus uploadattachment getattachment removeattachment scanreceipt scantickets
 
 jobs:
   deploy:
