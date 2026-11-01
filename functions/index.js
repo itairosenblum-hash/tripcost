@@ -311,7 +311,7 @@ Rules:
 - vendor: the business / company name as printed (hotel, airline, restaurant, shop, car rental). Drop legal suffixes like GmbH, Ltd, בע"מ, S.p.A. unless part of the brand.
 - description: 2-5 Hebrew words saying what was bought, only if it adds something beyond the vendor (for example "3 לילות", "השכרת רכב", "ארוחת ערב", "כרטיסי כניסה"). null otherwise.
 - amount: the total actually paid / charged including tax and tip, in the document's own currency, as a number. Ignore subtotals and VAT lines.
-- currency: ISO 4217 code of that amount. € = EUR, $ = USD (unless the country makes it clearly CAD/AUD), £ = GBP, ₪ / ש"ח / NIS = ILS, ¥ = JPY, ฿ = THB, ₺ = TRY, CHF / Fr = CHF.
+- currency: ISO 4217 code of that amount. € = EUR, $ = USD (unless the country makes it clearly CAD/AUD), £ = GBP, ₪ / ש"ח / NIS = ILS, ¥ = JPY, ฿ = THB, ₺ = TRY, CHF / Fr = CHF, zł / PLN = PLN.
 - date: the purchase / transaction date, YYYY-MM-DD. For a hotel use the stay's check-in date. Many countries print day first (DD/MM/YY, DD.MM.YYYY); US documents print month first.
 - chargeDate: YYYY-MM-DD of the actual card charge (מועד חיוב / תאריך חיוב / charge date / debit date) ONLY if printed separately from the purchase date, else null.
 - paymentMethod: "card" for a credit/debit card or Apple/Google Pay, "cash" for cash, "other" for bank transfer, Bit, PayPal and the like, null if not shown.

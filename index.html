@@ -812,7 +812,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">01/11/2026 23:09</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">01/11/2026 23:18</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1269,7 +1269,8 @@ const CURRENCY_POOL = [
   { name: "דולר אוסטרלי", symbol: "A$", code: "AUD" },
   { name: "דולר קנדי", symbol: "C$", code: "CAD" },
   { name: "לירה טורקית", symbol: "₺", code: "TRY" },
-  { name: "באט תאילנדי", symbol: "฿", code: "THB" }
+  { name: "באט תאילנדי", symbol: "฿", code: "THB" },
+  { name: "זלוטי פולני", symbol: "zł", code: "PLN" }
 ]; // ILS is the implicit base currency, not part of the selectable foreign pool
 const CURRENCY_CODE = { "שקל": "ILS" };
 CURRENCY_POOL.forEach(c => CURRENCY_CODE[c.name] = c.code);
@@ -4504,8 +4505,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '01/11/2026 23:09';
-const BUILD_EPOCH = 1793567393168; // ms — when this exact file was pushed
+const BUILD_STAMP = '01/11/2026 23:18';
+const BUILD_EPOCH = 1793567912995; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
