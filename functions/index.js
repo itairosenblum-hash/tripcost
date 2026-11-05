@@ -363,14 +363,137 @@ const cleanStr = (v, max = 120) => {
   return s && s !== "null" ? s.slice(0, max) : null;
 };
 
-export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+// כמה קבצים יחד: הם יכולים להיות מסמכים של אותו חיוב (חשבונית + ספח אשראי) — נספר פעם אחת,
+// או חיובים נפרדים — מסוכמים לעסקה אחת. ה-AI רק מפרט את החיובים, הסכימה נעשית כאן בקוד.
+const MULTI_SCAN_INSTRUCTIONS = `${SCAN_INSTRUCTIONS}
+
+SEVERAL FILES: you got more than one file, all to be saved as ONE expense.
+- First decide which files describe the SAME payment (an invoice and its card slip, a booking confirmation and its receipt, two photos or pages of the same receipt). Such duplicates are ONE charge — never count them twice.
+- Different payments (two installments, a deposit and the balance, two separate receipts) are separate charges.
+- charges: one entry per distinct payment, in date order. amount / currency / date / chargeDate / chargedAmountILS / exchangeRate follow the same rules as above, per charge. label: 1-4 Hebrew words telling the charges apart ("מקדמה", "יתרה", "לילה ראשון"), or null.
+- A deposit that is already included in a final invoice total is NOT a separate charge: list the final total once.
+- vendor / description / categoryId / paymentMethod / paid / notes describe the expense as a whole. paid is true only if every charge was paid.
+- notes: do not repeat the per-charge amounts; they are listed separately.`;
+
+const CHARGE_FIELDS = ["label", "amount", "currency", "date", "chargeDate", "chargedAmountILS", "exchangeRate"];
+const MULTI_FIELDS = ["vendor", "description", "charges", "paymentMethod", "paid", "categoryId", "notes"];
+const MULTI_SCAN_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    vendor: SCAN_SCHEMA.properties.vendor,
+    description: SCAN_SCHEMA.properties.description,
+    charges: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          label: { type: Type.STRING, nullable: true },
+          amount: { type: Type.NUMBER, nullable: true },
+          currency: { type: Type.STRING, nullable: true },
+          date: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+          chargeDate: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+          chargedAmountILS: { type: Type.NUMBER, nullable: true },
+          exchangeRate: { type: Type.NUMBER, nullable: true }
+        },
+        required: CHARGE_FIELDS,
+        propertyOrdering: CHARGE_FIELDS
+      }
+    },
+    paymentMethod: SCAN_SCHEMA.properties.paymentMethod,
+    paid: SCAN_SCHEMA.properties.paid,
+    categoryId: SCAN_SCHEMA.properties.categoryId,
+    notes: SCAN_SCHEMA.properties.notes,
+    confidence: SCAN_SCHEMA.properties.confidence
+  },
+  required: [...MULTI_FIELDS, "confidence"],
+  propertyOrdering: [...MULTI_FIELDS, "confidence"]
+};
+
+const MAX_SCAN_FILES = 8;
+const MAX_SCAN_TOTAL = 14 * 1024 * 1024;
+const cleanCurrency = (v) => (typeof v === "string" && /^[A-Z]{3}$/.test(v.trim().toUpperCase()) ? v.trim().toUpperCase() : null);
+const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
+
+// חיוב אחד אחרי ניקוי: שער שלא הודפס מחושב מהסכום בש"ח אם יש
+function cleanCharge(c) {
+  const currency = cleanCurrency(c?.currency);
+  const amount = posNum(c?.amount);
+  const chargedAmountILS = posNum(c?.chargedAmountILS);
+  let exchangeRate = posNum(c?.exchangeRate, 1000);
+  let rateSource = exchangeRate ? "printed" : null;
+  if (!exchangeRate && currency && currency !== "ILS" && amount && chargedAmountILS) {
+    exchangeRate = round(chargedAmountILS / amount, 4);
+    rateSource = "computed";
+  }
+  if (currency === "ILS") { exchangeRate = null; rateSource = null; }
+  return {
+    label: cleanStr(c?.label, 30),
+    amount, currency,
+    date: validDate(c?.date),
+    chargeDate: validDate(c?.chargeDate),
+    chargedAmountILS, exchangeRate, rateSource
+  };
+}
+// הסכום בש"ח של חיוב, אם אפשר לדעת אותו מהמסמך עצמו
+const chargeILS = (c) => c.currency === "ILS" ? c.amount : c.chargedAmountILS || (c.exchangeRate ? round(c.amount * c.exchangeRate) : null);
+
+// מאחד את החיובים לשדות של הוצאה אחת (סכום, מטבע, שער, תאריכים)
+function combineCharges(charges) {
+  const list = charges.filter((c) => c.amount);
+  const dates = list.map((c) => c.date).filter(Boolean).sort();
+  const chargeDates = list.map((c) => c.chargeDate).filter(Boolean).sort();
+  const out = {
+    amount: null, currency: null, chargedAmountILS: null, exchangeRate: null, rateSource: null,
+    date: dates[0] || null,                        // תחילת העסקה
+    chargeDate: chargeDates[chargeDates.length - 1] || null, // החיוב האחרון
+    mixed: false
+  };
+  if (!list.length) return out;
+  if (list.length === 1) return { ...out, ...list[0], label: undefined, mixed: false };
+  const currencies = [...new Set(list.map((c) => c.currency || "?"))];
+  const ils = list.map(chargeILS);
+  const allILS = ils.every((v) => v);
+  if (currencies.length === 1 && currencies[0] !== "?") {
+    out.currency = currencies[0];
+    out.amount = round(list.reduce((s, c) => s + c.amount, 0));
+    if (out.currency !== "ILS") {
+      if (list.every((c) => c.chargedAmountILS)) {
+        out.chargedAmountILS = round(list.reduce((s, c) => s + c.chargedAmountILS, 0));
+        out.exchangeRate = round(out.chargedAmountILS / out.amount, 4); // שער משוקלל
+        out.rateSource = "computed";
+      } else if (list.every((c) => c.exchangeRate) && new Set(list.map((c) => c.exchangeRate)).size === 1) {
+        out.exchangeRate = list[0].exchangeRate;
+        out.rateSource = list[0].rateSource;
+      }
+    }
+  } else if (allILS) {
+    // מטבעות שונים, אבל לכל חיוב ידוע הסכום בש"ח — מסכמים בשקלים
+    out.currency = "ILS";
+    out.amount = round(ils.reduce((s, v) => s + v, 0));
+  } else {
+    out.mixed = true; // האפליקציה תמיר לפי שער היום של כל חיוב
+  }
+  return out;
+}
+
+export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
   await requireAllowed(request);
-  const { data, mimeType, categories, tripName, tripStart } = request.data || {};
-  const type = String(mimeType || "");
-  if (!isAllowedType(type)) throw new HttpsError("invalid-argument", `סוג קובץ לא נתמך: ${type}`);
-  const buffer = Buffer.from(String(data || ""), "base64");
-  if (buffer.length < 100) throw new HttpsError("invalid-argument", "הקובץ ריק");
-  if (buffer.length > MAX_BYTES) throw new HttpsError("invalid-argument", "הקובץ גדול מדי (עד 7MB)");
+  const { data, mimeType, files, categories, tripName, tripStart } = request.data || {};
+  // קובץ אחד (data/mimeType, כמו בגרסאות הקודמות) או כמה (files)
+  const list = Array.isArray(files) && files.length ? files.slice(0, MAX_SCAN_FILES) : [{ data, mimeType }];
+  const multi = list.length > 1;
+  let total = 0;
+  const fileParts = list.map((f, i) => {
+    const type = String(f?.mimeType || "");
+    const n = multi ? ` ${i + 1}` : "";
+    if (!isAllowedType(type)) throw new HttpsError("invalid-argument", `סוג קובץ לא נתמך: ${type}`);
+    const buffer = Buffer.from(String(f?.data || ""), "base64");
+    if (buffer.length < 100) throw new HttpsError("invalid-argument", `הקובץ${n} ריק`);
+    if (buffer.length > MAX_BYTES) throw new HttpsError("invalid-argument", `הקובץ${n} גדול מדי (עד 7MB)`);
+    total += buffer.length;
+    return { inlineData: { mimeType: type, data: buffer.toString("base64") } };
+  });
+  if (total > MAX_SCAN_TOTAL) throw new HttpsError("invalid-argument", "הקבצים יחד גדולים מדי (עד 14MB)");
 
   // הקטגוריות מגיעות מהאפליקציה כדי שהתשובה תתאים בדיוק לרשימה שלה
   const cats = (Array.isArray(categories) ? categories : []).map((c) => cleanStr(c, 40)).filter(Boolean).slice(0, 30);
@@ -384,16 +507,36 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
     `Today is ${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" })}.`
   ].filter(Boolean).join("\n");
 
-  const schema = structuredClone(SCAN_SCHEMA);
+  const schema = structuredClone(multi ? MULTI_SCAN_SCHEMA : SCAN_SCHEMA);
   schema.properties.categoryId.enum = ids;
 
   const r = await askGemini({
-    parts: [{ inlineData: { mimeType: type, data: buffer.toString("base64") } }, { text: context }],
-    instructions: SCAN_INSTRUCTIONS,
+    parts: [...fileParts, { text: (multi ? `${fileParts.length} files attached.\n` : "") + context }],
+    instructions: multi ? MULTI_SCAN_INSTRUCTIONS : SCAN_INSTRUCTIONS,
     schema,
     what: "receipt"
   });
   const usedModel = r.__model;
+  const vendor = cleanStr(r.vendor, 60);
+  const description = cleanStr(r.description, 40);
+  const catIndex = ids.indexOf(r.categoryId);
+  const common = {
+    model: usedModel,
+    vendor,
+    item: [vendor, description].filter(Boolean).join(" · ") || null,
+    paymentMethod: ["card", "cash", "other"].includes(r.paymentMethod) ? r.paymentMethod : null,
+    paid: typeof r.paid === "boolean" ? r.paid : null,
+    category: catIndex >= 0 ? cats[catIndex] : null,
+    notes: cleanStr(r.notes, 160),
+    confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
+  };
+
+  if (multi) {
+    const charges = (Array.isArray(r.charges) ? r.charges : []).slice(0, 12).map(cleanCharge).filter((c) => c.amount);
+    const combined = combineCharges(charges);
+    delete combined.label;
+    return { ...common, ...combined, files: fileParts.length, charges };
+  }
 
   // ניקוי ובדיקות סבירות
   const currency = typeof r.currency === "string" && /^[A-Z]{3}$/.test(r.currency.trim().toUpperCase()) ? r.currency.trim().toUpperCase() : null;
@@ -407,26 +550,16 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
     rateSource = "computed";
   }
   if (currency === "ILS") { exchangeRate = null; rateSource = null; }
-  const vendor = cleanStr(r.vendor, 60);
-  const description = cleanStr(r.description, 40);
-  const catIndex = ids.indexOf(r.categoryId);
 
   return {
-    model: usedModel,
-    vendor,
-    item: [vendor, description].filter(Boolean).join(" · ") || null,
+    ...common,
     amount,
     currency,
     date: validDate(r.date),
     chargeDate: validDate(r.chargeDate),
-    paymentMethod: ["card", "cash", "other"].includes(r.paymentMethod) ? r.paymentMethod : null,
-    paid: typeof r.paid === "boolean" ? r.paid : null,
     chargedAmountILS,
     exchangeRate,
-    rateSource,
-    category: catIndex >= 0 ? cats[catIndex] : null,
-    notes: cleanStr(r.notes, 160),
-    confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
+    rateSource
   };
 });
 
