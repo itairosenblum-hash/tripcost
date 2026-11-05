@@ -1003,14 +1003,14 @@
     <div class="scan-box">
       <div class="scan-btn" id="btnScanReceipt">
         <span class="scan-em">🧾</span>
-        <span class="scan-txt"><b>סריקת קבלה</b><small>הפרטים ימולאו אוטומטית</small></span>
+        <span class="scan-txt"><b>סריקת קבלה</b><small>אפשר כמה קבצים יחד</small></span>
         <span class="scan-actions">
           <button type="button" class="scan-pick" id="btnScanCamera">📷 צילום</button>
-          <button type="button" class="scan-pick" id="btnScanFile">📁 קובץ</button>
+          <button type="button" class="scan-pick" id="btnScanFile">📁 קבצים</button>
         </span>
       </div>
       <input type="file" id="efScanCamera" accept="image/*" capture="environment" hidden>
-      <input type="file" id="efScanInput" accept="image/*,application/pdf" hidden>
+      <input type="file" id="efScanInput" accept="image/*,application/pdf" multiple hidden>
       <div class="scan-status" id="efScanStatus" hidden>
         <span class="scan-spin" id="efScanSpin"></span>
         <span id="efScanText"></span>
@@ -4097,7 +4097,7 @@ function openEditExpense(id){
 
 /* -- receipt scanning (Gemini through the scanReceipt Cloud Function, like the shopping & crane apps) -- */
 let scanSeq = 0;          // bumps on every scan and whenever the sheet reopens, so stale results are dropped
-let scanAttachId = null;  // the attachment the last scan added (replaced on rescan, not duplicated)
+let scanAttachIds = [];   // the attachments the last scan added (replaced on rescan, not duplicated)
 
 function scanStatus(state, text){
   const box = document.getElementById('efScanStatus');
@@ -4109,7 +4109,7 @@ function scanStatus(state, text){
 function resetScanUI(){
   if (document.getElementById('upCancel').onclick) uploadUI.hide(); // a scan was in progress
   scanSeq++;
-  scanAttachId = null;
+  scanAttachIds = [];
   scanRateLock = null;
   scanStatus(null);
   document.getElementById('btnScanReceipt').classList.remove('busy');
@@ -4131,54 +4131,73 @@ document.getElementById('efCategoryGrid').addEventListener('click', () => docume
 });
 document.getElementById('efScanCamera').addEventListener('change', onScanPicked);
 document.getElementById('efScanInput').addEventListener('change', onScanPicked);
+// Several files are read together as ONE expense: copies of the same charge (invoice + card slip)
+// count once, separate charges (deposit + balance, two receipts) are summed.
+const MAX_SCAN_FILES = 4;
 async function onScanPicked(e){
-  const original = (e.target.files || [])[0];
+  const picked = [...(e.target.files || [])];
   e.target.value = "";
-  if (!original) return;
+  if (!picked.length) return;
+  if (picked.length > MAX_SCAN_FILES){ toast(`אפשר עד ${MAX_SCAN_FILES} קבצים בכל פעם — נלקחו הראשונים`); picked.length = MAX_SCAN_FILES; }
   const trip = activeTrip();
   if (!trip) return;
+  const many = picked.length > 1;
   const seq = ++scanSeq;
   const btn = document.getElementById('btnScanReceipt');
   const saveBtn = document.getElementById('btnSaveExpense');
   const restore = () => { btn.classList.remove('busy'); saveBtn.disabled = false; };
   btn.classList.add('busy'); saveBtn.disabled = true;
-  scanStatus('busy', "קורא את הקבלה…");
-  uploadUI.show("סורק את הקבלה…", {
+  scanStatus('busy', many ? `קורא ${picked.length} קבלות…` : "קורא את הקבלה…");
+  uploadUI.show(many ? `סורק ${picked.length} קבלות…` : "סורק את הקבלה…", {
     from: "🧾", to: "👛",
     hint: "זה לוקח בדרך כלל כמה שניות.",
     onCancel: () => { scanSeq++; restore(); scanStatus('error', "הסריקה בוטלה"); }
   });
 
-  // The receipt is attached to the expense whether or not the reading succeeds.
-  let attachFile = original;
-  if ((original.type || "").startsWith("image/")){
-    uploadUI.set(0.03, "ממיר את התמונה ל-PDF…");
-    try{ attachFile = await imageToPdf(original); }catch(err){ console.warn("tripcost: pdf conversion failed, keeping the image", err); }
+  // The receipts are attached to the expense whether or not the reading succeeds.
+  const attachFiles = [];
+  for (let i = 0; i < picked.length; i++){
+    const original = picked[i];
+    let f = original;
+    if ((original.type || "").startsWith("image/")){
+      uploadUI.set(0.03 * (i + 1) / picked.length, many ? `ממיר תמונה ${i + 1} ל-PDF…` : "ממיר את התמונה ל-PDF…");
+      try{ f = await imageToPdf(original); }catch(err){ console.warn("tripcost: pdf conversion failed, keeping the image", err); }
+    }
+    attachFiles.push(f);
+    if (seq !== scanSeq) return;
   }
-  if (seq !== scanSeq) return;
 
   let result = null, error = "";
   try{
-    uploadUI.set(0.08, "מכין את הקובץ…");
-    const prepared = await prepareUpload(original);
-    if (!/^image\/|^application\/pdf$/.test(prepared.type)) throw new Error("אפשר לסרוק רק תמונה או PDF");
-    if (prepared.blob.size > 7 * 1024 * 1024) throw new Error("הקובץ גדול מ-7MB");
+    uploadUI.set(0.06, many ? "מכין את הקבצים…" : "מכין את הקובץ…");
+    const files = [];
+    let total = 0;
+    for (const original of picked){
+      const prepared = await prepareUpload(original);
+      if (!/^image\/|^application\/pdf$/.test(prepared.type)) throw new Error("אפשר לסרוק רק תמונה או PDF");
+      if (prepared.blob.size > 7 * 1024 * 1024) throw new Error(many ? `הקובץ ${original.name || ""} גדול מ-7MB` : "הקובץ גדול מ-7MB");
+      total += prepared.blob.size;
+      files.push({ data: await blobToBase64(prepared.blob), mimeType: prepared.type });
+      if (seq !== scanSeq) return;
+    }
+    if (total > 14 * 1024 * 1024) throw new Error("הקבצים יחד גדולים מ-14MB");
     const payload = {
-      data: await blobToBase64(prepared.blob),
-      mimeType: prepared.type,
       categories: CATEGORIES,
       tripName: trip.name || "",
       tripStart: trip.startDate || ""
     };
-    if (seq !== scanSeq) return;
-    uploadUI.set(0.12, "שולח את הקבלה…");
+    if (many) payload.files = files;
+    else Object.assign(payload, files[0]);
+    uploadUI.set(0.12, many ? "שולח את הקבלות…" : "שולח את הקבלה…");
     let crawling = false;
     const res = await callFnWithProgress("scanReceipt", payload, (f) => {
       if (seq !== scanSeq || crawling) return;
-      if (f < 1){ uploadUI.set(0.12 + f * 0.33, "שולח את הקבלה…"); return; }
+      if (f < 1){ uploadUI.set(0.12 + f * 0.33, many ? "שולח את הקבלות…" : "שולח את הקבלה…"); return; }
       // Upload finished — the AI is reading; real progress isn't available, so move steadily.
       crawling = true;
-      uploadUI.crawl(0.45, 0.95, ["מזהה את החברה…", "קורא סכום ומטבע…", "מאתר תאריך ומועד חיוב…", "בודק שער המרה…", "בוחר קטגוריה…", "עוד רגע…"], 14);
+      uploadUI.crawl(0.45, 0.95, many
+        ? ["מזהה את החברה…", "משווה בין הקבלות…", "מפריד חיובים כפולים…", "קורא סכומים ומטבעות…", "מסכם את העסקה…", "עוד רגע…"]
+        : ["מזהה את החברה…", "קורא סכום ומטבע…", "מאתר תאריך ומועד חיוב…", "בודק שער המרה…", "בוחר קטגוריה…", "עוד רגע…"], many ? 20 : 14);
     }, 200000);
     result = res.data;
   }catch(err){
@@ -4190,27 +4209,76 @@ async function onScanPicked(e){
   else uploadUI.hide();
   if (seq !== scanSeq) return;
 
-  if (scanAttachId){
-    currentAttachments = currentAttachments.filter(a => !(a.id === scanAttachId && a.isNew));
+  if (scanAttachIds.length){
+    currentAttachments = currentAttachments.filter(a => !(a.isNew && scanAttachIds.includes(a.id)));
   }
-  scanAttachId = uid();
-  currentAttachments.push({ id: scanAttachId, name: attachFile.name || "קבלה.pdf", type: attachFile.type, size: attachFile.size, file: attachFile, isNew: true });
+  scanAttachIds = attachFiles.map(f => {
+    const id = uid();
+    currentAttachments.push({ id, name: f.name || "קבלה.pdf", type: f.type, size: f.size, file: f, isNew: true });
+    return id;
+  });
   renderAttachChips();
 
+  const attached = many ? "הקבלות צורפו" : "הקבלה צורפה";
   if (result){
-    const unsupported = await applyScan(result, trip);
+    const { unsupported, summed } = await applyScan(result, trip);
     if (seq !== scanSeq) return;
+    const what = summed > 1 ? `${summed} חיובים סוכמו לעסקה אחת (הפירוט בהערות)` : many && summed === 1 ? "הקבצים זוהו כחיוב אחד" : "";
     scanStatus(unsupported ? 'error' : 'done', unsupported
-      ? `המטבע ${unsupported} לא נתמך — הסכום נכתב בהערות. הקבלה צורפה.`
-      : "הפרטים מולאו מהקבלה והיא צורפה להוצאה. בדקו לפני השמירה ✓");
+      ? `המטבע ${unsupported} לא נתמך — הסכום נכתב בהערות. ${attached}.`
+      : `הפרטים מולאו ${many ? "מהקבלות" : "מהקבלה"}${what ? " · " + what : ""}. ${attached} להוצאה. בדקו לפני השמירה ✓`);
   } else {
-    scanStatus('error', (error || "הסריקה נכשלה") + " — הקבלה צורפה, אפשר למלא ידנית.");
+    scanStatus('error', (error || "הסריקה נכשלה") + ` — ${attached}, אפשר למלא ידנית.`);
   }
   restore();
 }
 
-// Fills the expense form from a scan result. Returns the ISO code of an unsupported currency, if any.
+// Rate to shekels by ISO code on a date: a tracked currency's lookup, else the ECB rates directly.
+async function rateToILS(code, iso){
+  if (code === "ILS") return 1;
+  const name = Object.keys(CURRENCY_CODE).find(n => CURRENCY_CODE[n] === code);
+  let rate = null;
+  if (iso){
+    if (name) rate = await fetchHistoricalRate(name, iso);
+    else {
+      try{
+        const res = await fetch(`https://api.frankfurter.dev/v1/${iso}?from=${code}&to=ILS`);
+        const json = res.ok ? await res.json() : null;
+        rate = json && json.rates && json.rates.ILS || null;
+      }catch(e){ /* unknown to the ECB — fall through */ }
+    }
+  }
+  if (!rate && name && state.rates[name]) rate = state.rates[name];
+  return rate || null;
+}
+
+function fmtCharge(c){
+  const name = Object.keys(CURRENCY_CODE).find(n => CURRENCY_CODE[n] === c.currency);
+  const sym = name ? CUR_SYMBOL[name] : (c.currency || "");
+  const amt = (Math.round(c.amount * 100) / 100).toLocaleString("he-IL");
+  return [c.label, `${amt} ${sym}`.trim(), c.date ? `(${fmtDate(c.date)})` : ""].filter(Boolean).join(" ");
+}
+
+// Fills the expense form from a scan result.
+// Returns { unsupported: ISO code of an unsupported currency or null, summed: how many charges were added up }.
 async function applyScan(d, trip){
+  const charges = Array.isArray(d.charges) ? d.charges : [];
+  let partial = false;
+  if (d.mixed && charges.length){
+    // Charges in different currencies that the receipts don't price in shekels — convert each
+    // by the rate on its own charge (or purchase) date, and record the expense in shekels.
+    let sum = 0;
+    for (const c of charges){
+      let ils = c.currency === "ILS" ? c.amount : c.chargedAmountILS || (c.exchangeRate ? c.amount * c.exchangeRate : null);
+      if (ils == null && c.currency){
+        const r = await rateToILS(c.currency, c.chargeDate || c.date);
+        if (r) ils = c.amount * r;
+      }
+      if (ils == null) partial = true;
+      else sum += ils;
+    }
+    d = Object.assign({}, d, { currency: "ILS", amount: sum ? Math.round(sum * 100) / 100 : null, exchangeRate: null, chargedAmountILS: null });
+  }
   const conf = d.confidence || {};
   const low = (k) => typeof conf[k] === "number" && conf[k] < 0.7;
   const mark = (id, on) => { if (on) document.getElementById(id).classList.add('uncertain'); };
@@ -4259,6 +4327,10 @@ async function applyScan(d, trip){
   mark('efCurrencyField', !!unsupported || (!d.currency) || low('currency'));
 
   addNote(d.notes);
+  if (charges.length > 1){
+    addNote("פירוט: " + charges.map(fmtCharge).join(" + ") + (d.mixed ? " — הומר לש״ח לפי שער יום החיוב" : ""));
+    if (partial){ addNote("חלק מהחיובים לא הומרו לש״ח ולא נכללו בסכום"); document.getElementById('efAmountField').classList.add('uncertain'); }
+  }
 
   // Paid + charge date (מועד חיוב)
   const paidPill = document.getElementById('efPaidPill');
@@ -4296,7 +4368,7 @@ async function applyScan(d, trip){
     else await applyExpenseDateRate();
   }
   updateTotalHint();
-  return unsupported;
+  return { unsupported, summed: charges.length };
 }
 
 document.getElementById('btnAddExpense').addEventListener('click', openNewExpense);
