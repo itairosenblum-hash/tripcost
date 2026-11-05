@@ -719,6 +719,189 @@
     #versionFooter{ padding-bottom:96px; }
     #sidebarCol .ledger-balance-bar{ top:var(--header-h,0px); }
   }
+
+  /* ===== Desktop (wide screen): side menu + table + details panel, like a desktop program =====
+     Only from 1100px wide; phones, tablets and narrow windows keep the layout above. */
+  #deskNav, #deskTitle, #deskActions, #deskKpis, #deskInspector, #deskChips{display:none;}
+  #deskTitle small{font-size:15px;font-weight:600;color:var(--ink-soft);margin-inline-start:10px;}
+  @media (min-width: 1100px) and (min-height: 600px){
+    :root{ --nav-bg:#1E4A47; --nav-ink:#EEF4F2; --nav-soft:#B9D0CA; --nav-active:#2F6F6B; --nav-line:#2E5E5A; }
+    body{ background:var(--bg); overflow:hidden; }
+    #bgPlane{ display:none; }
+    #app{
+      max-width:none; margin:0; border-radius:0; box-shadow:none;
+      height:100vh; height:100dvh; min-height:0;
+      display:grid; grid-template-columns:252px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr);
+    }
+
+    /* side menu */
+    #deskNav{
+      display:flex; flex-direction:column; gap:20px; grid-column:1; grid-row:1 / -1;
+      background:var(--nav-bg); color:var(--nav-ink); padding:22px 14px 16px; overflow-y:auto; scrollbar-width:thin;
+    }
+    .dn-brand{display:flex;align-items:baseline;gap:9px;padding:0 8px;}
+    .dn-brand .mark{font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:900;font-size:26px;color:#FFFDF8;}
+    .dn-brand .sub{font-size:13px;color:var(--nav-soft);}
+    .dn-new{
+      display:flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:var(--radius-sm);
+      border:1px dashed #74A098;background:transparent;color:#FFFDF8;font-size:15px;font-weight:700;cursor:pointer;
+    }
+    .dn-new:hover{background:rgba(255,255,255,.06);}
+    .dn-group{font-size:12.5px;font-weight:700;color:var(--nav-soft);padding:12px 10px 4px;}
+    .dn-trip{
+      display:flex;flex-direction:column;gap:1px;width:100%;text-align:right;padding:9px 12px;border-radius:var(--radius-sm);
+      border:none;background:transparent;color:var(--nav-ink);cursor:pointer;
+    }
+    .dn-trip:hover{background:rgba(255,255,255,.07);}
+    .dn-trip.active{background:var(--nav-active);}
+    .dn-trip b{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .dn-trip span{font-size:12.5px;color:var(--nav-soft);font-variant-numeric:tabular-nums;}
+    .dn-trip.active span{color:#D7E8E3;}
+    .dn-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--nav-line);padding-top:12px;}
+    .dn-link{
+      display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);border:none;background:transparent;
+      color:var(--nav-ink);font-size:14.5px;cursor:pointer;text-align:right;width:100%;
+    }
+    .dn-link:hover{background:rgba(255,255,255,.07);}
+    .dn-link svg{flex:none;}
+    .dn-link .dot{width:8px;height:8px;border-radius:50%;background:var(--nav-soft);margin-inline-start:auto;flex:none;}
+    .dn-link.on .dot{background:#7FCB98;}
+    .dn-link.syncing .dot{background:var(--amber);animation:pulse 1s ease-in-out infinite;}
+    .dn-link.err .dot{background:#F09A80;}
+
+    /* header: title + flights | search | actions */
+    header.topbar{
+      grid-column:2; grid-row:1; position:static; padding:20px 28px 14px;
+      display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,320px) auto; column-gap:14px; row-gap:4px; align-items:center;
+    }
+    header.topbar .brand, #btnMenu, #syncStatusLine, #tripTabs, #cashCompactRow{ display:none !important; }
+    #deskTitle{display:block;grid-column:1;grid-row:1;margin:0;font-size:25px;font-weight:800;line-height:1.2;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    header.topbar .brand-row{grid-column:1;grid-row:2;min-width:0;}
+    header.topbar .trip-info{flex-direction:row;flex-wrap:wrap;gap:4px 14px;align-items:center;}
+    header.topbar .trip-info-row{font-size:13px;}
+    header.topbar > .field{grid-column:2;grid-row:1 / span 2;margin:0 !important;}
+    header.topbar > .field input{height:42px;}
+    #deskActions{display:flex;gap:10px;grid-column:3;grid-row:1 / span 2;}
+    .da-btn{
+      display:flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-radius:var(--radius-sm);
+      border:1px solid var(--border);background:var(--card);color:var(--ink);font-size:14.5px;font-weight:700;cursor:pointer;white-space:nowrap;
+    }
+    .da-btn:hover{border-color:var(--teal);}
+    .da-btn.primary{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:800;}
+    .da-btn.primary:hover{filter:brightness(1.07);}
+    .da-btn kbd{font-family:inherit;font-size:11.5px;font-weight:600;border-radius:6px;padding:1px 6px;background:rgba(0,0,0,.14);}
+    .da-btn:not(.primary) kbd{background:var(--card-2);color:var(--ink-soft);}
+
+    /* workspace grid: summary cards / table | details / footer */
+    main{
+      grid-column:2; grid-row:2; min-height:0;
+      padding:0 28px; gap:16px 20px; display:grid;
+      grid-template-columns:minmax(0,1fr) clamp(300px,24vw,370px);
+      grid-template-rows:auto minmax(0,1fr) auto; align-items:stretch;
+    }
+    #deskKpis{display:grid;grid-column:1 / -1;grid-row:1;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;}
+    #mainCol{grid-column:1;grid-row:2;margin:0;padding:0 0 20px;}
+    #sidebarCol{grid-column:2;grid-row:2;padding:0 2px 20px;}
+    #colResizer, .fab, #ledgerBalanceBar, #filterBar{display:none !important;}
+    #versionFooter{grid-column:1 / -1;grid-row:3;}
+
+    .dk-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:flex;flex-direction:column;gap:5px;min-width:0;}
+    .dk-card .l{font-size:13.5px;font-weight:700;color:var(--ink-soft);}
+    .dk-card .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15;overflow-wrap:anywhere;}
+    .dk-card .s{font-size:13px;color:var(--ink-soft);}
+    .dk-card .bar{height:7px;border-radius:99px;background:var(--card-2);overflow:hidden;}
+    .dk-card .bar i{display:block;height:100%;border-radius:99px;background:var(--teal);}
+    .dk-card .bar i.over{background:var(--danger);}
+    .dk-card.amber{background:var(--amber-tint);border-color:transparent;}
+    .dk-card.amber .l, .dk-card.amber .v{color:#7A5712;}
+    .dk-card button.s{background:none;border:none;padding:0;text-align:right;font:inherit;font-size:13px;font-weight:700;color:#7A5712;cursor:pointer;text-decoration:underline;}
+    .dk-card.click{cursor:pointer;}
+    .dk-card.click:hover{border-color:var(--teal);}
+
+    /* expenses table */
+    #expensesSection{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+    #expensesSection > .row{padding:12px 16px;margin:0 !important;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
+    #expensesSection > .row .section-title{font-size:16px;color:var(--ink);font-weight:800;}
+    #expensesSection > .row #sortSelect{display:none;}
+    .dt-chips{display:flex !important;gap:6px;flex-wrap:wrap;flex:1;}
+    .dt-chip{height:30px;padding:0 12px;border-radius:99px;border:1px solid var(--border);background:var(--card);color:var(--ink-soft);
+      font-size:13px;font-weight:700;cursor:pointer;}
+    .dt-chip.on{background:var(--teal);border-color:var(--teal);color:#fff;}
+    #expensesList .empty{padding:40px 16px;}
+    .dt-scroll{overflow-x:auto;}
+    .dt{min-width:600px;}
+    .dt-r{display:grid;grid-template-columns:minmax(140px,2fr) minmax(96px,1fr) 88px 84px 96px 84px;gap:12px;align-items:center;padding:0 16px;}
+    .dt-orig-sub{display:none;font-size:11.5px;font-weight:500;color:var(--ink-soft);}
+    .dt-h{background:var(--card-2);height:38px;font-size:12.5px;font-weight:700;color:var(--ink-soft);position:sticky;top:0;z-index:1;}
+    .dt-h button{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:right;}
+    .dt-h button.on{color:var(--ink);}
+    .dt-row{height:50px;border-top:1px solid var(--border);cursor:pointer;font-size:13.5px;color:var(--ink-soft);outline:none;}
+    .dt-row:hover{background:color-mix(in srgb, var(--card-2) 55%, transparent);}
+    .dt-row:focus-visible{box-shadow:inset 0 0 0 2px var(--teal);}
+    .dt-row.sel{background:var(--teal-tint);box-shadow:inset -3px 0 0 var(--teal);}
+    .dt-row.excluded{opacity:.6;}
+    .dt-name{display:flex;align-items:center;gap:7px;min-width:0;color:var(--ink);font-size:14.5px;font-weight:600;}
+    .dt-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .dt-name small{flex:none;font-size:12px;color:var(--ink-soft);font-weight:600;}
+    .dt-cat{display:flex;align-items:center;gap:7px;min-width:0;}
+    .dt-cat i{width:9px;height:9px;border-radius:50%;flex:none;}
+    .dt-cat span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .dt-num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+    .dt-ils{color:var(--ink);font-weight:700;font-size:14.5px;}
+    .dt-pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:var(--teal-tint);color:var(--teal-dark);white-space:nowrap;}
+    .dt-pill.pend{background:var(--amber-tint);color:#7A5712;}
+    .dt-foot{height:46px;border-top:1px solid var(--border);font-weight:800;font-size:14px;color:var(--ink);}
+
+    /* details panel */
+    #deskInspector{display:flex;flex-direction:column;gap:14px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;}
+    #deskInspector .di-empty{color:var(--ink-soft);font-size:14px;text-align:center;padding:26px 6px;line-height:1.6;}
+    .di-head{display:flex;gap:10px;align-items:flex-start;}
+    .di-head > div{flex:1;min-width:0;}
+    .di-cat{font-size:12.5px;font-weight:700;color:var(--ink-soft);display:flex;align-items:center;gap:6px;}
+    .di-cat i{width:9px;height:9px;border-radius:50%;}
+    .di-title{margin:3px 0 0;font-size:19px;font-weight:800;overflow-wrap:anywhere;}
+    .di-amt{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:13px 14px;border-radius:12px;background:var(--teal-tint);color:var(--teal-dark);}
+    .di-amt b{font-size:25px;font-weight:800;font-variant-numeric:tabular-nums;}
+    .di-amt span{font-size:13.5px;font-variant-numeric:tabular-nums;}
+    .di-dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px;}
+    .di-dl dt{color:var(--ink-soft);}
+    .di-dl dd{margin:0;font-weight:600;overflow-wrap:anywhere;line-height:1.5;}
+    .di-dl dd.note{font-weight:400;white-space:pre-line;}
+    .di-files{display:flex;flex-direction:column;gap:8px;}
+    .di-files > span{font-size:13px;font-weight:700;color:var(--ink-soft);}
+    .di-files .exp-attachments{margin:0;}
+    .di-actions{display:flex;gap:8px;}
+    .di-actions button{flex:1;height:40px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--card);color:var(--ink);font-size:14px;font-weight:700;cursor:pointer;}
+    .di-actions button:hover{border-color:var(--teal);}
+    .di-actions button.danger{background:var(--danger-tint);border-color:transparent;color:var(--danger);}
+  }
+  @media (min-width: 1100px) and (min-height: 600px) and (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --nav-bg:#0E1514; --nav-active:#24403D; --nav-line:#22302E; }
+    :root:not([data-theme="light"]) .dk-card.amber .l, :root:not([data-theme="light"]) .dk-card.amber .v,
+    :root:not([data-theme="light"]) .dk-card button.s, :root:not([data-theme="light"]) .dt-pill.pend{color:var(--amber);}
+    :root:not([data-theme="light"]) .da-btn.primary, :root:not([data-theme="light"]) .dt-chip.on{color:#0E1514;}
+  }
+  @media (min-width: 1100px) and (min-height: 600px){
+    :root[data-theme="dark"]{ --nav-bg:#0E1514; --nav-active:#24403D; --nav-line:#22302E; }
+    :root[data-theme="dark"] .dk-card.amber .l, :root[data-theme="dark"] .dk-card.amber .v,
+    :root[data-theme="dark"] .dk-card button.s, :root[data-theme="dark"] .dt-pill.pend{color:var(--amber);}
+    :root[data-theme="dark"] .da-btn.primary, :root[data-theme="dark"] .dt-chip.on{color:#0E1514;}
+  }
+  @media (min-width: 1100px) and (max-width: 1365px) and (min-height: 600px){
+    #app{grid-template-columns:220px minmax(0,1fr);}
+    main{grid-template-columns:minmax(0,1fr) 290px;padding:0 22px;}
+    header.topbar{padding:18px 22px 12px;}
+    .dk-card{padding:12px 14px;}
+    .dk-card .v{font-size:21px;}
+    .dt{min-width:0;}
+    .dt-r{grid-template-columns:minmax(120px,2fr) minmax(84px,1fr) 84px 90px 80px;gap:10px;padding:0 14px;}
+    .dt-orig{display:none;}
+    .dt-ils{display:flex;flex-direction:column;line-height:1.15;}
+    .dt-orig-sub{display:block;}
+    .da-btn .lbl-long{display:none;}
+    .dn-brand .sub{display:none;}
+  }
   /* -- date inputs: show dd/mm/yyyy regardless of browser locale -- */
   .date-wrap{position:relative;}
   .date-wrap input[type=date]{color:transparent !important;}
@@ -772,7 +955,10 @@
 <div id="ptr" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v13M6 11l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="app">
 
+  <nav id="deskNav" aria-label="ניווט ראשי"></nav>
+
   <header class="topbar" id="topbar">
+    <h1 id="deskTitle"></h1>
     <div class="brand-row">
       <div class="brand">
         <span class="mark">TripCost</span>
@@ -791,11 +977,24 @@
     <div class="field" style="margin:10px 0 0;">
       <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
     </div>
+    <div id="deskActions">
+      <button type="button" class="da-btn" id="deskScan" title="סריקת קבלות — הפרטים ימולאו אוטומטית">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8h6M9 12h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>סריקת <span class="lbl-long">קבלות</span></span>
+      </button>
+      <button type="button" class="da-btn primary" id="deskNew" title="הוצאה חדשה (N)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+        הוצאה חדשה <kbd>N</kbd>
+      </button>
+    </div>
   </header>
 
   <main id="main">
 
+    <section id="deskKpis" aria-label="סיכום הטיול"></section>
+
     <div id="sidebarCol">
+      <aside id="deskInspector" aria-label="פרטי ההוצאה"></aside>
       <section id="ledgerSection">
         <div id="finishedSummary"></div>
         <div id="categoryDonut"></div>
@@ -809,6 +1008,7 @@
       <section id="expensesSection">
         <div class="row" style="margin-bottom:10px;">
           <div class="section-title" style="margin:0;">הוצאות</div>
+          <div class="dt-chips" id="deskChips"></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <select id="sortSelect" style="border:1px solid var(--border);background:var(--card);border-radius:var(--radius-sm);padding:6px 10px;font-size:14px;color:var(--ink-soft);font-weight:700;">
               <option value="date_desc">תאריך: מהחדש לישן</option>
@@ -822,7 +1022,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">02/11/2026 23:07</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">05/11/2026 22:27</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1822,7 +2022,10 @@ function setSyncStatus(mode, text){
   line.className = mode === 'on' ? 'on' : mode === 'syncing' ? 'syncing' : mode === 'err' ? 'err' : '';
   line.style.display = 'flex';
   line.innerHTML = `<span class="dot"></span><span>${escapeHtml(text || 'סנכרון בענן')}</span>`;
+  lastSyncStatus = { mode, text: text || 'סנכרון בענן' };
+  if (typeof renderDeskSync === 'function') renderDeskSync();
 }
+let lastSyncStatus = { mode: 'off', text: 'סנכרון בענן' };
 
 function initFirebaseIfConfigured(){
   const cfg = loadFirebaseConfig();
@@ -3101,6 +3304,7 @@ function renderExpenses(){
   const trip = activeTrip();
   const list = document.getElementById('expensesList');
   renderFilterBar();
+  if (DESK_MQ.matches) renderDeskChips();
   if (!trip || trip.expenses.length === 0){
     list.innerHTML = `
       <div class="empty">
@@ -3134,6 +3338,8 @@ function renderExpenses(){
       : `<div class="empty"><div class="big">✅</div><p><b>הכל שולם!</b></p><p>אין הוצאות שממתינות לתשלום</p></div>`;
     return;
   }
+
+  if (DESK_MQ.matches){ renderDeskTable(list, items, trip); return; }
 
   const locked = tripLocked(trip);
   list.innerHTML = items.map(exp => {
@@ -3338,9 +3544,279 @@ function renderAll(){
   renderBalanceBar();
   renderRates();
   renderExpenses();
+  renderDesk();
   document.querySelector('.fab').style.display = tripLocked(activeTrip()) ? 'none' : '';
+  document.getElementById('deskActions').style.visibility = tripLocked(activeTrip()) ? 'hidden' : '';
   updateHeaderHeightVar();
 }
+
+/* ========================= Desktop layout (≥1100px): side menu, summary cards, table + details ========================= */
+const DESK_MQ = window.matchMedia('(min-width: 1100px) and (min-height: 600px)');
+let deskSelectedId = null;
+DESK_MQ.addEventListener('change', () => renderAll());
+
+function tripTotalILS(t){ return (t.expenses || []).filter(inTotal).reduce((s, e) => s + expenseTotalILS(e), 0); }
+function tripRange(t){
+  const a = t.startDate, b = t.endDate;
+  if (!a) return "";
+  if (!b || b === a) return fmtDate(a);
+  const [ay, am, ad] = a.split('-'), [by, bm, bd] = b.split('-');
+  if (ay === by && am === bm) return `${ad}–${bd}/${bm}/${by}`;
+  if (ay === by) return `${ad}/${am}–${bd}/${bm}/${by}`;
+  return `${fmtDate(a)}–${fmtDate(b)}`;
+}
+const DESK_ICONS = {
+  sync: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  trips: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  cash: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8"/></svg>',
+  rates: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  xls: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
+};
+
+function renderDesk(){
+  if (!DESK_MQ.matches) return;
+  renderDeskNav();
+  renderDeskTitle();
+  renderDeskKpis();
+  renderDeskInspector();
+}
+
+function switchTrip(id){
+  state.activeTripId = id;
+  expenseFilter = { type: 'all' };
+  expandedExpenseId = null;
+  deskSelectedId = null;
+  saveState();
+  renderAll();
+}
+
+function renderDeskNav(){
+  const nav = document.getElementById('deskNav');
+  const tripBtn = (t) => `<button type="button" class="dn-trip${t.id === state.activeTripId ? ' active' : ''}" data-trip="${t.id}"${t.id === state.activeTripId ? ' aria-current="true"' : ''}>
+      <b>${escapeHtml(t.name || "טיול ללא שם")}</b>
+      <span>${tripRange(t) ? `<bdi dir="ltr">${tripRange(t)}</bdi> · ` : ""}₪${fmtMoney(tripTotalILS(t))}</span>
+    </button>`;
+  const open = state.trips.filter(t => !t.finished);
+  const done = state.trips.filter(t => t.finished);
+  nav.innerHTML = `
+    <div class="dn-brand"><span class="mark">TripCost</span><span class="sub">מעקב הוצאות</span></div>
+    <button type="button" class="dn-new" id="dnNewTrip">${DESK_ICONS.plus} טיול חדש</button>
+    <div>
+      ${open.length ? `<div class="dn-group">טיולים</div>${open.map(tripBtn).join("")}` : ""}
+      ${done.length ? `<div class="dn-group">הסתיימו</div>${done.map(tripBtn).join("")}` : ""}
+    </div>
+    <div class="dn-foot">
+      <button type="button" class="dn-link" id="dnSync"></button>
+      <button type="button" class="dn-link" id="dnCash">${DESK_ICONS.cash} מזומן לטיול</button>
+      <button type="button" class="dn-link" id="dnTrips" title="רשימת הטיולים ושערי המטבע">${DESK_ICONS.rates} ניהול טיולים</button>
+      <button type="button" class="dn-link" id="dnExport">${DESK_ICONS.xls} ייצוא לאקסל</button>
+    </div>`;
+  nav.querySelectorAll('[data-trip]').forEach(b => b.addEventListener('click', () => switchTrip(b.dataset.trip)));
+  document.getElementById('dnNewTrip').addEventListener('click', openNewTripForm);
+  document.getElementById('dnSync').addEventListener('click', () => { renderSyncOverlay(); showOverlay('overlaySync'); });
+  document.getElementById('dnCash').addEventListener('click', openCashSheet);
+  document.getElementById('dnTrips').addEventListener('click', openTripsList);
+  document.getElementById('dnExport').addEventListener('click', () => exportTripXlsx(activeTrip()));
+  renderDeskSync();
+}
+function renderDeskSync(){
+  const b = document.getElementById('dnSync');
+  if (!b) return;
+  const { mode, text } = lastSyncStatus;
+  b.className = 'dn-link ' + (mode === 'on' ? 'on' : mode === 'syncing' ? 'syncing' : mode === 'err' ? 'err' : '');
+  b.innerHTML = `${DESK_ICONS.sync}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(text)}</span><span class="dot"></span>`;
+}
+
+function renderDeskTitle(){
+  const trip = activeTrip();
+  const h = document.getElementById('deskTitle');
+  if (!trip){ h.textContent = "TripCost"; return; }
+  const range = tripRange(trip);
+  h.innerHTML = `${escapeHtml(trip.name || "טיול ללא שם")}${range ? `<small><bdi dir="ltr">${range}</bdi></small>` : ""}${trip.finished ? `<small>· הסתיים</small>` : ""}`;
+}
+
+function renderDeskKpis(){
+  const trip = activeTrip();
+  const el = document.getElementById('deskKpis');
+  if (!trip){ el.innerHTML = ""; return; }
+  const counted = trip.expenses.filter(inTotal);
+  const excluded = trip.expenses.length - counted.length;
+  const sum = (list) => list.reduce((s, e) => s + expenseTotalILS(e), 0);
+  const total = sum(counted);
+  const pending = counted.filter(e => !e.paid);
+  const paid = total - sum(pending);
+  const catCount = new Set(counted.map(expCategory)).size;
+
+  const cards = [];
+  cards.push(`<div class="dk-card"><span class="l">סה״כ הוצאות</span><span class="v">₪${fmtMoney(total)}</span>
+    <span class="s">${counted.length} הוצאות${catCount ? ` · ${catCount} קטגוריות` : ""}${excluded ? ` · +${excluded} מחוץ לתזרים` : ""}</span></div>`);
+
+  if (trip.budget > 0){
+    const remaining = trip.budget - paid;
+    const pct = Math.min(100, Math.round(paid / trip.budget * 100));
+    cards.push(`<div class="dk-card"><span class="l">יתרה מהתקציב</span>
+      <span class="v" style="color:${remaining < 0 ? 'var(--danger)' : 'var(--teal)'}">₪${fmtMoney(remaining)}</span>
+      <div class="bar" role="img" aria-label="שולמו ${pct}% מהתקציב"><i class="${remaining < 0 ? 'over' : ''}" style="width:${pct}%"></i></div>
+      <span class="s">שולם ₪${fmtMoney(paid)} מתוך ₪${fmtMoney(trip.budget)}</span></div>`);
+  } else {
+    cards.push(`<div class="dk-card"><span class="l">שולם עד כה</span><span class="v">₪${fmtMoney(paid)}</span>
+      <span class="s">אפשר להגדיר תקציב בעריכת הטיול</span></div>`);
+  }
+
+  if (pending.length){
+    cards.push(`<div class="dk-card amber"><span class="l">טרם שולם</span><span class="v">₪${fmtMoney(sum(pending))}</span>
+      <button type="button" class="s" id="dkPending">${pending.length} הוצאות · ${expenseFilter.type === 'pending' ? 'הצג הכול' : 'הצג רק אותן'}</button></div>`);
+  } else {
+    cards.push(`<div class="dk-card"><span class="l">טרם שולם</span><span class="v">₪0</span><span class="s">הכול שולם</span></div>`);
+  }
+
+  const currencies = tripCurrencies(trip);
+  const cashInitial = trip.cashInitial || {};
+  const spent = {};
+  trip.expenses.forEach(e => { if (e.paymentMethod === "מזומן" && e.paid) spent[e.currency] = (spent[e.currency] || 0) + (e.amount || 0); });
+  const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
+  cards.push(`<button type="button" class="dk-card click" id="dkCash" style="font:inherit;color:inherit;text-align:right;">
+    <span class="l">מזומן שנשאר</span>
+    <span class="v">${active.length ? active.map(c => `${CUR_SYMBOL[c]}${fmtMoney((cashInitial[c] || 0) - (spent[c] || 0))}`).join(" · ") : "—"}</span>
+    <span class="s">${active.length ? "התחלה: " + active.map(c => `${CUR_SYMBOL[c]}${fmtMoney(cashInitial[c])}`).join(" · ") : "לא הוגדר · לחצו להגדרה"}</span></button>`);
+
+  el.innerHTML = cards.join("");
+  const pb = document.getElementById('dkPending');
+  if (pb) pb.addEventListener('click', () => {
+    expenseFilter = expenseFilter.type === 'pending' ? { type: 'all' } : { type: 'pending' };
+    renderExpenses(); renderDeskKpis(); renderDeskInspector();
+  });
+  document.getElementById('dkCash').addEventListener('click', openCashSheet);
+}
+
+function renderDeskChips(){
+  const trip = activeTrip();
+  const el = document.getElementById('deskChips');
+  if (!trip || !trip.expenses.length){ el.innerHTML = ""; return; }
+  const pendingCount = trip.expenses.filter(e => !e.paid).length;
+  const chips = [`<button type="button" class="dt-chip${expenseFilter.type === 'all' ? ' on' : ''}" data-f="all">הכול (${trip.expenses.length})</button>`];
+  if (pendingCount) chips.push(`<button type="button" class="dt-chip${expenseFilter.type === 'pending' ? ' on' : ''}" data-f="pending">טרם שולם (${pendingCount})</button>`);
+  if (expenseFilter.type === 'category') chips.push(`<button type="button" class="dt-chip on" data-f="all" title="ניקוי הסינון">${escapeHtml(expenseFilter.value)} ✕</button>`);
+  el.innerHTML = chips.join("");
+  el.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
+    expenseFilter = { type: b.dataset.f };
+    renderExpenses(); renderDeskKpis(); renderDeskInspector();
+  }));
+}
+
+function renderDeskTable(list, items, trip){
+  if (!items.some(e => e.id === deskSelectedId)) deskSelectedId = items[0].id;
+  const sortMode = document.getElementById('sortSelect').value;
+  const sortBtn = (label, mode, next) => `<button type="button" class="${sortMode === mode || sortMode === next ? 'on' : ''}" data-sort="${sortMode === mode ? next : mode}">${label}${sortMode === mode ? ' ▾' : sortMode === next ? ' ▴' : ''}</button>`;
+  const shownTotal = items.filter(inTotal).reduce((s, e) => s + expenseTotalILS(e), 0);
+  list.innerHTML = `<div class="dt-scroll"><div class="dt" role="table" aria-label="רשימת ההוצאות">
+    <div class="dt-r dt-h" role="row">
+      <span role="columnheader">פריט</span><span role="columnheader">קטגוריה</span>
+      <span role="columnheader">${sortBtn('תאריך', 'date_desc', 'date_asc')}</span>
+      <span role="columnheader" class="dt-orig">סכום מקורי</span>
+      <span role="columnheader">${sortBtn('בשקלים', 'amount_desc', 'amount_desc')}</span>
+      <span role="columnheader">סטטוס</span>
+    </div>
+    ${items.map(exp => {
+      const cat = expCategory(exp);
+      const att = (exp.attachments || []).length;
+      return `<div class="dt-r dt-row${exp.id === deskSelectedId ? ' sel' : ''}${inTotal(exp) ? '' : ' excluded'}" role="row" tabindex="0" data-id="${exp.id}" aria-selected="${exp.id === deskSelectedId}">
+        <span class="dt-name" role="cell"><span>${escapeHtml(exp.item || "הוצאה")}</span>${att ? `<small title="${att} קבצים מצורפים">📎${att > 1 ? att : ""}</small>` : ""}</span>
+        <span class="dt-cat" role="cell"><i style="background:${CATEGORY_COLOR[cat]}"></i><span>${escapeHtml(cat)}</span></span>
+        <span class="dt-num" role="cell">${fmtDate(exp.date)}</span>
+        <span class="dt-num dt-orig" role="cell">${exp.currency !== "שקל" ? `${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}` : ""}</span>
+        <span class="dt-num dt-ils" role="cell">₪${fmtMoney(expenseTotalILS(exp))}${exp.currency !== "שקל" ? `<small class="dt-orig-sub">${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}</small>` : ""}</span>
+        <span role="cell"><span class="dt-pill${exp.paid ? '' : ' pend'}">${exp.paid ? 'שולם' : 'טרם שולם'}</span></span>
+      </div>`;
+    }).join("")}
+    <div class="dt-r dt-foot" role="row"><span role="cell">סה״כ${items.length !== trip.expenses.length ? ` (${items.length} מוצגות)` : ""}</span><span></span><span></span><span class="dt-orig"></span><span class="dt-num" role="cell">₪${fmtMoney(shownTotal)}</span><span></span></div>
+  </div></div>`;
+
+  list.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('sortSelect').value = b.dataset.sort;
+    renderExpenses();
+  }));
+  list.querySelectorAll('.dt-row').forEach(r => {
+    r.addEventListener('click', () => selectDeskRow(r.dataset.id));
+    r.addEventListener('dblclick', () => { if (!tripLocked(activeTrip())) openEditExpense(r.dataset.id); });
+    r.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter'){ e.preventDefault(); if (deskSelectedId === r.dataset.id && !tripLocked(activeTrip())) openEditExpense(r.dataset.id); else selectDeskRow(r.dataset.id); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        const next = e.key === 'ArrowDown' ? r.nextElementSibling : r.previousElementSibling;
+        if (next && next.classList.contains('dt-row')) selectDeskRow(next.dataset.id, true);
+      }
+    });
+  });
+}
+function selectDeskRow(id, focus){
+  deskSelectedId = id;
+  document.querySelectorAll('#expensesList .dt-row').forEach(r => {
+    const on = r.dataset.id === id;
+    r.classList.toggle('sel', on);
+    r.setAttribute('aria-selected', on);
+    if (on && focus){ r.focus(); r.scrollIntoView({ block: 'nearest' }); }
+  });
+  renderDeskInspector();
+}
+
+function renderDeskInspector(){
+  const el = document.getElementById('deskInspector');
+  const trip = activeTrip();
+  const exp = trip && trip.expenses.find(e => e.id === deskSelectedId);
+  if (!exp){
+    el.innerHTML = `<div class="di-empty">${trip && trip.expenses.length ? "בחרו הוצאה בטבלה כדי לראות את הפרטים.<br>לחיצה כפולה פותחת לעריכה." : "עדיין אין הוצאות בטיול הזה."}</div>`;
+    return;
+  }
+  const cat = expCategory(exp);
+  const locked = tripLocked(trip);
+  const rows = [
+    ['תאריך', fmtDate(exp.date)],
+    ['תשלום', escapeHtml(exp.paymentMethod || "—")],
+    ['סטטוס', exp.paid ? 'שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '') : 'הוזמן · טרם שולם']
+  ];
+  if (exp.split > 1) rows.push(['חלוקה', `ל-${exp.split}`]);
+  if (!inTotal(exp)) rows.push(['תזרים', 'לא נכלל בסה״כ']);
+  el.innerHTML = `
+    <div class="di-head">
+      <div>
+        <div class="di-cat"><i style="background:${CATEGORY_COLOR[cat]}"></i>${escapeHtml(cat)}</div>
+        <h2 class="di-title">${escapeHtml(exp.item || "הוצאה")}</h2>
+      </div>
+    </div>
+    <div class="di-amt"><b>₪${fmtMoney(expenseTotalILS(exp))}</b>${exp.currency !== "שקל" ? `<span>${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)} × ${exp.rate}</span>` : ""}</div>
+    <dl class="di-dl">
+      ${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}
+      ${exp.notes ? `<dt>הערות</dt><dd class="note">${escapeHtml(exp.notes)}</dd>` : ""}
+    </dl>
+    ${(exp.attachments || []).length ? `<div class="di-files"><span>קבצים מצורפים (${exp.attachments.length})</span><div class="exp-attachments">${exp.attachments.map(a => `<button type="button" class="attach-chip" data-open="${a.id}" data-driveurl="${escapeHtml(a.driveUrl || '')}" data-driveid="${escapeHtml(a.driveId || '')}" data-name="${escapeHtml(a.name || '')}">${iconForType(a.type)}<span>${escapeHtml(truncateName(a.name))}</span></button>`).join("")}</div></div>` : ""}
+    ${locked ? `<div class="di-empty" style="padding:4px;">🔒 הטיול הסתיים ונעול</div>` : `<div class="di-actions">
+      <button type="button" id="diEdit">עריכה</button>
+      <button type="button" class="danger" id="diDelete">מחיקה</button>
+    </div>`}`;
+  el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openAttachment(b.dataset.open, b.dataset.driveurl, b.dataset.driveid, b.dataset.name)));
+  const ed = document.getElementById('diEdit');
+  if (ed) ed.addEventListener('click', () => openEditExpense(exp.id));
+  const del = document.getElementById('diDelete');
+  if (del) del.addEventListener('click', () => deleteExpense(exp.id));
+}
+
+document.getElementById('deskNew').addEventListener('click', openNewExpense);
+document.getElementById('deskScan').addEventListener('click', () => {
+  openNewExpense();
+  if (document.getElementById('overlayExpense').classList.contains('show')) document.getElementById('btnScanFile').click();
+});
+// Keyboard: N = new expense, Ctrl/⌘+K or / = search (desktop only, never while typing or with a window open)
+document.addEventListener('keydown', (e) => {
+  if (!DESK_MQ.matches || document.querySelector('.overlay.show')) return;
+  const typing = e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]');
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK'){ e.preventDefault(); document.getElementById('expenseSearchInput').focus(); return; }
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'KeyN'){ e.preventDefault(); openNewExpense(); }
+  else if (e.key === '/'){ e.preventDefault(); document.getElementById('expenseSearchInput').focus(); }
+});
+
 const WIDE_MQ = window.matchMedia('(min-width: 860px), (min-width: 600px) and (min-height: 600px)');
 function scrollToExpenses(){
   // Wide layout: page is locked, each column scrolls — bring the expenses column to its top.
@@ -4587,8 +5063,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '02/11/2026 23:07';
-const BUILD_EPOCH = 1793653664103; // ms — when this exact file was pushed
+const BUILD_STAMP = '05/11/2026 22:27';
+const BUILD_EPOCH = 1793910440210; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -4602,8 +5078,20 @@ function checkForNewVersion(){
     .then(r => r.json())
     .then(list => {
       const c = Array.isArray(list) ? list[0] : null;
-      const commitMs = c && c.commit && c.commit.committer ? Date.parse(c.commit.committer.date) : 0;
-      if (!commitMs || commitMs <= BUILD_EPOCH + 2 * 60 * 1000) return; // 2-min push tolerance
+      if (!c || !c.sha) return;
+      // The page doesn't know its own commit, and merge times don't match a hand-set stamp. So the
+      // latest commit seen the first time THIS page text runs (the service worker loads fresh copies
+      // while online) is taken as its own; a different latest commit later = a newer version exists.
+      const key = 'tripcost.buildSha.' + BUILD_STAMP;
+      let mine = null;
+      try { mine = localStorage.getItem(key); } catch(e){}
+      if (!mine){
+        const commitMs = c.commit && c.commit.committer ? Date.parse(c.commit.committer.date) : 0;
+        // A cached page that's clearly older than the latest commit still gets the hint.
+        if (commitMs && commitMs > BUILD_EPOCH + 2 * 24 * 3600 * 1000) mine = "";
+        else { try { localStorage.setItem(key, c.sha); } catch(e){} return; }
+      }
+      if (mine === c.sha) return;
       const hint = document.getElementById('versionUpdateHint');
       if (hint && !hint.firstChild){
         hint.append(" · ");
