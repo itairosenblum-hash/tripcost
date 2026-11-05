@@ -4133,7 +4133,7 @@ document.getElementById('efScanCamera').addEventListener('change', onScanPicked)
 document.getElementById('efScanInput').addEventListener('change', onScanPicked);
 // Several files are read together as ONE expense: copies of the same charge (invoice + card slip)
 // count once, separate charges (deposit + balance, two receipts) are summed.
-const MAX_SCAN_FILES = 4;
+const MAX_SCAN_FILES = 8;
 async function onScanPicked(e){
   const picked = [...(e.target.files || [])];
   e.target.value = "";

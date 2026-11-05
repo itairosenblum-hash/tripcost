@@ -409,7 +409,7 @@ const MULTI_SCAN_SCHEMA = {
   propertyOrdering: [...MULTI_FIELDS, "confidence"]
 };
 
-const MAX_SCAN_FILES = 4;
+const MAX_SCAN_FILES = 8;
 const MAX_SCAN_TOTAL = 14 * 1024 * 1024;
 const cleanCurrency = (v) => (typeof v === "string" && /^[A-Z]{3}$/.test(v.trim().toUpperCase()) ? v.trim().toUpperCase() : null);
 const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
