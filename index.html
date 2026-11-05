@@ -11,9 +11,8 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/heebo-hebrew-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/heebo-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-app-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-auth-compat.js"></script>
@@ -21,6 +20,13 @@
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.13.0/firebase-functions-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
+  /* Fonts are served from the app itself (not Google Fonts) so they're cached for offline use and
+     every screen renders in the same typeface. Variable fonts: every weight 100-900 is real, never synthesized. */
+  @font-face{font-family:'Heebo';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/heebo-hebrew-wght-normal.woff2) format('woff2');unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F;}
+  @font-face{font-family:'Heebo';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/heebo-latin-wght-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+  @font-face{font-family:'Heebo';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/heebo-latin-ext-wght-normal.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+  @font-face{font-family:'Frank Ruhl Libre';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/frank-ruhl-libre-latin-wght-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+
   :root{
     --bg:#FAF6EF;
     --card:#FFFDF8;
@@ -77,12 +83,12 @@
     margin:0;
     background:var(--bg);
     color:var(--ink);
-    font-family:'Heebo',-apple-system,sans-serif;
+    font-family:'Heebo',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
     padding-top:var(--safe-t);
     padding-bottom:var(--safe-b);
     -webkit-tap-highlight-color: transparent;
   }
-  h1,h2,h3,.display{font-family:'Frank Ruhl Libre',serif;}
+  h1,h2,h3{font-weight:800;}
   .tnum{font-variant-numeric: tabular-nums;}
   button{font-family:inherit;}
   input,select,textarea{font-family:inherit;}
@@ -103,7 +109,7 @@
   /* On a narrow phone the flight details need the room — drop the subtitle. */
   @media (max-width: 599px){ .brand-row.has-flight .brand .sub{display:none;} }
   .brand{display:flex;align-items:baseline;gap:8px;}
-  .brand .mark{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--teal-dark);letter-spacing:.3px;}
+  .brand .mark{font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:900;font-size:22px;color:var(--teal-dark);letter-spacing:.3px;}
   .brand .sub{font-size:14px;color:var(--ink-soft);}
   .icon-btn{
     width:34px;height:34px;border-radius:var(--radius-pill);border:1px solid var(--border);
@@ -156,10 +162,10 @@
   }
   .pass-top{padding:20px 20px 16px;}
   .pass-eyebrow{font-size:14px;color:var(--ink-soft);margin-bottom:2px;}
-  .pass-total{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:38px;line-height:1.05;color:var(--ink);}
-  .pass-total small{font-family:'Heebo';font-weight:600;font-size:17px;color:var(--ink-soft);}
+  .pass-total{font-weight:800;font-variant-numeric:tabular-nums;font-size:38px;line-height:1.05;color:var(--ink);}
+  .pass-total small{font-weight:600;font-size:17px;color:var(--ink-soft);}
   .pass-pending{margin-top:4px;font-size:16px;font-weight:700;color:#8a6417;}
-  .pass-pending span{font-family:'Heebo';font-weight:600;font-size:14px;color:var(--ink-soft);margin-right:4px;}
+  .pass-pending span{font-weight:600;font-size:14px;color:var(--ink-soft);margin-right:4px;}
   @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pass-pending{color:var(--amber);}}
   :root[data-theme="dark"] .pass-pending{color:var(--amber);}
   .pass-meta{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
@@ -212,7 +218,7 @@
     display:flex;justify-content:space-between;align-items:center;
   }
   .ledger-balance-label{font-size:12px;color:var(--ink-soft);}
-  .ledger-balance-total{font-family:'Frank Ruhl Libre',serif;font-weight:900;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .ledger-balance-total{font-weight:800;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .ledger-balance-meta{text-align:left;font-size:12px;color:var(--ink-soft);}
   .ledger-balance-meta .pending-btn{
     background:none;border:none;font:inherit;color:#8a6417;font-weight:700;cursor:pointer;padding:0;
@@ -805,9 +811,9 @@
           <div class="section-title" style="margin:0;">הוצאות</div>
           <div style="display:flex;gap:8px;align-items:center;">
             <select id="sortSelect" style="border:1px solid var(--border);background:var(--card);border-radius:var(--radius-sm);padding:6px 10px;font-size:14px;color:var(--ink-soft);font-weight:700;">
-              <option value="date_desc">תאריך: חדש→ישן</option>
-              <option value="date_asc">תאריך: ישן→חדש</option>
-              <option value="amount_desc">סכום: גבוה→נמוך</option>
+              <option value="date_desc">תאריך: מהחדש לישן</option>
+              <option value="date_asc">תאריך: מהישן לחדש</option>
+              <option value="amount_desc">סכום: מהגבוה לנמוך</option>
             </select>
           </div>
         </div>
@@ -1037,7 +1043,7 @@
       <div class="seg" id="efPaymentSeg">
         <button type="button" data-val="אשראי" class="active">💳 אשראי</button>
         <button type="button" data-val="מזומן">💵 מזומן</button>
-        <button type="button" data-val="אחר">⋯ אחר</button>
+        <button type="button" data-val="אחר">• אחר</button>
       </div>
     </div>
     <div class="field" id="efPaymentOtherField" style="display:none;">
@@ -2908,7 +2914,7 @@ function renderRates(){
   const foreignCurrencies = tripCurrencies(trip).filter(c => c !== "שקל");
   const rows = foreignCurrencies.map(c => `
     <div class="rate-item">
-      <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${escapeHtml(c)} → שקל</div>
+      <div class="rate-cur"><span class="rate-flag">${CUR_SYMBOL[c]}</span> ${escapeHtml(c)}/שקל</div>
       <div class="rate-val"><input type="number" step="0.0001" class="rate-input tnum" id="${rateInputId(c)}" value="${r[c] || 1}"></div>
     </div>`).join("");
   card.innerHTML = foreignCurrencies.length ? `
@@ -3219,7 +3225,7 @@ function renderTripInfoStrip(){
     else if (takeoff) times = escapeHtml(takeoff);
     if (l && !isNaN(l)){
       const sameDay = t && !isNaN(t) && dm(t) === dm(l);
-      times += (times ? " → " : "נחיתה ") + (sameDay ? hm(l) : `${dm(l)} ${hm(l)}`);
+      times += (times ? " – " : "נחיתה ") + (sameDay ? hm(l) : `${dm(l)} ${hm(l)}`);
     }
     if (times) parts.push(`<bdi dir="ltr">${times}</bdi>`);
     return parts.length ? `<span title="${label}">${icon}</span> ${parts.join(" · ")}` : null;
@@ -3806,7 +3812,7 @@ function showLockedRate(hint, currency){
   document.getElementById('efRate').value = scanRateLock.rate;
   updateTotalHint();
   hint.style.display = "block";
-  hint.textContent = `שער ${currency}→שקל ${scanRateLock.label}: ${scanRateLock.rate} (אפשר לערוך ידנית)`;
+  hint.textContent = `שער ${currency}/שקל ${scanRateLock.label}: ${scanRateLock.rate} (אפשר לערוך ידנית)`;
   return true;
 }
 async function applyExpenseDateRate(){
@@ -3826,7 +3832,7 @@ async function applyExpenseDateRate(){
   if (rate){
     document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
     updateTotalHint();
-    hint.textContent = `שער ${currency}→שקל ליום ${fmtDate(dateVal)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
+    hint.textContent = `שער ${currency}/שקל ליום ${fmtDate(dateVal)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
   } else {
     hint.textContent = "לא נמצא שער היסטורי לתאריך הזה — משתמש בשער הנוכחי, ניתן לערוך ידנית";
   }
@@ -3876,7 +3882,7 @@ async function applyPaidDate(iso){
   if (rate){
     document.getElementById('efRate').value = Math.round(rate * 10000) / 10000;
     updateTotalHint();
-    hint.textContent = `שער ${currency}→שקל ליום ${fmtDate(iso)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
+    hint.textContent = `שער ${currency}/שקל ליום ${fmtDate(iso)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
   } else {
     hint.textContent = "לא הצלחתי למצוא שער היסטורי לתאריך הזה — הזן ידנית";
   }

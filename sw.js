@@ -2,13 +2,17 @@
 // sw.js's own bytes, which is what makes the browser notice there's an update at
 // all -- a byte-identical sw.js is never re-installed, no matter how much
 // index.html changed on the server.
-const CACHE_NAME = 'tripcost-v35';
+const CACHE_NAME = 'tripcost-v36';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './fonts/heebo-hebrew-wght-normal.woff2',
+  './fonts/heebo-latin-wght-normal.woff2',
+  './fonts/heebo-latin-ext-wght-normal.woff2',
+  './fonts/frank-ruhl-libre-latin-wght-normal.woff2'
 ];
 
 self.addEventListener('install', (event) => {
