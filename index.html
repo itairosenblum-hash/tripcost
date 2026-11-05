@@ -831,7 +831,18 @@
     #expensesList .empty{padding:40px 16px;}
     .dt-scroll{overflow-x:auto;}
     .dt{min-width:600px;}
-    .dt-r{display:grid;grid-template-columns:minmax(140px,2fr) minmax(96px,1fr) 88px 84px 96px 84px;gap:12px;align-items:center;padding:0 16px;}
+    .dt-r{display:grid;grid-template-columns:22px minmax(140px,2fr) minmax(96px,1fr) 88px 84px 96px 92px;gap:12px;align-items:center;padding:0 16px;}
+    .dt-check{display:flex;align-items:center;}
+    .dt-check input{width:17px;height:17px;margin:0;accent-color:var(--teal);cursor:pointer;}
+    .dt-row.checked{background:color-mix(in srgb, var(--teal-tint) 70%, transparent);}
+    button.dt-pill{border:1px solid transparent;cursor:pointer;font-family:inherit;}
+    button.dt-pill:hover{border-color:currentColor;}
+    .dt-bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;}
+    .dt-bulk b{font-size:14px;margin-inline-end:4px;}
+    .dt-bulk button{height:30px;padding:0 12px;border-radius:99px;border:1px solid var(--border);background:var(--card);color:var(--ink);font-size:13px;font-weight:700;cursor:pointer;}
+    .dt-bulk button:hover{border-color:var(--teal);}
+    .dt-bulk button.danger{background:var(--danger-tint);border-color:transparent;color:var(--danger);}
+    .dt-bulk button.plain{border-color:transparent;background:transparent;color:var(--ink-soft);}
     .dt-orig-sub{display:none;font-size:11.5px;font-weight:500;color:var(--ink-soft);}
     .dt-h{background:var(--card-2);height:38px;font-size:12.5px;font-weight:700;color:var(--ink-soft);position:sticky;top:0;z-index:1;}
     .dt-h button{background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:right;}
@@ -895,13 +906,53 @@
     .dk-card{padding:12px 14px;}
     .dk-card .v{font-size:21px;}
     .dt{min-width:0;}
-    .dt-r{grid-template-columns:minmax(120px,2fr) minmax(84px,1fr) 84px 90px 80px;gap:10px;padding:0 14px;}
+    .dt-r{grid-template-columns:20px minmax(120px,2fr) minmax(84px,1fr) 84px 90px 88px;gap:10px;padding:0 14px;}
     .dt-orig{display:none;}
     .dt-ils{display:flex;flex-direction:column;line-height:1.15;}
     .dt-orig-sub{display:block;}
     .da-btn .lbl-long{display:none;}
     .dn-brand .sub{display:none;}
   }
+
+  /* ===== Trip report (printed / saved as PDF) ===== */
+  #printReport{display:none;}
+  @media print{
+    @page{size:A4;margin:13mm 12mm;}
+    html, body{height:auto !important;overflow:visible !important;background:#fff !important;}
+    body.printing-report > *:not(#printReport){display:none !important;}
+    body.printing-report #printReport{display:block;}
+    #printReport, #printReport *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+  #printReport{font-family:'Heebo',system-ui,sans-serif;color:#20302E;font-size:10.5pt;line-height:1.45;direction:rtl;}
+  .pr-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:2px solid #2F6F6B;padding-bottom:8pt;margin-bottom:12pt;}
+  .pr-head h1{margin:0;font-size:20pt;font-weight:800;line-height:1.2;}
+  .pr-head .sub{font-size:10pt;color:#4A5C57;margin-top:3pt;}
+  .pr-head .brand{font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:900;font-size:15pt;color:#1E4A47;}
+  .pr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8pt;margin-bottom:14pt;}
+  .pr-kpi{border:1px solid #E4DCC8;border-radius:8pt;padding:7pt 9pt;background:#FFFDF8;}
+  .pr-kpi .k{font-size:8.5pt;font-weight:700;color:#4A5C57;}
+  .pr-kpi .v{font-size:14pt;font-weight:800;font-variant-numeric:tabular-nums;}
+  .pr-kpi .s{font-size:8pt;color:#4A5C57;}
+  .pr-h2{font-size:12pt;font-weight:800;margin:14pt 0 6pt;}
+  .pr-cats{display:grid;grid-template-columns:1fr 1fr;gap:3pt 22pt;}
+  .pr-cat{display:grid;grid-template-columns:110pt 1fr 92pt;align-items:center;gap:8pt;font-size:9.5pt;}
+  .pr-cat .bar{height:6pt;border-radius:3pt;background:#F3ECDC;overflow:hidden;}
+  .pr-cat .bar i{display:block;height:100%;border-radius:3pt;}
+  .pr-cat .n{text-align:left;font-variant-numeric:tabular-nums;color:#4A5C57;}
+  .pr-table{width:100%;border-collapse:collapse;font-size:9pt;}
+  .pr-table th{background:#F3ECDC;color:#4A5C57;font-weight:700;text-align:right;padding:5pt 6pt;font-size:8.5pt;}
+  .pr-table td{padding:5pt 6pt;border-bottom:1px solid #EFE8D8;vertical-align:top;}
+  .pr-table tr{break-inside:avoid;}
+  .pr-table .num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .pr-table .ils{font-weight:700;}
+  .pr-table .note{display:block;font-size:8pt;color:#4A5C57;margin-top:1pt;}
+  .pr-table .files{display:block;font-size:8pt;margin-top:1pt;}
+  .pr-table .files a{color:#1E4A47;}
+  .pr-table tr.excl td{color:#8A8578;}
+  .pr-table tfoot td{font-weight:800;border-top:2px solid #2F6F6B;border-bottom:none;}
+  .pr-pill{display:inline-block;font-size:8pt;font-weight:700;padding:1pt 6pt;border-radius:99px;background:#E4EFEC;color:#1E4A47;white-space:nowrap;}
+  .pr-pill.pend{background:#FBF0DA;color:#6B4C0F;}
+  .pr-foot{margin-top:14pt;font-size:8pt;color:#8A8578;display:flex;justify-content:space-between;}
   /* -- date inputs: show dd/mm/yyyy regardless of browser locale -- */
   .date-wrap{position:relative;}
   .date-wrap input[type=date]{color:transparent !important;}
@@ -1022,7 +1073,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">05/11/2026 22:27</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">05/11/2026 22:44</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1178,6 +1229,7 @@
     </div>
     <div class="divider" id="exportTripDivider" style="display:none;"></div>
     <button class="btn-ghost" style="width:100%;display:none;" id="btnExportXlsx">📤 ייצוא הטיול לאקסל</button>
+    <button class="btn-ghost" style="width:100%;display:none;margin-top:8px;" id="btnExportPdf">📄 דו״ח סיכום (PDF)</button>
     <div class="divider" id="deleteTripDivider" style="display:none;"></div>
     <button class="btn-ghost btn-danger-outline" style="width:100%;display:none;" id="btnDeleteTrip">מחיקת הטיול הזה</button>
   </div>
@@ -3516,7 +3568,7 @@ function renderFinishedSummary(){
       ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+expenseTotalILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
       <div class="fin-actions">
         <button type="button" class="mini-btn" id="btnFinLock">${locked ? "🔓 פתח לעריכה" : "🔒 נעל שוב"}</button>
-        ${trip.expenses.length ? `<button type="button" class="mini-btn" id="btnFinExport">📊 ייצוא לאקסל</button>` : ""}
+        ${trip.expenses.length ? `<button type="button" class="mini-btn" id="btnFinExport">📊 ייצוא לאקסל</button><button type="button" class="mini-btn" id="btnFinPdf">📄 דו״ח PDF</button>` : ""}
       </div>
     </div>`;
 
@@ -3528,6 +3580,8 @@ function renderFinishedSummary(){
   });
   const exp = document.getElementById('btnFinExport');
   if (exp) exp.addEventListener('click', () => exportTripXlsx(trip));
+  const pdfBtn = document.getElementById('btnFinPdf');
+  if (pdfBtn) pdfBtn.addEventListener('click', () => printTripReport(trip));
   const pb = document.getElementById('btnFinPending');
   if (pb) pb.addEventListener('click', () => {
     expenseFilter = { type: 'pending' };
@@ -3553,6 +3607,8 @@ function renderAll(){
 /* ========================= Desktop layout (≥1100px): side menu, summary cards, table + details ========================= */
 const DESK_MQ = window.matchMedia('(min-width: 1100px) and (min-height: 600px)');
 let deskSelectedId = null;
+const deskChecked = new Set();   // ids ticked in the table (bulk actions)
+let deskLastChecked = null;      // for shift-click ranges
 DESK_MQ.addEventListener('change', () => renderAll());
 
 function tripTotalILS(t){ return (t.expenses || []).filter(inTotal).reduce((s, e) => s + expenseTotalILS(e), 0); }
@@ -3571,6 +3627,7 @@ const DESK_ICONS = {
   cash: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8"/></svg>',
   rates: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   xls: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  pdf: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v5h5M10 13h6M10 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
 };
 
@@ -3587,6 +3644,7 @@ function switchTrip(id){
   expenseFilter = { type: 'all' };
   expandedExpenseId = null;
   deskSelectedId = null;
+  deskChecked.clear();
   saveState();
   renderAll();
 }
@@ -3610,6 +3668,7 @@ function renderDeskNav(){
       <button type="button" class="dn-link" id="dnSync"></button>
       <button type="button" class="dn-link" id="dnCash">${DESK_ICONS.cash} מזומן לטיול</button>
       <button type="button" class="dn-link" id="dnTrips" title="רשימת הטיולים ושערי המטבע">${DESK_ICONS.rates} ניהול טיולים</button>
+      <button type="button" class="dn-link" id="dnPdf">${DESK_ICONS.pdf} דו״ח סיכום (PDF)</button>
       <button type="button" class="dn-link" id="dnExport">${DESK_ICONS.xls} ייצוא לאקסל</button>
     </div>`;
   nav.querySelectorAll('[data-trip]').forEach(b => b.addEventListener('click', () => switchTrip(b.dataset.trip)));
@@ -3618,6 +3677,7 @@ function renderDeskNav(){
   document.getElementById('dnCash').addEventListener('click', openCashSheet);
   document.getElementById('dnTrips').addEventListener('click', openTripsList);
   document.getElementById('dnExport').addEventListener('click', () => exportTripXlsx(activeTrip()));
+  document.getElementById('dnPdf').addEventListener('click', () => printTripReport(activeTrip()));
   renderDeskSync();
 }
 function renderDeskSync(){
@@ -3693,7 +3753,29 @@ function renderDeskKpis(){
 function renderDeskChips(){
   const trip = activeTrip();
   const el = document.getElementById('deskChips');
-  if (!trip || !trip.expenses.length){ el.innerHTML = ""; return; }
+  if (!trip || !trip.expenses.length){ el.innerHTML = ""; deskChecked.clear(); return; }
+  [...deskChecked].forEach(id => { if (!trip.expenses.some(e => e.id === id)) deskChecked.delete(id); });
+  if (tripLocked(trip)) deskChecked.clear();
+  if (deskChecked.size){
+    const ids = [...deskChecked];
+    const sel = trip.expenses.filter(e => deskChecked.has(e.id));
+    const sum = sel.filter(inTotal).reduce((s, e) => s + expenseTotalILS(e), 0);
+    el.innerHTML = `<div class="dt-bulk" role="toolbar" aria-label="פעולות על ההוצאות שנבחרו">
+      <b>${ids.length} נבחרו · ₪${fmtMoney(sum)}</b>
+      ${sel.some(e => !e.paid) ? `<button type="button" data-bulk="paid">סימון כשולם</button>` : ""}
+      ${sel.some(e => e.paid) ? `<button type="button" data-bulk="unpaid">סימון כטרם שולם</button>` : ""}
+      <button type="button" class="danger" data-bulk="delete">מחיקה</button>
+      <button type="button" class="plain" data-bulk="clear">ביטול בחירה (Esc)</button>
+    </div>`;
+    el.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => {
+      const a = b.dataset.bulk;
+      if (a === 'paid') setExpensesPaid(ids, true);
+      else if (a === 'unpaid') setExpensesPaid(ids, false);
+      else if (a === 'delete') deleteExpenses(ids);
+      else { deskChecked.clear(); renderExpenses(); }
+    }));
+    return;
+  }
   const pendingCount = trip.expenses.filter(e => !e.paid).length;
   const chips = [`<button type="button" class="dt-chip${expenseFilter.type === 'all' ? ' on' : ''}" data-f="all">הכול (${trip.expenses.length})</button>`];
   if (pendingCount) chips.push(`<button type="button" class="dt-chip${expenseFilter.type === 'pending' ? ' on' : ''}" data-f="pending">טרם שולם (${pendingCount})</button>`);
@@ -3707,11 +3789,14 @@ function renderDeskChips(){
 
 function renderDeskTable(list, items, trip){
   if (!items.some(e => e.id === deskSelectedId)) deskSelectedId = items[0].id;
+  const locked = tripLocked(trip);
+  const checkedShown = items.filter(e => deskChecked.has(e.id)).length;
   const sortMode = document.getElementById('sortSelect').value;
   const sortBtn = (label, mode, next) => `<button type="button" class="${sortMode === mode || sortMode === next ? 'on' : ''}" data-sort="${sortMode === mode ? next : mode}">${label}${sortMode === mode ? ' ▾' : sortMode === next ? ' ▴' : ''}</button>`;
   const shownTotal = items.filter(inTotal).reduce((s, e) => s + expenseTotalILS(e), 0);
   list.innerHTML = `<div class="dt-scroll"><div class="dt" role="table" aria-label="רשימת ההוצאות">
     <div class="dt-r dt-h" role="row">
+      <span role="columnheader" class="dt-check">${locked ? "" : `<input type="checkbox" id="dtAll" aria-label="בחירת כל ההוצאות המוצגות"${checkedShown === items.length ? " checked" : ""}>`}</span>
       <span role="columnheader">פריט</span><span role="columnheader">קטגוריה</span>
       <span role="columnheader">${sortBtn('תאריך', 'date_desc', 'date_asc')}</span>
       <span role="columnheader" class="dt-orig">סכום מקורי</span>
@@ -3721,26 +3806,71 @@ function renderDeskTable(list, items, trip){
     ${items.map(exp => {
       const cat = expCategory(exp);
       const att = (exp.attachments || []).length;
-      return `<div class="dt-r dt-row${exp.id === deskSelectedId ? ' sel' : ''}${inTotal(exp) ? '' : ' excluded'}" role="row" tabindex="0" data-id="${exp.id}" aria-selected="${exp.id === deskSelectedId}">
+      const checked = deskChecked.has(exp.id);
+      return `<div class="dt-r dt-row${exp.id === deskSelectedId ? ' sel' : ''}${checked ? ' checked' : ''}${inTotal(exp) ? '' : ' excluded'}" role="row" tabindex="0" data-id="${exp.id}" aria-selected="${exp.id === deskSelectedId}">
+        <span class="dt-check" role="cell">${locked ? "" : `<input type="checkbox" data-check="${exp.id}" aria-label="בחירת ${escapeHtml(exp.item || "הוצאה")}"${checked ? " checked" : ""}>`}</span>
         <span class="dt-name" role="cell"><span>${escapeHtml(exp.item || "הוצאה")}</span>${att ? `<small title="${att} קבצים מצורפים">📎${att > 1 ? att : ""}</small>` : ""}</span>
         <span class="dt-cat" role="cell"><i style="background:${CATEGORY_COLOR[cat]}"></i><span>${escapeHtml(cat)}</span></span>
         <span class="dt-num" role="cell">${fmtDate(exp.date)}</span>
         <span class="dt-num dt-orig" role="cell">${exp.currency !== "שקל" ? `${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}` : ""}</span>
         <span class="dt-num dt-ils" role="cell">₪${fmtMoney(expenseTotalILS(exp))}${exp.currency !== "שקל" ? `<small class="dt-orig-sub">${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}</small>` : ""}</span>
-        <span role="cell"><span class="dt-pill${exp.paid ? '' : ' pend'}">${exp.paid ? 'שולם' : 'טרם שולם'}</span></span>
+        <span role="cell">${locked
+          ? `<span class="dt-pill${exp.paid ? '' : ' pend'}">${exp.paid ? 'שולם' : 'טרם שולם'}</span>`
+          : `<button type="button" class="dt-pill${exp.paid ? '' : ' pend'}" data-paid="${exp.id}" title="${exp.paid ? 'לחצו לסימון כטרם שולם' : 'לחצו לסימון כשולם היום'}">${exp.paid ? 'שולם' : 'טרם שולם'}</button>`}</span>
       </div>`;
     }).join("")}
-    <div class="dt-r dt-foot" role="row"><span role="cell">סה״כ${items.length !== trip.expenses.length ? ` (${items.length} מוצגות)` : ""}</span><span></span><span></span><span class="dt-orig"></span><span class="dt-num" role="cell">₪${fmtMoney(shownTotal)}</span><span></span></div>
+    <div class="dt-r dt-foot" role="row"><span></span><span role="cell">סה״כ${items.length !== trip.expenses.length ? ` (${items.length} מוצגות)` : ""}</span><span></span><span></span><span class="dt-orig"></span><span class="dt-num" role="cell">₪${fmtMoney(shownTotal)}</span><span></span></div>
   </div></div>`;
 
   list.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => {
     document.getElementById('sortSelect').value = b.dataset.sort;
     renderExpenses();
   }));
+  const all = document.getElementById('dtAll');
+  if (all){
+    all.indeterminate = checkedShown > 0 && checkedShown < items.length;
+    all.addEventListener('change', () => {
+      if (all.checked) items.forEach(e => deskChecked.add(e.id)); else items.forEach(e => deskChecked.delete(e.id));
+      renderExpenses();
+    });
+  }
+  list.querySelectorAll('[data-check]').forEach(cb => {
+    cb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = cb.dataset.check;
+      if (e.shiftKey && deskLastChecked){
+        // Shift: check / uncheck the whole range between the last box and this one
+        const ids = items.map(x => x.id);
+        const [a, b] = [ids.indexOf(deskLastChecked), ids.indexOf(id)].sort((x, y) => x - y);
+        if (a > -1) ids.slice(a, b + 1).forEach(x => cb.checked ? deskChecked.add(x) : deskChecked.delete(x));
+      }
+      if (cb.checked) deskChecked.add(id); else deskChecked.delete(id);
+      deskLastChecked = id;
+      renderExpenses();
+    });
+    cb.addEventListener('dblclick', (e) => e.stopPropagation());
+  });
+  list.querySelectorAll('[data-paid]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const exp = trip.expenses.find(x => x.id === b.dataset.paid);
+      if (exp) setExpensesPaid([exp.id], !exp.paid);
+    });
+    b.addEventListener('dblclick', (e) => e.stopPropagation());
+  });
   list.querySelectorAll('.dt-row').forEach(r => {
     r.addEventListener('click', () => selectDeskRow(r.dataset.id));
     r.addEventListener('dblclick', () => { if (!tripLocked(activeTrip())) openEditExpense(r.dataset.id); });
     r.addEventListener('keydown', (e) => {
+      if (e.key === ' ' && e.target === r && !locked){
+        e.preventDefault();
+        if (deskChecked.has(r.dataset.id)) deskChecked.delete(r.dataset.id); else deskChecked.add(r.dataset.id);
+        deskLastChecked = r.dataset.id;
+        renderExpenses();
+        const again = document.querySelector(`#expensesList .dt-row[data-id="${r.dataset.id}"]`);
+        if (again) again.focus();
+        return;
+      }
       if (e.key === 'Enter'){ e.preventDefault(); if (deskSelectedId === r.dataset.id && !tripLocked(activeTrip())) openEditExpense(r.dataset.id); else selectDeskRow(r.dataset.id); }
       else if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
         e.preventDefault();
@@ -3802,6 +3932,137 @@ function renderDeskInspector(){
   if (del) del.addEventListener('click', () => deleteExpense(exp.id));
 }
 
+
+/* -- quick actions on several expenses at once (table checkboxes / status pill) -- */
+function setExpensesPaid(ids, paid){
+  const trip = activeTrip();
+  if (!trip || guardLocked()) return;
+  const list = trip.expenses.filter(e => ids.includes(e.id) && !!e.paid !== paid);
+  if (!list.length) return;
+  const before = list.map(e => ({ id: e.id, paid: e.paid, paidDate: e.paidDate }));
+  const today = todayISO();
+  list.forEach(e => { e.paid = paid; e.paidDate = paid ? (e.paidDate || today) : null; });
+  saveState();
+  renderAll();
+  const label = paid ? "סומן כשולם" : "סומן כטרם שולם";
+  showUndoToast(list.length > 1 ? `${list.length} הוצאות ${paid ? "סומנו כשולמו" : "סומנו כטרם שולמו"}` : `${label}: ${list[0].item || "הוצאה"}`, {
+    onUndo: () => {
+      const t = state.trips.find(x => x.id === trip.id);
+      if (!t) return;
+      before.forEach(b => { const e = t.expenses.find(x => x.id === b.id); if (e){ e.paid = b.paid; e.paidDate = b.paidDate; } });
+      saveState(); renderAll(); toast("בוטל ✓");
+    },
+    onCommit: () => {}
+  });
+}
+
+function deleteExpenses(ids){
+  const trip = activeTrip();
+  if (!trip || guardLocked()) return;
+  const removed = [];
+  trip.expenses = trip.expenses.filter((e, i) => {
+    if (ids.includes(e.id)){ removed.push({ e, i }); return false; }
+    return true;
+  });
+  if (!removed.length) return;
+  deskChecked.clear();
+  saveState();
+  renderAll();
+  showUndoToast(removed.length > 1 ? `נמחקו ${removed.length} הוצאות` : `נמחק: ${removed[0].e.item || "הוצאה"}`, {
+    onUndo: () => {
+      const t = state.trips.find(x => x.id === trip.id);
+      if (!t) return;
+      removed.forEach(({ e, i }) => t.expenses.splice(Math.min(i, t.expenses.length), 0, e));
+      saveState(); renderAll(); toast("השחזור בוצע ✓");
+    },
+    onCommit: () => removed.forEach(({ e }) => deleteAttachmentsOf(e))
+  });
+}
+
+/* -- trip report: a printable page the browser saves as PDF (Hebrew/RTL renders exactly like the app) -- */
+function printTripReport(trip){
+  if (!trip || !trip.expenses.length){ toast("אין הוצאות לדו״ח"); return; }
+  const esc = escapeHtml;
+  const counted = trip.expenses.filter(inTotal);
+  const sum = (l) => l.reduce((s, e) => s + expenseTotalILS(e), 0);
+  const total = sum(counted);
+  const pending = counted.filter(e => !e.paid);
+  const paid = total - sum(pending);
+  let days = 0;
+  if (trip.startDate && trip.endDate) days = daysBetween(trip.startDate, trip.endDate) + 1;
+  if (!(days > 0)){
+    const d = trip.expenses.map(e => e.date).filter(Boolean).sort();
+    if (d.length) days = daysBetween(d[0], d[d.length - 1]) + 1;
+  }
+  const range = tripRange(trip);
+  const flights = [trip.flightOut, trip.flightReturn].filter(Boolean).join(" / ");
+  const sub = [range ? `<bdi dir="ltr">${range}</bdi>` : "", days > 0 ? `${days} ימים` : "", flights ? `טיסות <bdi dir="ltr">${esc(flights)}</bdi>` : "", trip.bookingRef ? `הזמנה <bdi dir="ltr">${esc(trip.bookingRef)}</bdi>` : ""].filter(Boolean).join(" · ");
+
+  const kpis = [
+    ["סה״כ הוצאות", `₪${fmtMoney(total)}`, `${counted.length} הוצאות${counted.length !== trip.expenses.length ? ` · +${trip.expenses.length - counted.length} מחוץ לתזרים` : ""}`],
+    ["שולם", `₪${fmtMoney(paid)}`, pending.length ? `טרם שולם: ₪${fmtMoney(sum(pending))} (${pending.length})` : "הכול שולם"]
+  ];
+  if (trip.budget > 0){
+    const left = trip.budget - total;
+    kpis.push([left >= 0 ? "נשאר מהתקציב" : "חריגה מהתקציב", `₪${fmtMoney(Math.abs(left))}`, `תקציב ₪${fmtMoney(trip.budget)} · כולל מה שטרם שולם`]);
+  }
+  if (days > 0) kpis.push(["ממוצע ליום", `₪${fmtMoney(Math.round(total / days))}`, `על פני ${days} ימים`]);
+  while (kpis.length < 4) kpis.push(null);
+
+  const byCat = {};
+  counted.forEach(e => { const c = expCategory(e); byCat[c] = (byCat[c] || 0) + expenseTotalILS(e); });
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const maxCat = cats.length ? cats[0][1] : 1;
+
+  const rows = [...trip.expenses].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const html = `
+    <div class="pr-head">
+      <div>
+        <h1>דו״ח הוצאות — ${esc(trip.name || "טיול")}</h1>
+        ${sub ? `<div class="sub">${sub}</div>` : ""}
+      </div>
+      <div class="brand">TripCost</div>
+    </div>
+    <div class="pr-kpis">${kpis.map(k => k ? `<div class="pr-kpi"><div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>` : "<div></div>").join("")}</div>
+    ${cats.length ? `<div class="pr-h2">פילוח לפי קטגוריה</div>
+    <div class="pr-cats">${cats.map(([c, v]) => `<div class="pr-cat"><span>${esc(c)}</span><span class="bar"><i style="width:${Math.max(2, v / maxCat * 100)}%;background:${CATEGORY_COLOR[c]}"></i></span><span class="n">₪${fmtMoney(v)} · ${total ? Math.round(v / total * 100) : 0}%</span></div>`).join("")}</div>` : ""}
+    <div class="pr-h2">כל ההוצאות</div>
+    <table class="pr-table">
+      <thead><tr><th>תאריך</th><th>פריט</th><th>קטגוריה</th><th>תשלום</th><th>סכום</th><th>שער</th><th>בשקלים</th><th>סטטוס</th></tr></thead>
+      <tbody>${rows.map(e => {
+        const files = (e.attachments || []).map(a => a.driveUrl ? `<a href="${esc(a.driveUrl)}">${esc(a.name || "קובץ")}</a>` : esc(a.name || "קובץ")).join(" · ");
+        return `<tr class="${inTotal(e) ? "" : "excl"}">
+          <td class="num">${fmtDate(e.date)}</td>
+          <td>${esc(e.item || "הוצאה")}${inTotal(e) ? "" : " (מחוץ לתזרים)"}${e.notes ? `<span class="note">${esc(e.notes)}</span>` : ""}${files ? `<span class="files">📎 ${files}</span>` : ""}</td>
+          <td>${esc(expCategory(e))}</td>
+          <td>${esc(e.paymentMethod || "")}</td>
+          <td class="num">${CUR_SYMBOL[e.currency] || ""}${fmtMoney(e.amount)}</td>
+          <td class="num">${e.currency === "שקל" ? "" : e.rate}</td>
+          <td class="num ils">₪${fmtMoney(expenseTotalILS(e))}</td>
+          <td><span class="pr-pill${e.paid ? "" : " pend"}">${e.paid ? "שולם" + (e.paidDate ? " " + fmtDate(e.paidDate) : "") : "טרם שולם"}</span></td>
+        </tr>`;
+      }).join("")}</tbody>
+      <tfoot><tr><td colspan="6">סה״כ (בלי הוצאות מחוץ לתזרים)</td><td class="num">₪${fmtMoney(total)}</td><td></td></tr></tfoot>
+    </table>
+    <div class="pr-foot"><span>TripCost · דו״ח הופק ב-${fmtDate(todayISO())}</span><span>${esc(trip.name || "")}</span></div>`;
+
+  let box = document.getElementById('printReport');
+  if (!box){ box = document.createElement('div'); box.id = 'printReport'; document.body.appendChild(box); }
+  box.innerHTML = html;
+  const prevTitle = document.title;
+  document.title = `דו״ח הוצאות - ${trip.name || "טיול"}`; // becomes the PDF's file name
+  document.body.classList.add('printing-report');
+  const done = () => {
+    document.body.classList.remove('printing-report');
+    document.title = prevTitle;
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  toast("בחלון ההדפסה בחרו „שמירה כ-PDF״");
+  // let the fonts and layout settle before the print dialog snapshots the page
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => setTimeout(() => window.print(), 60));
+}
+
 document.getElementById('deskNew').addEventListener('click', openNewExpense);
 document.getElementById('deskScan').addEventListener('click', () => {
   openNewExpense();
@@ -3812,6 +4073,7 @@ document.addEventListener('keydown', (e) => {
   if (!DESK_MQ.matches || document.querySelector('.overlay.show')) return;
   const typing = e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]');
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK'){ e.preventDefault(); document.getElementById('expenseSearchInput').focus(); return; }
+  if (e.key === 'Escape' && deskChecked.size && !typing){ deskChecked.clear(); renderExpenses(); return; }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code === 'KeyN'){ e.preventDefault(); openNewExpense(); }
   else if (e.key === '/'){ e.preventDefault(); document.getElementById('expenseSearchInput').focus(); }
@@ -3887,6 +4149,7 @@ function openNewTripForm(){
   document.getElementById('tfBudget').value = "";
   document.getElementById('tfFinished').checked = false;
   document.getElementById('btnExportXlsx').style.display = "none";
+  document.getElementById('btnExportPdf').style.display = "none";
   document.getElementById('exportTripDivider').style.display = "none";
   document.getElementById('btnDeleteTrip').style.display = "none";
   document.getElementById('deleteTripDivider').style.display = "none";
@@ -3922,6 +4185,7 @@ function openEditTripForm(id){
   document.getElementById('tfFinished').checked = !!t.finished;
   const hasExpenses = t.expenses.length > 0;
   document.getElementById('btnExportXlsx').style.display = hasExpenses ? "block" : "none";
+  document.getElementById('btnExportPdf').style.display = hasExpenses ? "block" : "none";
   document.getElementById('exportTripDivider').style.display = hasExpenses ? "block" : "none";
   document.getElementById('btnDeleteTrip').style.display = "block";
   document.getElementById('deleteTripDivider').style.display = "block";
@@ -4995,6 +5259,9 @@ document.getElementById('btnExportXlsx').addEventListener('click', () => {
   // trip you happen to have selected up top.
   exportTripXlsx(state.trips.find(t => t.id === editingTripId) || activeTrip());
 });
+document.getElementById('btnExportPdf').addEventListener('click', () => {
+  printTripReport(state.trips.find(t => t.id === editingTripId) || activeTrip());
+});
 function exportTripXlsx(trip){
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
   const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים"];
@@ -5063,8 +5330,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '05/11/2026 22:27';
-const BUILD_EPOCH = 1793910440210; // ms — when this exact file was pushed
+const BUILD_STAMP = '05/11/2026 22:44';
+const BUILD_EPOCH = 1793911461410; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
