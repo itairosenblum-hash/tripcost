@@ -1084,7 +1084,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">14/11/2026 17:24</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">14/11/2026 17:28</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1355,16 +1355,16 @@
           <input type="number" id="efSplit" inputmode="numeric" min="2" step="1" value="2">
           <button type="button" class="split-btn" id="efSplitPlus" aria-label="יותר">+</button>
         </div>
+        <div class="split-row" id="efPaidBackCurRow">
+          <span style="font-weight:700;color:var(--ink-soft);">מטבע ההחזר לראש</span>
+          <select id="efPaidBackCur" style="flex:1;min-width:0;"></select>
+        </div>
         <div class="per-head tnum" id="efPerHead"></div>
         <div class="split-row">
           <span style="font-weight:700;color:var(--ink-soft);">כמה החזירו?</span>
           <button type="button" class="split-btn" id="efPaidBackMinus" aria-label="פחות">−</button>
           <input type="number" id="efPaidBack" inputmode="numeric" min="0" step="1" value="0">
           <button type="button" class="split-btn" id="efPaidBackPlus" aria-label="יותר">+</button>
-        </div>
-        <div class="split-row" id="efPaidBackCurRow">
-          <span style="font-weight:700;color:var(--ink-soft);">באיזה מטבע?</span>
-          <select id="efPaidBackCur" style="flex:1;min-width:0;"></select>
         </div>
         <div class="hint tnum" id="efPaidBackHint" style="margin-top:6px;"></div>
       </div>
@@ -2937,7 +2937,8 @@ function perHeadInPaidBackCur(exp){ return perHeadILS(exp) / paidBackRate(exp); 
 function sharedText(exp){
   const k = splitPaidBack(exp), c = paidBackCur(exp);
   const each = c === "שקל" ? "" : ` · ${CUR_SYMBOL[c] || ""}${fmtMoney(perHeadInPaidBackCur(exp))} כל אחד`;
-  return `👥 ${expenseSplit(exp)} אנשים · ₪${fmtMoney(perHeadILS(exp))} לראש${k ? ` · ${k} החזירו (₪${fmtMoney(splitPaidBackILS(exp))}${each})` : ""}`;
+  const headCur = c === "שקל" ? "" : ` (${CUR_SYMBOL[c] || ""}${fmtMoney(perHeadInPaidBackCur(exp))})`;
+  return `👥 ${expenseSplit(exp)} אנשים · ₪${fmtMoney(perHeadILS(exp))}${headCur} לראש${k ? ` · ${k} החזירו (₪${fmtMoney(splitPaidBackILS(exp))}${each})` : ""}`;
 }
 function refundText(r){
   return `${r.from || "החזר"}: ${CUR_SYMBOL[r.currency] || ""}${fmtMoney(r.amount)}${r.currency !== "שקל" ? ` (₪${fmtMoney(refundILS(r))})` : ""}`;
@@ -3493,7 +3494,7 @@ function renderExpenses(){
           <div class="exp-row-amt">₪${fmtMoney(totalIls)}</div>
           ${showOrig ? `<div class="exp-orig tnum" style="font-size:11.5px;">${CUR_SYMBOL[exp.currency]}${fmtMoney(exp.amount)} × ${exp.rate}</div>` : ""}
           ${(exp.refunds || []).length ? `<div class="exp-refund tnum">↩️ הוחזר ₪${fmtMoney(expenseRefundsILS(exp))}</div>` : ""}
-          ${expenseSplit(exp) > 1 ? `<div class="exp-refund tnum">👥 ₪${fmtMoney(perHeadILS(exp))} לראש${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)}/${expenseSplit(exp) - 1} החזירו` : ""}</div>` : ""}
+          ${expenseSplit(exp) > 1 ? `<div class="exp-refund tnum">👥 ${paidBackCur(exp) !== "שקל" ? `${CUR_SYMBOL[paidBackCur(exp)] || ""}${fmtMoney(perHeadInPaidBackCur(exp))} / ` : ""}₪${fmtMoney(perHeadILS(exp))} לראש${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)}/${expenseSplit(exp) - 1} החזירו` : ""}</div>` : ""}
         </div>
       </button>
       ${expanded ? `
@@ -4692,10 +4693,11 @@ function updatePerHead(net){
   const pb = document.getElementById('efPaidBack');
   const k = Math.min(n - 1, Math.max(0, Math.round(parseFloat(pb.value) || 0)));
   if (String(k) !== pb.value && document.activeElement !== pb) pb.value = k;
-  el.textContent = `₪${fmtMoney(net / n)} לראש (${n} אנשים)`;
-  document.getElementById('efPaidBackCurRow').style.display = k ? "flex" : "none";
   const pc = document.getElementById('efPaidBackCur').value || "שקל";
   const pr = formPaidBackRate();
+  el.textContent = pc === "שקל"
+    ? `₪${fmtMoney(net / n)} לראש (${n} אנשים)`
+    : `${CUR_SYMBOL[pc] || ""}${fmtMoney(net / n / pr)} לראש = ₪${fmtMoney(net / n)} (${n} אנשים, שער ${Math.round(pr * 10000) / 10000})`;
   const eachCur = pc === "שקל" ? "" : ` (${CUR_SYMBOL[pc] || ""}${fmtMoney(net / n / pr)} כל אחד, לפי שער ${Math.round(pr * 10000) / 10000})`;
   document.getElementById('efPaidBackHint').textContent = k
     ? `החזירו ${k} × ₪${fmtMoney(net / n)}${eachCur} = ₪${fmtMoney(net / n * k)} · ההוצאה תיספר כ-₪${fmtMoney(net - net / n * k)}`
@@ -5434,8 +5436,8 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     date: document.getElementById('efDate').value,
     split: sharedOn() ? formSplit() : 1,
     splitPaidBack: sharedOn() ? formPaidBack() : 0,
-    splitPaidBackCurrency: sharedOn() && formPaidBack() ? (document.getElementById('efPaidBackCur').value || "שקל") : null,
-    splitPaidBackRate: sharedOn() && formPaidBack() ? formPaidBackRate() : null,
+    splitPaidBackCurrency: sharedOn() ? (document.getElementById('efPaidBackCur').value || "שקל") : null,
+    splitPaidBackRate: sharedOn() ? formPaidBackRate() : null,
     paymentMethod: getPaymentValue(),
     category: getCategoryValue(),
     amount: parseFloat(document.getElementById('efAmount').value) || 0,
@@ -5597,8 +5599,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '14/11/2026 17:24';
-const BUILD_EPOCH = 1794669847249; // ms — when this exact file was pushed
+const BUILD_STAMP = '14/11/2026 17:28';
+const BUILD_EPOCH = 1794670103418; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
