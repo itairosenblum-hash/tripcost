@@ -349,6 +349,8 @@
   .exp-total{font-weight:800;font-size:17px;}
   .exp-orig{font-size:13.5px;color:var(--ink-soft);}
   .exp-refund{font-size:11.5px;font-weight:700;color:var(--teal-dark);}
+  .exp-row-amt.credit,.dt-ils.credit,.di-amt b.credit{color:var(--teal-dark);}
+  .kind-seg button.active[data-val="credit"]{background:var(--teal-dark);}
   .refund-box{border:1px solid var(--border);background:var(--card-2);border-radius:var(--radius-sm);padding:10px 10px 2px;margin-bottom:8px;}
   .refund-box .field{margin-bottom:8px;}
   .refund-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13.5px;font-weight:700;color:var(--ink-soft);}
@@ -1089,7 +1091,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">14/11/2026 17:28</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 13:39</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -1291,6 +1293,15 @@
       </div>
     </div>
 
+    <div class="field">
+      <label>סוג</label>
+      <div class="seg kind-seg" id="efKindSeg">
+        <button type="button" data-val="charge" class="active">🧾 חיוב</button>
+        <button type="button" data-val="credit">↩️ זיכוי</button>
+      </div>
+      <div class="hint" id="efKindHint" style="display:none;margin-top:6px;margin-bottom:0;">זיכוי (החזר מבית עסק, ביטול עסקה, זיכוי בכרטיס) יורד מהסה״כ, מהתקציב ומהפילוח לפי קטגוריה</div>
+    </div>
+
     <div class="field" id="efItemField">
       <label>פריט</label>
       <input type="text" id="efItem" placeholder="לדוגמה: מלון בזלצבורג">
@@ -1342,13 +1353,13 @@
 
     <div class="hint" id="efTotalHint">סה״כ עלות: —</div>
 
-    <div class="field">
+    <div class="field" id="efRefundsField">
       <label>החזרים (מישהו החזיר לי כסף על ההוצאה)</label>
       <div id="efRefundList"></div>
       <button type="button" class="tool-btn" id="btnAddRefund">↩️ הוספת החזר</button>
     </div>
 
-    <div class="field">
+    <div class="field" id="efSplitField">
       <label>חלוקה</label>
       <div class="check-row">
         <div class="check-pill" id="efSharedPill">👥 הוצאה משותפת</div>
@@ -2918,9 +2929,14 @@ function setInTotalUI(on){
   document.getElementById('efInTotalHint').style.display = on ? "none" : "block";
 }
 
+// A credit (זיכוי) is money a business returned — a refund, a cancelled booking, a card credit.
+// It's stored like an expense with credit:true and a positive amount, and counts negatively everywhere.
+function expSign(exp){ return exp.credit ? -1 : 1; }
+function signedAmount(exp){ return expSign(exp) * (exp.amount || 0); }
+function fmtILS(n){ return (n < 0 ? "−" : "") + "₪" + fmtMoney(Math.abs(n)); }
 function expenseGrossILS(exp){
   const rate = (exp.currency === "שקל") ? 1 : (exp.rate || 1);
-  return (exp.amount || 0) * rate;
+  return signedAmount(exp) * rate;
 }
 // Refunds: money someone paid back toward an expense — who, how much, in which currency
 // (with its own rate). Every total uses the net amount, so they come off budget, donut and exports.
@@ -3012,7 +3028,7 @@ function renderBalanceBar(){
   const byCurrency = {};
   tripCurrencies(trip).forEach(c => byCurrency[c] = 0);
   paidExpenses.forEach(e => {
-    byCurrency[e.currency] = (byCurrency[e.currency]||0) + (e.amount||0);
+    byCurrency[e.currency] = (byCurrency[e.currency]||0) + signedAmount(e);
     (e.refunds || []).forEach(r => { byCurrency[r.currency] = (byCurrency[r.currency]||0) - (r.amount||0); });
     if (splitPaidBack(e)) byCurrency[paidBackCur(e)] = (byCurrency[paidBackCur(e)]||0) - perHeadInPaidBackCur(e) * splitPaidBack(e);
   });
@@ -3072,7 +3088,7 @@ function renderCashCompact(){
   const spentByCurrency = {};
   currencies.forEach(c => spentByCurrency[c] = 0);
   trip.expenses.forEach(e => {
-    if (e.paymentMethod === "מזומן" && e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + (e.amount || 0);
+    if (e.paymentMethod === "מזומן" && e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + signedAmount(e);
   });
   const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
 
@@ -3158,8 +3174,8 @@ function renderCategoryChart(){
   CATEGORIES.forEach(c => byCat[c] = 0);
   trip.expenses.filter(inTotal).forEach(e => { byCat[expCategory(e)] += expenseTotalILS(e); });
   const cats = donutMode === 'spend' ? CATEGORIES.filter(c => !DONUT_EXCLUDED_IN_SPEND.includes(c)) : CATEGORIES;
-  const total = cats.reduce((s,c) => s + byCat[c], 0);
   const entries = cats.map(c => [c, byCat[c]]).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const total = entries.reduce((s,[,v]) => s + v, 0);
 
   const modeSeg = `
       <div class="seg donut-mode-seg">
@@ -3510,11 +3526,11 @@ function renderExpenses(){
           <div class="exp-row-bar" style="background:${CATEGORY_COLOR[cat]};"></div>
           <div style="min-width:0;">
             <div style="display:flex;align-items:center;min-width:0;"><div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>${attCount ? `<span class="exp-row-clip" title="${attCount} קבצים מצורפים" aria-label="${attCount} קבצים מצורפים">📎${attCount > 1 ? attCount : ""}</span>` : ""}</div>
-            <div class="exp-row-sub">${escapeHtml(cat)} · ${fmtDate(exp.date)}${expenseSplit(exp) > 1 ? ` · 👥 ${expenseSplit(exp)} אנשים${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}` : ""}${inTotal(exp) ? "" : " · מחוץ לתזרים"}</div>
+            <div class="exp-row-sub">${exp.credit ? "↩️ זיכוי · " : ""}${escapeHtml(cat)} · ${fmtDate(exp.date)}${expenseSplit(exp) > 1 ? ` · 👥 ${expenseSplit(exp)} אנשים${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}` : ""}${inTotal(exp) ? "" : " · מחוץ לתזרים"}</div>
           </div>
         </div>
         <div style="text-align:left;">
-          <div class="exp-row-amt">₪${fmtMoney(totalIls)}</div>
+          <div class="exp-row-amt${exp.credit ? ' credit' : ''}">${fmtILS(totalIls)}</div>
           ${showOrig ? `<div class="exp-orig tnum" style="font-size:11.5px;">${CUR_SYMBOL[exp.currency]}${fmtMoney(exp.amount)} × ${exp.rate}</div>` : ""}
           ${(exp.refunds || []).length ? `<div class="exp-refund tnum">↩️ הוחזר ₪${fmtMoney(expenseRefundsILS(exp))}</div>` : ""}
           ${expenseSplit(exp) > 1 ? `<div class="exp-refund tnum">👥 ${paidBackCur(exp) !== "שקל" ? `${CUR_SYMBOL[paidBackCur(exp)] || ""}${fmtMoney(perHeadInPaidBackCur(exp))} / ` : ""}₪${fmtMoney(perHeadILS(exp))} לראש${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)}/${expenseSplit(exp) - 1} החזירו` : ""}</div>` : ""}
@@ -3523,8 +3539,9 @@ function renderExpenses(){
       ${expanded ? `
       <div class="exp-row-detail">
         <div class="exp-row-tags">
+          ${exp.credit ? `<span class="tag on">↩️ זיכוי</span>` : ""}
           <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
-          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ('✓ שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : 'הוזמן · טרם שולם'}</span>
+          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ((exp.credit ? '✓ זוכה' : '✓ שולם') + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : 'הוזמן · טרם שולם'}</span>
           ${inTotal(exp) ? "" : `<span class="tag">🚫 לא נכלל בתזרים</span>`}
           ${(exp.refunds || []).map(r => `<span class="tag on">↩️ ${escapeHtml(refundText(r))}</span>`).join("")}
         </div>
@@ -3846,7 +3863,7 @@ function renderDeskKpis(){
   const currencies = tripCurrencies(trip);
   const cashInitial = trip.cashInitial || {};
   const spent = {};
-  trip.expenses.forEach(e => { if (e.paymentMethod === "מזומן" && e.paid) spent[e.currency] = (spent[e.currency] || 0) + (e.amount || 0); });
+  trip.expenses.forEach(e => { if (e.paymentMethod === "מזומן" && e.paid) spent[e.currency] = (spent[e.currency] || 0) + signedAmount(e); });
   const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
   cards.push(`<button type="button" class="dk-card click" id="dkCash" style="font:inherit;color:inherit;text-align:right;">
     <span class="l">מזומן שנשאר</span>
@@ -3924,8 +3941,8 @@ function renderDeskTable(list, items, trip){
         <span class="dt-name" role="cell"><span>${escapeHtml(exp.item || "הוצאה")}</span>${att ? `<small title="${att} קבצים מצורפים">📎${att > 1 ? att : ""}</small>` : ""}</span>
         <span class="dt-cat" role="cell"><i style="background:${CATEGORY_COLOR[cat]}"></i><span>${escapeHtml(cat)}</span></span>
         <span class="dt-num" role="cell">${fmtDate(exp.date)}</span>
-        <span class="dt-num dt-orig" role="cell">${exp.currency !== "שקל" ? `${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}` : ""}</span>
-        <span class="dt-num dt-ils" role="cell">₪${fmtMoney(expenseTotalILS(exp))}${exp.currency !== "שקל" ? `<small class="dt-orig-sub">${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}</small>` : ""}${(exp.refunds || []).length ? `<small class="exp-refund" style="display:block;">↩️ הוחזר ₪${fmtMoney(expenseRefundsILS(exp))}</small>` : ""}${expenseSplit(exp) > 1 ? `<small class="exp-refund" style="display:block;">👥 ₪${fmtMoney(perHeadILS(exp))} לראש · ${expenseSplit(exp)}${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}</small>` : ""}</span>
+        <span class="dt-num dt-orig" role="cell">${exp.currency !== "שקל" ? `${exp.credit ? "−" : ""}${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}` : ""}</span>
+        <span class="dt-num dt-ils${exp.credit ? ' credit' : ''}" role="cell">${fmtILS(expenseTotalILS(exp))}${exp.currency !== "שקל" ? `<small class="dt-orig-sub">${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}</small>` : ""}${(exp.refunds || []).length ? `<small class="exp-refund" style="display:block;">↩️ הוחזר ₪${fmtMoney(expenseRefundsILS(exp))}</small>` : ""}${expenseSplit(exp) > 1 ? `<small class="exp-refund" style="display:block;">👥 ₪${fmtMoney(perHeadILS(exp))} לראש · ${expenseSplit(exp)}${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}</small>` : ""}</span>
         <span role="cell">${locked
           ? `<span class="dt-pill${exp.paid ? '' : ' pend'}">${exp.paid ? 'שולם' : 'טרם שולם'}</span>`
           : `<button type="button" class="dt-pill${exp.paid ? '' : ' pend'}" data-paid="${exp.id}" title="${exp.paid ? 'לחצו לסימון כטרם שולם' : 'לחצו לסימון כשולם היום'}">${exp.paid ? 'שולם' : 'טרם שולם'}</button>`}</span>
@@ -4031,7 +4048,7 @@ function renderDeskInspector(){
         <h2 class="di-title">${escapeHtml(exp.item || "הוצאה")}</h2>
       </div>
     </div>
-    <div class="di-amt"><b>₪${fmtMoney(expenseTotalILS(exp))}</b>${exp.currency !== "שקל" ? `<span>${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)} × ${exp.rate}</span>` : ""}</div>
+    <div class="di-amt"><b class="${exp.credit ? 'credit' : ''}">${exp.credit ? "↩️ זיכוי " : ""}${fmtILS(expenseTotalILS(exp))}</b>${exp.currency !== "שקל" ? `<span>${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)} × ${exp.rate}</span>` : ""}</div>
     <dl class="di-dl">
       ${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}
       ${exp.notes ? `<dt>הערות</dt><dd class="note">${escapeHtml(exp.notes)}</dd>` : ""}
@@ -4149,12 +4166,12 @@ function printTripReport(trip){
         const files = (e.attachments || []).map(a => a.driveUrl ? `<a href="${esc(a.driveUrl)}">${esc(a.name || "קובץ")}</a>` : esc(a.name || "קובץ")).join(" · ");
         return `<tr class="${inTotal(e) ? "" : "excl"}">
           <td class="num">${fmtDate(e.date)}</td>
-          <td>${esc(e.item || "הוצאה")}${inTotal(e) ? "" : " (מחוץ לתזרים)"}${e.notes ? `<span class="note">${esc(e.notes)}</span>` : ""}${expenseSplit(e) > 1 ? `<span class="note">${esc(sharedText(e))}</span>` : ""}${(e.refunds || []).length ? `<span class="note">↩️ החזרים: ${(e.refunds).map(r => esc(refundText(r))).join(" · ")} (לפני החזרים ₪${fmtMoney(expenseGrossILS(e))})</span>` : ""}${files ? `<span class="files">📎 ${files}</span>` : ""}</td>
+          <td>${e.credit ? "↩️ זיכוי: " : ""}${esc(e.item || "הוצאה")}${inTotal(e) ? "" : " (מחוץ לתזרים)"}${e.notes ? `<span class="note">${esc(e.notes)}</span>` : ""}${expenseSplit(e) > 1 ? `<span class="note">${esc(sharedText(e))}</span>` : ""}${(e.refunds || []).length ? `<span class="note">↩️ החזרים: ${(e.refunds).map(r => esc(refundText(r))).join(" · ")} (לפני החזרים ₪${fmtMoney(expenseGrossILS(e))})</span>` : ""}${files ? `<span class="files">📎 ${files}</span>` : ""}</td>
           <td>${esc(expCategory(e))}</td>
           <td>${esc(e.paymentMethod || "")}</td>
-          <td class="num">${CUR_SYMBOL[e.currency] || ""}${fmtMoney(e.amount)}</td>
+          <td class="num">${e.credit ? "−" : ""}${CUR_SYMBOL[e.currency] || ""}${fmtMoney(e.amount)}</td>
           <td class="num">${e.currency === "שקל" ? "" : e.rate}</td>
-          <td class="num ils">₪${fmtMoney(expenseTotalILS(e))}</td>
+          <td class="num ils">${fmtILS(expenseTotalILS(e))}</td>
           <td><span class="pr-pill${e.paid ? "" : " pend"}">${e.paid ? "שולם" + (e.paidDate ? " " + fmtDate(e.paidDate) : "") : "טרם שולם"}</span></td>
         </tr>`;
       }).join("")}</tbody>
@@ -4702,12 +4719,35 @@ function updateTotalHint(){
   const rate = cur === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1);
   syncRefundRates();
   const gross = amount * rate;
+  if (creditOn()){
+    document.getElementById('efTotalHint').textContent = "סה״כ זיכוי: ₪" + fmtMoney(gross) + " (יורד מהסה״כ)";
+    return;
+  }
   const refunded = currentRefunds.reduce((s, r) => s + refundILS(r), 0);
   document.getElementById('efTotalHint').textContent = refunded
     ? `סה״כ עלות: ₪${fmtMoney(gross)} · הוחזרו ₪${fmtMoney(refunded)} · אחרי החזרים: ₪${fmtMoney(gross - refunded)}`
     : "סה״כ עלות: ₪" + fmtMoney(gross);
   updatePerHead(gross - refunded);
 }
+
+/* -- charge / credit (זיכוי) -- */
+function creditOn(){ return document.querySelector('#efKindSeg button.active')?.dataset.val === 'credit'; }
+function setKindUI(credit){
+  document.querySelectorAll('#efKindSeg button').forEach(b => b.classList.toggle('active', (b.dataset.val === 'credit') === !!credit));
+  document.getElementById('efKindHint').style.display = credit ? "block" : "none";
+  // Refunds and splitting describe money owed back on a purchase — not relevant to a credit.
+  document.getElementById('efRefundsField').style.display = credit ? "none" : "";
+  document.getElementById('efSplitField').style.display = credit ? "none" : "";
+  document.getElementById('efPaidPill').textContent = credit ? "✓ זוכה" : "✓ שולם";
+  document.getElementById('expFormTitle').textContent = editingExpenseId
+    ? (credit ? "עריכת זיכוי" : "עריכת הוצאה")
+    : (credit ? "זיכוי חדש" : "הוצאה חדשה");
+  updateTotalHint();
+}
+document.getElementById('efKindSeg').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-val]');
+  if (b) setKindUI(b.dataset.val === 'credit');
+});
 
 /* -- shared expense: how many people, how much per head -- */
 function formSplit(){ return Math.max(2, Math.round(parseFloat(document.getElementById('efSplit').value) || 2)); }
@@ -5072,6 +5112,7 @@ function openNewExpense(){
   renderAttachChips();
   updateRateFieldVisibility();
   updateDriveWarning();
+  setKindUI(false);
   showOverlay('overlayExpense');
   setTimeout(()=> document.getElementById('efItem').focus(), 250);
 }
@@ -5122,7 +5163,7 @@ function openEditExpense(id){
   document.getElementById('btnDeleteExpense').style.display = "block";
   document.getElementById('deleteExpenseDivider').style.display = "block";
   renderAttachChips();
-  updateTotalHint();
+  setKindUI(!!exp.credit);
   showOverlay('overlayExpense');
 }
 
@@ -5254,7 +5295,7 @@ async function onScanPicked(e){
   if (result){
     const { unsupported, summed } = await applyScan(result, trip);
     if (seq !== scanSeq) return;
-    const what = summed > 1 ? `${summed} חיובים סוכמו לעסקה אחת (הפירוט בהערות)` : many && summed === 1 ? "הקבצים זוהו כחיוב אחד" : "";
+    const what = (creditOn() ? "זוהה כזיכוי ↩️" + (summed > 1 ? " · " : "") : "") + (summed > 1 ? `${summed} חיובים סוכמו לעסקה אחת (הפירוט בהערות)` : many && summed === 1 ? "הקבצים זוהו כחיוב אחד" : "");
     scanStatus(unsupported ? 'error' : 'done', unsupported
       ? `המטבע ${unsupported} לא נתמך — הסכום נכתב בהערות. ${attached}.`
       : `הפרטים מולאו ${many ? "מהקבלות" : "מהקבלה"}${what ? " · " + what : ""}. ${attached} להוצאה. בדקו לפני השמירה ✓`);
@@ -5287,7 +5328,7 @@ function fmtCharge(c){
   const name = Object.keys(CURRENCY_CODE).find(n => CURRENCY_CODE[n] === c.currency);
   const sym = name ? CUR_SYMBOL[name] : (c.currency || "");
   const amt = (Math.round(c.amount * 100) / 100).toLocaleString("he-IL");
-  return [c.label, `${amt} ${sym}`.trim(), c.date ? `(${fmtDate(c.date)})` : ""].filter(Boolean).join(" ");
+  return [c.label, `${c.isCredit ? "זיכוי −" : ""}${amt} ${sym}`.trim(), c.date ? `(${fmtDate(c.date)})` : ""].filter(Boolean).join(" ");
 }
 
 // Fills the expense form from a scan result.
@@ -5300,15 +5341,16 @@ async function applyScan(d, trip){
     // by the rate on its own charge (or purchase) date, and record the expense in shekels.
     let sum = 0;
     for (const c of charges){
+      const sg = c.isCredit ? -1 : 1;
       let ils = c.currency === "ILS" ? c.amount : c.chargedAmountILS || (c.exchangeRate ? c.amount * c.exchangeRate : null);
       if (ils == null && c.currency){
         const r = await rateToILS(c.currency, c.chargeDate || c.date);
         if (r) ils = c.amount * r;
       }
       if (ils == null) partial = true;
-      else sum += ils;
+      else sum += sg * ils;
     }
-    d = Object.assign({}, d, { currency: "ILS", amount: sum ? Math.round(sum * 100) / 100 : null, exchangeRate: null, chargedAmountILS: null });
+    d = Object.assign({}, d, { currency: "ILS", isCredit: sum < 0, amount: sum ? Math.round(Math.abs(sum) * 100) / 100 : null, exchangeRate: null, chargedAmountILS: null });
   }
   const conf = d.confidence || {};
   const low = (k) => typeof conf[k] === "number" && conf[k] < 0.7;
@@ -5316,6 +5358,8 @@ async function applyScan(d, trip){
   document.querySelectorAll('#overlayExpense .field.uncertain').forEach(f => f.classList.remove('uncertain'));
   const notesEl = document.getElementById('efNotes');
   const addNote = (t) => { if (t && !notesEl.value.includes(t)) notesEl.value = notesEl.value.trim() ? notesEl.value.trim() + " · " + t : t; };
+
+  setKindUI(!!d.isCredit);
 
   if (d.item) document.getElementById('efItem').value = d.item;
   mark('efItemField', !d.item || low('vendor'));
@@ -5458,8 +5502,10 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
   }
   saveBtn.disabled = false;
 
+  const isCredit = creditOn();
   const data = {
     item: item,
+    credit: isCredit,
     date: document.getElementById('efDate').value,
     split: sharedOn() ? formSplit() : 1,
     splitPaidBack: sharedOn() ? formPaidBack() : 0,
@@ -5482,6 +5528,11 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     attachments: currentAttachments.map(a => ({id:a.id, name:a.name, type:a.type, size:a.size, driveId:a.driveId||null, driveUrl:a.driveUrl||null}))
   };
 
+  if (isCredit){
+    // A credit has no refunds or split of its own.
+    Object.assign(data, { split: 1, splitPaidBack: 0, splitPaidBackCurrency: null, splitPaidBackRate: null, refunds: [] });
+  }
+
   if (editingExpenseId){
     const idx = trip.expenses.findIndex(e => e.id === editingExpenseId);
     if (idx > -1) trip.expenses[idx] = Object.assign({id: editingExpenseId}, data);
@@ -5496,7 +5547,7 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
   if (driveFailures > 0){
     toast(`ההוצאה נשמרה, אך ההעלאה ל-Drive נכשלה${driveFailReason ? " (" + driveFailReason + ")" : ""}`);
   } else {
-    toast("ההוצאה נשמרה ✓");
+    toast(isCredit ? "הזיכוי נשמר ✓" : "ההוצאה נשמרה ✓");
   }
 });
 
@@ -5556,9 +5607,9 @@ document.getElementById('btnExportPdf').addEventListener('click', () => {
 });
 function exportTripXlsx(trip){
   if (!trip || trip.expenses.length === 0){ toast("אין הוצאות לייצוא"); return; }
-  const header = ["פריט","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים","החזרים","סה\"כ החזרים (₪)","לראש (₪)","כמה החזירו"];
+  const header = ["פריט","סוג","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים","החזרים","סה\"כ החזרים (₪)","לראש (₪)","כמה החזירו"];
   const data = [header, ...trip.expenses.map(e => [
-    e.item, e.date, e.split, e.paymentMethod, e.amount, e.currency, e.rate,
+    e.item, e.credit ? "זיכוי" : "חיוב", e.date, e.split, e.paymentMethod, signedAmount(e), e.currency, e.rate,
     Math.round(expenseTotalILS(e)*100)/100, e.paid ? "V" : "", inTotal(e) ? "V" : "", e.notes,
     (e.attachments||[]).map(a=>a.name).join(", "),
     (e.refunds||[]).map(refundText).join(" | "),
@@ -5626,8 +5677,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '14/11/2026 17:28';
-const BUILD_EPOCH = 1794670103418; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 13:39';
+const BUILD_EPOCH = 1794829188477; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
