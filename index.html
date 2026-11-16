@@ -1047,6 +1047,7 @@
   .st-frame > .st-slide{height:100%;padding-top:calc(58px + var(--st-it, 0px));padding-bottom:calc(70px + var(--st-ib, 0px));}
   .st-frame .st-brand{bottom:calc(22px + var(--st-ib, 0px));}
   .st-frame .st-credit{bottom:calc(50px + var(--st-ib, 0px));}
+  html.st-shared-only body > *:not(#storyView):not(.toast):not(.st-export){display:none !important;}
   .st-export{position:fixed;left:-20000px;top:0;width:360px;height:640px;pointer-events:none;}
 
   .st-slide{position:relative;width:360px;height:640px;overflow:hidden;font-family:'Heebo',system-ui,-apple-system,Arial,sans-serif;direction:rtl;
@@ -1202,7 +1203,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:37</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:41</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -5799,8 +5800,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 22:37';
-const BUILD_EPOCH = 1794861444070; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 22:41';
+const BUILD_EPOCH = 1794861675806; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -6429,20 +6430,30 @@ async function revokeStoryLink(tripId){
 }
 
 // Someone opened a shared link (?story=…): show that story, view-only, no sign-in needed.
-async function openSharedStory(id){
+// A shared link shows only the story: the app itself stays hidden (html.st-shared-only), and
+// closing the story leads to an end screen with a replay button instead of the app.
+let storySharedId = null;
+function storySharedMessage(title, sub, opts){
+  opts = opts || {};
   const el = storyEl();
-  document.documentElement.classList.add('st-open');
+  el.querySelector('.st-stage').style.background = "linear-gradient(160deg,#173B39,#2F6F6B)";
+  el.querySelector('.st-frame').innerHTML = `<div class="st-slide" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);"><div class="st-body st-center">
+    <div class="st-emoji-xl">${opts.emoji || "✈️"}</div><div class="st-title" style="font-size:28px;">${title}</div><div class="st-sub">${sub}</div>
+    ${opts.spin ? `<div class="st-spin"></div>` : ""}${opts.replay ? `<button type="button" class="st-btn" data-st="replay" style="margin-top:26px;font-size:16px;padding:12px 22px;">▶️ לצפייה חוזרת</button>` : ""}</div><div class="st-brand">TripCost</div></div>`;
+  el.querySelector('.st-bars').innerHTML = "";
+  el.querySelector('.st-actions').style.visibility = "hidden";
+  el.querySelector('.st-x').style.visibility = opts.replay ? "hidden" : "";
+  const rb = el.querySelector('[data-st="replay"]');
+  if (rb) rb.addEventListener('click', () => openSharedStory(storySharedId));
+}
+async function openSharedStory(id){
+  storySharedId = id;
+  const el = storyEl();
+  document.documentElement.classList.add('st-open', 'st-shared-only');
   el.classList.add('show', 'shared');
   story = null;
   storyLayout();
-  const frame = el.querySelector('.st-frame');
-  const msg = (title, sub, spin) => {
-    el.querySelector('.st-stage').style.background = "linear-gradient(160deg,#173B39,#2F6F6B)";
-    frame.innerHTML = `<div class="st-slide" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);"><div class="st-body st-center">
-      <div class="st-emoji-xl">✈️</div><div class="st-title" style="font-size:28px;">${title}</div><div class="st-sub">${sub}</div>${spin ? `<div class="st-spin"></div>` : ""}</div><div class="st-brand">TripCost</div></div>`;
-    el.querySelector('.st-bars').innerHTML = "";
-    el.querySelector('.st-actions').style.visibility = "hidden";
-  };
+  const msg = (title, sub, spin) => storySharedMessage(title, sub, { spin });
   msg("טוען את הסטורי…", "רגע אחד", true);
   try{
     if (!fbFunctions) throw new Error("השרת לא זמין — בדקו חיבור לאינטרנט");
@@ -6450,6 +6461,7 @@ async function openSharedStory(id){
     const snap = res.data && res.data.snapshot;
     if (!snap || typeof snap !== "object" || !Array.isArray(snap.cats)) throw new Error("הסטורי לא נמצא");
     el.querySelector('.st-actions').style.visibility = "";
+    el.querySelector('.st-x').style.visibility = "";
     story = { shared: true, trip: null, data: snap, i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
               insights: Array.isArray(snap.insights) ? snap.insights : [], tagline: snap.tagline || "", ai: true,
               photos: {}, blobs: {}, renders: {}, raf: 0, token: Symbol() };
@@ -6604,7 +6616,12 @@ function storyClose(fromPop){
   const el = storyEl();
   if (!story && !el.classList.contains('show')) return;
   if (story) cancelAnimationFrame(story.raf);
-  const wasShared = el.classList.contains('shared');
+  if (el.classList.contains('shared')){
+    story = null;
+    storySharedMessage("תודה שצפיתם!", "הסטורי נוצר ב-TripCost", { emoji: "🧳", replay: true });
+    return;
+  }
+  const wasShared = false;
   story = null;
   el.classList.remove('show', 'shared');
   el.querySelector('.st-frame').innerHTML = "";
