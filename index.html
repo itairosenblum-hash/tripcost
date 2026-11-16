@@ -1028,9 +1028,22 @@
   .st-btn:active{transform:scale(.96);}
   .st-btn[disabled]{opacity:.7;}
   .st-btn.ghost{background:rgba(32,48,46,.75);color:#fff;}
-  .st-hint{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.75);pointer-events:none;}
+  .st-hint{position:absolute;bottom:78px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.75);pointer-events:none;}
   .st-ui.light .st-hint{color:rgba(32,48,46,.6);}
 
+  .st-link{position:absolute;top:7px;left:48px;height:28px;border:none;border-radius:999px;padding:0 11px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;pointer-events:auto;
+    background:rgba(255,255,255,.22);color:#fff;}
+  .st-link[disabled]{opacity:.7;}
+  .st-ui.light .st-link{background:rgba(32,48,46,.12);color:#20302E;}
+  .st-ui.has-link .st-bars{left:140px;}
+  .st-photo{position:absolute;inset:0;background-size:cover;background-position:center;animation:stZoom 9s ease-out both;}
+  .st-shade{position:absolute;inset:0;}
+  .st-fade{animation:stFade .9s ease both;}
+  .st-photo.st-fade{animation:stFade .9s ease both, stZoom 9s ease-out both;}
+  @keyframes stFade{from{opacity:0;}to{opacity:1;}}
+  @keyframes stZoom{from{transform:scale(1.1);}to{transform:scale(1);}}
+  .st-credit{position:absolute;bottom:50px;left:24px;right:24px;text-align:center;font-size:9.5px;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;}
+  .st-slide.has-photo .st-title, .st-slide.has-photo .st-big{text-shadow:0 2px 14px rgba(0,0,0,.35);}
   .st-export{position:fixed;left:-20000px;top:0;width:360px;height:640px;pointer-events:none;}
 
   .st-slide{position:relative;width:360px;height:640px;overflow:hidden;font-family:'Heebo',system-ui,-apple-system,Arial,sans-serif;direction:rtl;
@@ -1186,7 +1199,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:16</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:31</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -3792,6 +3805,7 @@ function renderFinishedSummary(){
       ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+expenseTotalILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
       <div class="fin-actions">
         ${storyAvailable(trip) ? `<button type="button" class="mini-btn story-btn" id="btnFinStory" style="flex-basis:100%;">✨ סטורי הטיול</button>` : ""}
+        ${trip.storyShareId ? `<button type="button" class="mini-btn" id="btnFinStoryRevoke">🔗 ביטול הקישור לסטורי</button>` : ""}
         <button type="button" class="mini-btn" id="btnFinLock">${locked ? "🔓 פתח לעריכה" : "🔒 נעל שוב"}</button>
         ${trip.expenses.length ? `<button type="button" class="mini-btn" id="btnFinExport">📊 ייצוא לאקסל</button><button type="button" class="mini-btn" id="btnFinPdf">📄 דו״ח PDF</button>` : ""}
       </div>
@@ -3809,6 +3823,8 @@ function renderFinishedSummary(){
   if (pdfBtn) pdfBtn.addEventListener('click', () => printTripReport(trip));
   const sb = document.getElementById('btnFinStory');
   if (sb) sb.addEventListener('click', () => openTripStory(trip.id));
+  const sr = document.getElementById('btnFinStoryRevoke');
+  if (sr) sr.addEventListener('click', () => revokeStoryLink(trip.id));
   const pb = document.getElementById('btnFinPending');
   if (pb) pb.addEventListener('click', () => {
     expenseFilter = { type: 'pending' };
@@ -5780,8 +5796,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 22:16';
-const BUILD_EPOCH = 1794860186399; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 22:31';
+const BUILD_EPOCH = 1794861079312; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -5895,12 +5911,17 @@ function storyData(trip){
   const topDay = dayList.reduce((m, x) => (!m || x[1] > m[1]) ? x : m, null);
   const topDayItems = topDay && topDay[1] > 0 ? ground.filter(e => e.date === topDay[0]).sort((a, b) => expenseTotalILS(b) - expenseTotalILS(a)).slice(0, 2) : [];
 
-  const biggest = list.filter(e => !e.credit).sort((a, b) => expenseTotalILS(b) - expenseTotalILS(a))[0] || null;
+  const big = list.filter(e => !e.credit).sort((a, b) => expenseTotalILS(b) - expenseTotalILS(a))[0] || null;
+  const biggest = big ? { item: big.item || "", cat: expCategory(big), ils: expenseTotalILS(big), date: big.date || "" } : null;
+  const curs = Object.entries(byCur).filter(([, v]) => Math.abs(v) > 0.004).sort((a, b) => Math.abs(b[1] * rateFor(b[0])) - Math.abs(a[1] * rateFor(a[0])));
   const creditsBack = list.filter(e => e.credit).reduce((s, e) => s - expenseTotalILS(e), 0)
     + list.reduce((s, e) => s + (e.credit ? 0 : expenseRefundsILS(e) + splitPaidBackILS(e)), 0);
 
+  // Everything except list/byPay/byCat/creditsBack is plain data that a shared link can carry (see storySnapshot).
   return {
-    trip, list, total, days, cats, byCat, byPay, byCur, groundTotal, dayList, topDay, topDayItems, biggest, creditsBack,
+    name: trip.name || "", budget: trip.budget > 0 ? trip.budget : 0, tripId: trip.id,
+    list, total, days, cats, byCat, byPay, byCur, curs, groundTotal, dayList, topDay, biggest, creditsBack,
+    topDayItems: topDayItems.map(e => e.item || "הוצאה"),
     count: list.length,
     foreign: Object.keys(byCur).filter(c => c !== "שקל" && Math.abs(byCur[c]) > 0.004),
     start, end
@@ -5923,9 +5944,9 @@ function storyAiPayload(d){
   ex.sort((a, b) => a.date.localeCompare(b.date));
   const obj = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, r(v)]));
   return {
-    trip: d.trip.name || "", startDate: d.start, endDate: d.end, days: d.days,
+    trip: d.name, startDate: d.start, endDate: d.end, days: d.days,
     expensesCount: d.count, totalIls: r(d.total), onTheGroundIls: r(d.groundTotal),
-    budgetIls: d.trip.budget > 0 ? r(d.trip.budget) : null,
+    budgetIls: d.budget > 0 ? r(d.budget) : null,
     byCategoryIls: obj(d.byCat), byPaymentIls: obj(d.byPay),
     byCurrencyOriginal: Object.fromEntries(Object.entries(d.byCur).map(([k, v]) => [CURRENCY_CODE[k] || k, Math.round(v * 100) / 100])),
     onTheGroundByDayIls: Object.fromEntries(d.dayList.map(([k, v]) => [k, r(v)])),
@@ -5984,20 +6005,20 @@ async function storyLoadInsights(force){
   const payload = storyAiPayload(s.data);
   const fp = storyHash(JSON.stringify(payload));
   const cached = trip.storyInsights;
-  if (!force && cached && cached.fp === fp && Array.isArray(cached.insights) && cached.insights.length){
-    return { insights: cached.insights, tagline: cached.tagline || "", ai: true };
+  if (!force && cached && cached.v === 2 && cached.fp === fp && Array.isArray(cached.insights) && cached.insights.length){
+    return { insights: cached.insights, tagline: cached.tagline || "", destination: cached.destination || "", ai: true };
   }
-  if (!fbFunctions || !cloudUser || !navigator.onLine) return { insights: storyLocalInsights(s.data), tagline: "", ai: false };
+  if (!fbFunctions || !cloudUser || !navigator.onLine) return { insights: storyLocalInsights(s.data), tagline: "", destination: "", ai: false };
   try{
     const res = await callFn("tripInsights", 150000)({ summary: payload });
     const r = res.data || {};
     if (!Array.isArray(r.insights) || !r.insights.length) throw new Error("empty");
     const t = state.trips.find(x => x.id === trip.id);
-    if (t){ t.storyInsights = { fp, tagline: r.tagline || "", insights: r.insights, at: new Date().toISOString() }; saveState(); }
-    return { insights: r.insights, tagline: r.tagline || "", ai: true };
+    if (t){ t.storyInsights = { v: 2, fp, tagline: r.tagline || "", destination: r.destination || "", insights: r.insights, at: new Date().toISOString() }; saveState(); }
+    return { insights: r.insights, tagline: r.tagline || "", destination: r.destination || "", ai: true };
   }catch(e){
     console.warn("tripcost: insights failed", e);
-    return { insights: storyLocalInsights(s.data), tagline: "", ai: false };
+    return { insights: storyLocalInsights(s.data), tagline: "", destination: "", ai: false };
   }
 }
 
@@ -6017,12 +6038,17 @@ function storyBuildSlides(){
 }
 
 function storySlideHtml(slide, isStatic){
-  const d = story.data, trip = d.trip;
+  const d = story.data;
   const cls = isStatic ? " st-static" : "";
   const blob = (pos, color) => `<div class="st-blob" style="${pos};background:radial-gradient(circle, ${color} 0%, transparent 68%);"></div>`;
   const brand = `<div class="st-brand">TripCost</div>`;
+  // Slides that can carry a photo: the photo replaces the decorative blobs and gets a credit line.
+  const ph = (key) => storyPhotoLayer(key, storyPhotoColor(key), false);
+  const hasPh = (key) => !!(story.photos && story.photos[key] && story.photos[key].data);
+  const deco = (key, html) => hasPh(key) ? ph(key) : html;
+  const phCls = (key) => hasPh(key) ? " has-photo" : "";
   const count = (n, fmt) => `<span data-count="${n}" data-fmt="${fmt}">${fmt === "ils" ? storyIls(n) : storyNum(n)}</span>`;
-  const name = escapeHtml(trip.name || "הטיול");
+  const name = escapeHtml(d.name || "הטיול");
   const range = (d.start && d.end) ? (d.start === d.end ? fmtDate(d.start) : `${fmtDate(d.start)} – ${fmtDate(d.end)}`) : "";
 
   if (slide.key === "intro"){
@@ -6030,26 +6056,26 @@ function storySlideHtml(slide, isStatic){
     if (d.days > 0) chips.push(`🗓️ ${d.days} ימים`);
     chips.push(`🧾 ${d.count} הוצאות`);
     if (d.foreign.length) chips.push(`💱 ${d.foreign.length + (d.byCur["שקל"] ? 1 : 0)} מטבעות`);
-    return { bg: "#1E4A47", html: `<div class="st-slide${cls}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);">
-      ${blob("top:-110px;left:-90px", "rgba(217,164,65,.55)")}${blob("bottom:-140px;right:-120px", "rgba(140,201,193,.35)")}
+    return { bg: "#1E4A47", html: `<div class="st-slide${cls}${phCls("intro")}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);">
+      ${deco("intro", blob("top:-110px;left:-90px", "rgba(217,164,65,.55)") + blob("bottom:-140px;right:-120px", "rgba(140,201,193,.35)"))}
       <div class="st-body st-center">
         <div class="st-kicker st-in" style="--d:.05s">הסיפור של הטיול</div>
         <div class="st-emoji-xl st-pop" style="--d:.15s">✈️</div>
         <div class="st-title st-in" style="--d:.3s">${name}</div>
         ${range ? `<div class="st-sub st-in" style="--d:.45s" dir="ltr">${range}</div>` : ""}
         <div class="st-chips st-in" style="--d:.65s">${chips.map(c => `<span>${c}</span>`).join("")}</div>
-      </div>${brand}</div>` };
+      </div>${storyPhotoCredit("intro")}${brand}</div>` };
   }
 
   if (slide.key === "total"){
-    const curs = Object.entries(d.byCur).filter(([c, v]) => Math.abs(v) > 0.004).sort((a, b) => Math.abs(b[1] * rateFor(b[0])) - Math.abs(a[1] * rateFor(a[0])));
+    const curs = d.curs || [];
     let budget = "";
-    if (trip.budget > 0){
-      const r = d.total / trip.budget, pct = Math.round(r * 100);
+    if (d.budget > 0){
+      const r = d.total / d.budget, pct = Math.round(r * 100);
       const to = Math.min(1, Math.max(0, r));
       budget = `<div class="st-budget st-in" style="--d:.8s">
         <div class="track"><div class="fill st-growx" style="--d:1s;--to:${to};transform:scaleX(${to});${r > 1 ? "background:#8E2F1B;" : ""}"></div></div>
-        <div class="lbl"><span>${pct}% מהתקציב</span><span>${r <= 1 ? `נשארו ${storyIls(trip.budget - d.total)} 🎉` : `חריגה של ${storyIls(d.total - trip.budget)}`}</span></div>
+        <div class="lbl"><span>${pct}% מהתקציב</span><span>${r <= 1 ? `נשארו ${storyIls(d.budget - d.total)} 🎉` : `חריגה של ${storyIls(d.total - d.budget)}`}</span></div>
       </div>`;
     }
     return { bg: "#D9A441", light: true, html: `<div class="st-slide light${cls}" style="background:linear-gradient(160deg,#F2C46B 0%,#D9A441 55%,#C98A2E 100%);">
@@ -6071,7 +6097,7 @@ function storySlideHtml(slide, isStatic){
     const barsHtml = n ? `<div class="st-days">${bars.map(([day, v], i) =>
       `<i class="st-grow${d.topDay && day === d.topDay[0] ? " top" : ""}" style="height:${Math.max(2, v / max * 100)}%;--d:${(0.5 + i * Math.min(0.06, 0.9 / n)).toFixed(2)}s"></i>`).join("")}</div>
       <div class="st-days-axis"><span dir="ltr">${fmtDate(bars[0][0]).slice(0, 5)}</span><span dir="ltr">${fmtDate(bars[n-1][0]).slice(0, 5)}</span></div>` : "";
-    const top = d.topDay && d.topDay[1] > 0 ? `<div class="st-callout st-in" style="--d:1.2s">🔥 היום הכי יקר: <b>${storyDayLabel(d.topDay[0])}</b> · <b>${storyIls(d.topDay[1])}</b>${d.topDayItems.length ? `<div class="st-note" style="margin-top:4px;">בעיקר: ${d.topDayItems.map(e => escapeHtml(e.item || "הוצאה")).join(", ")}</div>` : ""}</div>` : "";
+    const top = d.topDay && d.topDay[1] > 0 ? `<div class="st-callout st-in" style="--d:1.2s">🔥 היום הכי יקר: <b>${storyDayLabel(d.topDay[0])}</b> · <b>${storyIls(d.topDay[1])}</b>${d.topDayItems.length ? `<div class="st-note" style="margin-top:4px;">בעיקר: ${d.topDayItems.map(n => escapeHtml(n)).join(", ")}</div>` : ""}</div>` : "";
     return { bg: "#1A2725", html: `<div class="st-slide${cls}" style="background:linear-gradient(170deg,#132020 0%,#20302E 100%);">
       ${blob("top:-130px;left:-110px", "rgba(95,167,159,.35)")}
       <div class="st-body">
@@ -6105,7 +6131,7 @@ function storySlideHtml(slide, isStatic){
   }
 
   if (slide.key === "biggest"){
-    const e = d.biggest, c = expCategory(e), v = expenseTotalILS(e);
+    const e = d.biggest, c = CATEGORIES.includes(e.cat) ? e.cat : "שונות", v = e.ils;
     const pct = d.total > 0 ? Math.round(v / d.total * 100) : 0;
     return { bg: "#9A4330", html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,#8E3B28 0%,#B5533C 60%,#C9694F 100%);">
       ${blob("top:-120px;right:-110px", "rgba(242,196,107,.45)")}
@@ -6132,15 +6158,15 @@ function storySlideHtml(slide, isStatic){
   if (slide.kind === "insight"){
     const ins = slide.ins, [c1, c2] = STORY_INSIGHT_BG[slide.idx % STORY_INSIGHT_BG.length];
     const n = story.insights.length;
-    return { bg: c1, html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,${c1} 0%,${c2} 100%);">
-      ${blob("top:-120px;left:-110px", "rgba(255,255,255,.22)")}${blob("bottom:-150px;right:-120px", "rgba(0,0,0,.18)")}
+    return { bg: c1, html: `<div class="st-slide${cls}${phCls(slide.key)}" style="background:linear-gradient(160deg,${c1} 0%,${c2} 100%);">
+      ${deco(slide.key, blob("top:-120px;left:-110px", "rgba(255,255,255,.22)") + blob("bottom:-150px;right:-120px", "rgba(0,0,0,.18)"))}
       <div class="st-body st-center">
         <div class="st-in" style="--d:.05s"><span class="st-tag">✨ תובנה ${slide.idx + 1}/${n}</span></div>
         <div class="st-emoji-xl st-pop" style="--d:.15s;margin-top:22px;">${escapeHtml(ins.emoji || "✨")}</div>
         <div class="st-title st-in" style="--d:.3s;font-size:30px;">${escapeHtml(ins.title || "")}</div>
         ${ins.highlight ? `<div class="st-big m st-pop" style="--d:.45s">${escapeHtml(ins.highlight)}</div>` : ""}
         <div class="st-text st-in" style="--d:.65s;margin-top:6px;">${escapeHtml(ins.text || "")}</div>
-      </div>${brand}</div>` };
+      </div>${storyPhotoCredit(slide.key)}${brand}</div>` };
   }
 
   // outro
@@ -6152,15 +6178,15 @@ function storySlideHtml(slide, isStatic){
     top ? ["הכי הרבה על", `${CATEGORY_ICON[top[0]]} ${Math.round(top[1] / d.cats.reduce((s, x) => s + x[1], 0) * 100)}%`] : null
   ].filter(Boolean);
   const tagline = story.tagline || storyLocalTagline(d);
-  return { bg: "#1E4A47", html: `<div class="st-slide${cls}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 70%,#3E8B84 100%);">
-    ${blob("top:-110px;right:-100px", "rgba(217,164,65,.5)")}${blob("bottom:-140px;left:-120px", "rgba(140,201,193,.3)")}
+  return { bg: "#1E4A47", html: `<div class="st-slide${cls}${phCls("outro")}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 70%,#3E8B84 100%);">
+    ${deco("outro", blob("top:-110px;right:-100px", "rgba(217,164,65,.5)") + blob("bottom:-140px;left:-120px", "rgba(140,201,193,.3)"))}
     <div class="st-body st-center">
       <div class="st-kicker st-in" style="--d:.05s">${name} · במספרים</div>
       <div class="st-emoji-l st-pop" style="--d:.15s;margin-top:10px;">🏁</div>
       <div class="st-grid">${stats.map((x, i) => `<div class="st-in" style="--d:${(0.3 + i * 0.12).toFixed(2)}s"><div class="k">${x[0]}</div><div class="v">${escapeHtml(x[1])}</div></div>`).join("")}</div>
       ${tagline ? `<div class="st-quote st-in" style="--d:.9s">״${escapeHtml(tagline)}״</div>` : ""}
       ${range ? `<div class="st-sub st-in" style="--d:1s;margin-top:12px;" dir="ltr">${range}</div>` : ""}
-    </div>${brand}</div>` };
+    </div>${storyPhotoCredit("outro")}${brand}</div>` };
 }
 
 // Closing line when the AI didn't write one: by where the money went on the ground.
@@ -6169,6 +6195,274 @@ function storyLocalTagline(d){
     "ביגוד וקוסמטיקה": "טיול של שופינג", "מתנות ומזכרות": "טיול של מזכרות לכולם" };
   const top = d.cats.find(([c]) => lines[c]);
   return top ? lines[top[0]] : "";
+}
+
+/* ---------- photos (Wikipedia / Wikimedia Commons) ----------
+   Freely licensed photos: the destination on the opening and closing slides, and a photo per
+   insight (the AI suggests what to look for). Every photo carries its author and license.
+   Lookups are cached in localStorage; image bytes are inlined as data URLs so the shared
+   images can include them. */
+const STORY_PHOTO_KEY = "tripcost.storyPhotos.v1";
+const STORY_II = { prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiurlheight: "1100", iiextmetadatafilter: "Artist|LicenseShortName" };
+const STORY_GENERIC_WORDS = ["טיול","טיולים","חופשה","חופשת","החופשה","הטיול","טיסה","ירח","דבש","משפחתי","משפחה","קיץ","חורף","אביב","סתיו","סוכות","פסח","חנוכה","סופ\"ש","סופש","ו","עם","של"];
+let storyPhotoCache = (() => { try{ return JSON.parse(localStorage.getItem(STORY_PHOTO_KEY)) || {}; }catch(e){ return {}; } })();
+const storyPhotoBytes = new Map(); // url -> Promise<dataURL>
+
+function storyPhotoCacheSave(){
+  const keys = Object.keys(storyPhotoCache);
+  if (keys.length > 300) keys.slice(0, keys.length - 300).forEach(k => delete storyPhotoCache[k]);
+  try{ localStorage.setItem(STORY_PHOTO_KEY, JSON.stringify(storyPhotoCache)); }catch(e){}
+}
+async function storyWiki(host, params){
+  const u = new URL(`https://${host}/w/api.php`);
+  Object.entries(Object.assign({ action: "query", format: "json", formatversion: "2", origin: "*" }, params)).forEach(([k, v]) => u.searchParams.set(k, v));
+  const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 9000);
+  try{
+    const r = await fetch(u, { signal: ctrl.signal });
+    if (!r.ok) throw new Error("http " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+// Wikimedia metadata is HTML: read its text in an inert document (never in the live page).
+function storyStripHtml(h){
+  if (!h) return "";
+  const doc = new DOMParser().parseFromString(String(h), "text/html");
+  return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+}
+function storyImageInfo(page){
+  const ii = page && page.imageinfo && page.imageinfo[0];
+  if (!ii || ii.mime !== "image/jpeg" || !ii.thumburl) return null;
+  if ((ii.width || 0) < 800 || (ii.height || 0) < 500) return null;
+  const m = ii.extmetadata || {};
+  const lic = storyStripHtml(m.LicenseShortName && m.LicenseShortName.value);
+  if (!lic) return null;
+  const artist = storyStripHtml(m.Artist && m.Artist.value).slice(0, 40);
+  return { url: ii.thumburl, credit: [artist, lic].filter(Boolean).join(" · ") };
+}
+async function storyFindPhoto(query, lang, avoid){
+  query = String(query || "").trim();
+  if (!query) return null;
+  lang = lang || "en";
+  const key = lang + ":" + query.toLowerCase();
+  const avoidSet = new Set(avoid || []);
+  const hit = storyPhotoCache[key];
+  if (key in storyPhotoCache && !(hit && avoidSet.has(hit.url))) return hit;
+  let found = null;
+  try{
+    const w = await storyWiki(`${lang}.wikipedia.org`, { generator: "search", gsrsearch: query, gsrlimit: "1", prop: "pageimages", piprop: "name" });
+    const pg = w.query && w.query.pages && w.query.pages[0];
+    if (pg && pg.pageimage){
+      const f = await storyWiki("commons.wikimedia.org", Object.assign({ titles: "File:" + pg.pageimage }, STORY_II));
+      found = storyImageInfo(f.query && f.query.pages && f.query.pages[0]);
+      if (found && avoidSet.has(found.url)) found = null;
+    }
+    if (!found && lang === "en"){
+      const c = await storyWiki("commons.wikimedia.org", Object.assign({ generator: "search", gsrsearch: query + " filemime:image/jpeg", gsrnamespace: "6", gsrlimit: "8" }, STORY_II));
+      const pages = ((c.query && c.query.pages) || []).slice().sort((a, b) => (a.index || 0) - (b.index || 0));
+      for (const p of pages){ const x = storyImageInfo(p); if (x && !avoidSet.has(x.url)){ found = x; break; } }
+    }
+  }catch(e){
+    console.warn("tripcost: photo lookup failed", query, e);
+    return null; // network trouble: don't remember "no photo"
+  }
+  if (!avoidSet.size || !found){ storyPhotoCache[key] = found; storyPhotoCacheSave(); }
+  return found;
+}
+function storyPhotoDataUrl(url){
+  if (!storyPhotoBytes.has(url)){
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error("http " + r.status); return r.blob(); })
+      .then(b => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); }));
+    p.catch(() => storyPhotoBytes.delete(url));
+    storyPhotoBytes.set(url, p);
+  }
+  return storyPhotoBytes.get(url);
+}
+// The destination from the trip name ("ליסבון 2026", "טיול לרומא") for a Hebrew Wikipedia search.
+function storyDestinationQueries(name){
+  const words = String(name || "").replace(/[0-9׳'"״\-–_.,()!?/]+/g, " ").split(/\s+/).filter(w => w && !STORY_GENERIC_WORDS.includes(w));
+  if (!words.length) return [];
+  const q = words.join(" "), out = [q];
+  if (/^ל[א-ת]{3,}/.test(words[0])) out.push([words[0].slice(1), ...words.slice(1)].join(" "));
+  return out;
+}
+function storyRgba(hex, a){
+  const h = hex.replace("#", "");
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
+}
+function storyPhotoLayer(key, color, fade){
+  const p = story && story.photos && story.photos[key];
+  if (!p || !p.data) return "";
+  return `<div class="st-photo${fade ? " st-fade" : ""}" style="background-image:url('${p.data}')"></div>
+    <div class="st-shade${fade ? " st-fade" : ""}" style="background:linear-gradient(180deg, ${storyRgba(color, .5)} 0%, ${storyRgba(color, .62)} 40%, ${storyRgba(color, .9)} 100%);"></div>`;
+}
+function storyPhotoCredit(key){
+  const p = story && story.photos && story.photos[key];
+  return p && p.data ? `<div class="st-credit">📷 ${escapeHtml(p.credit || "")} · Wikimedia Commons</div>` : "";
+}
+const STORY_PHOTO_COLOR = { intro: "#173B39", outro: "#173B39" };
+function storyPhotoColor(key){
+  if (STORY_PHOTO_COLOR[key]) return STORY_PHOTO_COLOR[key];
+  const i = parseInt(String(key).replace("ins", ""), 10) || 0;
+  return STORY_INSIGHT_BG[i % STORY_INSIGHT_BG.length][0];
+}
+// Loads a found photo into the story; if its slide is on screen, fades it in without restarting the slide.
+async function storySetPhoto(key, info){
+  if (!info || !story) return;
+  const s = story;
+  try{
+    const data = await storyPhotoDataUrl(info.url);
+    if (story !== s) return;
+    s.photos[key] = { url: info.url, credit: info.credit, data };
+    delete s.renders[key]; delete s.blobs[key];
+    const cur = s.slides[s.i];
+    if (cur && cur.key === key){
+      const el = storyEl().querySelector('.st-frame .st-slide');
+      if (el && !el.querySelector('.st-photo')){
+        el.querySelectorAll('.st-blob').forEach(b => b.remove());
+        el.classList.add('has-photo');
+        el.insertAdjacentHTML('afterbegin', storyPhotoLayer(key, storyPhotoColor(key), true));
+        el.insertAdjacentHTML('beforeend', storyPhotoCredit(key));
+      }
+    }
+  }catch(e){ console.warn("tripcost: photo download failed", e); }
+}
+async function storyLoadDestinationPhotos(destination){
+  const s = story;
+  let intro = s.photos.intro && s.photos.intro.url ? { url: s.photos.intro.url, credit: s.photos.intro.credit } : null;
+  if (!intro){
+    if (destination) intro = await storyFindPhoto(destination, "en");
+    if (!intro) for (const q of storyDestinationQueries(s.data.name)){ intro = await storyFindPhoto(q, "he"); if (intro) break; }
+    if (!intro || story !== s) return;
+    await storySetPhoto("intro", intro);
+  }
+  let outro = null;
+  if (destination) outro = await storyFindPhoto(destination + " panorama", "en", [intro.url]);
+  if (story === s) await storySetPhoto("outro", outro || intro);
+}
+async function storyLoadInsightPhotos(destination){
+  const s = story, used = [s.photos.intro && s.photos.intro.url].filter(Boolean);
+  const jobs = (s.insights || []).map(async (ins, i) => {
+    if (!ins.photoQuery) return;
+    const p = await storyFindPhoto(ins.photoQuery, "en", used);
+    if (!p || used.includes(p.url) || story !== s) return;
+    used.push(p.url);
+    await storySetPhoto("ins" + i, p);
+  });
+  await Promise.all(jobs);
+}
+function storyWithin(promise, ms){ return Promise.race([promise, new Promise(r => setTimeout(r, ms))]); }
+
+/* ---------- shareable link ---------- */
+
+// What a shared link carries: the summarized story only — no expense list, notes or files.
+function storySnapshot(){
+  const d = story.data, photos = {};
+  Object.entries(story.photos).forEach(([k, p]) => { if (p && p.url) photos[k] = { url: p.url, credit: p.credit || "" }; });
+  return {
+    v: 1, name: d.name, budget: d.budget, total: d.total, days: d.days, cats: d.cats, byCur: d.byCur, curs: d.curs,
+    groundTotal: d.groundTotal, dayList: d.dayList, topDay: d.topDay, topDayItems: d.topDayItems, biggest: d.biggest,
+    count: d.count, foreign: d.foreign, start: d.start, end: d.end,
+    insights: (story.insights || []).map(i => ({ emoji: i.emoji, title: i.title, highlight: i.highlight, text: i.text })),
+    tagline: story.tagline || "", photos
+  };
+}
+function storyLinkUrl(id){ return location.origin + location.pathname + "?story=" + encodeURIComponent(id); }
+async function storySaveLink(s){
+  const trip = state.trips.find(t => t.id === s.data.tripId);
+  const res = await callFn("saveStoryLink", 60000)({ id: (trip && trip.storyShareId) || null, tripId: s.data.tripId, snapshot: storySnapshot() });
+  const id = res.data && res.data.id;
+  if (!id) throw new Error("לא התקבל קישור");
+  if (trip && trip.storyShareId !== id){ trip.storyShareId = id; saveState(); }
+  return storyLinkUrl(id);
+}
+async function storySendLink(url){
+  const title = story ? story.data.name : "TripCost";
+  if (navigator.share){
+    try{ await navigator.share({ title, text: `✈️ הסטורי של ${title}`, url }); return true; }
+    catch(e){ if (e && e.name === "AbortError") return true; if (e && e.name === "NotAllowedError") return false; }
+  }
+  try{ await navigator.clipboard.writeText(url); toast("🔗 הקישור הועתק"); return true; }
+  catch(e){ return false; }
+}
+async function storyShareLink(){
+  if (!story || story.shared || story.busy) return;
+  const s = story;
+  if (!fbFunctions || !cloudUser){ toast("כדי לשתף קישור צריך להיות מחוברים לסנכרון בענן"); return; }
+  if (!s.insights){ toast("רגע, התובנות עוד נטענות…"); return; }
+  const btn = storyEl().querySelector('[data-st="link"]');
+  // A link that's ready opens the share sheet right away (iOS needs that to happen inside the tap).
+  if (s.linkUrl){
+    const url = s.linkUrl;
+    s.linkUrl = null; btn.textContent = "🔗 קישור";
+    if (!(await storySendLink(url))) toast("לא הצלחנו לפתוח שיתוף");
+    return;
+  }
+  s.busy = true; btn.disabled = true; btn.textContent = "יוצר קישור…";
+  try{
+    const url = await storySaveLink(s);
+    s.busy = false; btn.disabled = false; btn.textContent = "🔗 קישור";
+    if (!(await storySendLink(url)) && story === s){
+      s.linkUrl = url; btn.textContent = "🔗 שליחת הקישור";
+      toast("הקישור מוכן — הקישו שוב לשליחה");
+    }
+  }catch(e){
+    console.warn("tripcost: story link failed", e);
+    toast(fnError(e));
+  }finally{
+    if (story === s){ s.busy = false; s.last = performance.now(); }
+    btn.disabled = false;
+    if (!s.linkUrl) btn.textContent = "🔗 קישור";
+  }
+}
+async function revokeStoryLink(tripId){
+  const trip = state.trips.find(t => t.id === tripId);
+  if (!trip || !trip.storyShareId) return;
+  if (!confirm("לבטל את הקישור לסטורי? מי שקיבל אותו לא יוכל לפתוח אותו יותר.")) return;
+  try{
+    await callFn("deleteStoryLink", 30000)({ id: trip.storyShareId });
+    delete trip.storyShareId; saveState(); renderAll();
+    toast("הקישור לסטורי בוטל");
+  }catch(e){ toast(fnError(e)); }
+}
+
+// Someone opened a shared link (?story=…): show that story, view-only, no sign-in needed.
+async function openSharedStory(id){
+  const el = storyEl();
+  document.documentElement.classList.add('st-open');
+  el.classList.add('show', 'shared');
+  story = null;
+  storyLayout();
+  const frame = el.querySelector('.st-frame');
+  const msg = (title, sub, spin) => {
+    el.querySelector('.st-stage').style.background = "linear-gradient(160deg,#173B39,#2F6F6B)";
+    frame.innerHTML = `<div class="st-slide" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);"><div class="st-body st-center">
+      <div class="st-emoji-xl">✈️</div><div class="st-title" style="font-size:28px;">${title}</div><div class="st-sub">${sub}</div>${spin ? `<div class="st-spin"></div>` : ""}</div><div class="st-brand">TripCost</div></div>`;
+    el.querySelector('.st-bars').innerHTML = "";
+    el.querySelector('.st-actions').style.visibility = "hidden";
+  };
+  msg("טוען את הסטורי…", "רגע אחד", true);
+  try{
+    if (!fbFunctions) throw new Error("השרת לא זמין — בדקו חיבור לאינטרנט");
+    const res = await callFn("getSharedStory", 30000)({ id });
+    const snap = res.data && res.data.snapshot;
+    if (!snap || typeof snap !== "object" || !Array.isArray(snap.cats)) throw new Error("הסטורי לא נמצא");
+    el.querySelector('.st-actions').style.visibility = "";
+    story = { shared: true, trip: null, data: snap, i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
+              insights: Array.isArray(snap.insights) ? snap.insights : [], tagline: snap.tagline || "", ai: true,
+              photos: {}, blobs: {}, renders: {}, raf: 0, token: Symbol() };
+    story.slides = storyBuildSlides();
+    const photos = snap.photos || {};
+    // Give the opening photo a moment so the story starts with it.
+    await storyWithin(storySetPhoto("intro", photos.intro), 2500);
+    if (!story) return;
+    Object.keys(photos).forEach(k => { if (k !== "intro") storySetPhoto(k, photos[k]); });
+    storyShow(0);
+    story.raf = requestAnimationFrame(storyTick);
+    storyLibLoad().catch(() => {});
+  }catch(e){
+    console.warn("tripcost: shared story failed", e);
+    msg("לא הצלחנו לפתוח את הסטורי", escapeHtml(e && e.code ? fnError(e) : (e && e.message) || "נסו שוב מאוחר יותר"), false);
+  }
 }
 
 /* ---------- viewer ---------- */
@@ -6182,7 +6476,7 @@ function storyEl(){
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', 'סטורי הטיול');
   el.innerHTML = `<div class="st-stage"><div class="st-frame"></div></div>
-    <div class="st-ui"><div class="st-bars"></div><button type="button" class="st-x" aria-label="סגירה">✕</button>
+    <div class="st-ui"><div class="st-bars"></div><button type="button" class="st-x" aria-label="סגירה">✕</button><button type="button" class="st-link" data-st="link">🔗 קישור</button>
       <div class="st-hint"></div>
       <div class="st-actions"><button type="button" class="st-btn" data-st="share">שיתוף ↗</button><button type="button" class="st-btn ghost" data-st="all" style="display:none;">שיתוף הכול</button></div></div>`;
   document.body.appendChild(el);
@@ -6212,6 +6506,7 @@ function storyEl(){
   el.querySelector('.st-x').addEventListener('click', () => storyClose());
   el.querySelector('[data-st="share"]').addEventListener('click', () => storyShare(false));
   el.querySelector('[data-st="all"]').addEventListener('click', () => storyShare(true));
+  el.querySelector('[data-st="link"]').addEventListener('click', () => storyShareLink());
   window.addEventListener('resize', () => { if (story) storyLayout(); });
   window.addEventListener('popstate', () => { if (story) storyClose(true); });
   document.addEventListener('visibilitychange', () => { if (story) story.last = performance.now(); });
@@ -6245,8 +6540,9 @@ function openTripStory(tripId){
   if (!storyAvailable(trip)){ toast("צריך לפחות 3 הוצאות ששולמו כדי ליצור סטורי"); return; }
   const el = storyEl();
   story = { trip, data: storyData(trip), i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
-            insights: null, tagline: "", ai: false, blobs: {}, renders: {}, raf: 0, token: Symbol() };
+            insights: null, tagline: "", ai: false, photos: {}, blobs: {}, renders: {}, raf: 0, token: Symbol() };
   story.slides = storyBuildSlides();
+  el.classList.remove('shared');
   document.documentElement.classList.add('st-open');
   el.classList.add('show');
   history.pushState({ story: true }, "");
@@ -6255,10 +6551,17 @@ function openTripStory(tripId){
   story.raf = requestAnimationFrame(storyTick);
   storyLibLoad().catch(() => {});
 
-  const token = story.token;
-  storyLoadInsights(false).then(r => {
+  const token = story.token, s0 = story;
+  // The destination photo can start right away when an earlier run already named the destination.
+  const known = trip.storyInsights && trip.storyInsights.destination;
+  const destJob = known ? storyLoadDestinationPhotos(known) : null;
+  storyLoadInsights(false).then(async r => {
     if (!story || story.token !== token) return;
     story.insights = r.insights; story.tagline = r.tagline; story.ai = r.ai;
+    const photosJob = Promise.all([storyLoadInsightPhotos(r.destination), destJob || storyLoadDestinationPhotos(r.destination)]).catch(() => {});
+    // Wait a little for the insight photos so the insight slides open with them.
+    await storyWithin(photosJob, 5000);
+    if (!story || story.token !== token) return;
     const cur = story.slides[story.i];
     story.slides = storyBuildSlides();
     delete story.renders.outro; delete story.blobs.outro;
@@ -6267,17 +6570,25 @@ function openTripStory(tripId){
       story.i = story.slides.findIndex(s => s.key === cur.key);
       if (cur.key === "outro") storyShow(story.i, true); else storyBars();
     }
+    // Keep an existing shared link up to date with the latest story.
+    if (trip.storyShareId && cloudUser && fbFunctions){
+      photosJob.then(() => { if (story === s0) return storySaveLink(s0); }).catch(e => console.warn("tripcost: link refresh failed", e));
+    }
   });
 }
 
 function storyClose(fromPop){
-  if (!story) return;
-  cancelAnimationFrame(story.raf);
-  story = null;
   const el = storyEl();
-  el.classList.remove('show');
+  if (!story && !el.classList.contains('show')) return;
+  if (story) cancelAnimationFrame(story.raf);
+  const wasShared = el.classList.contains('shared');
+  story = null;
+  el.classList.remove('show', 'shared');
   el.querySelector('.st-frame').innerHTML = "";
+  el.querySelector('.st-actions').style.visibility = "";
   document.documentElement.classList.remove('st-open');
+  // A shared link lands here directly: closing it just leaves the app (without the ?story=…).
+  if (wasShared){ history.replaceState(null, "", location.pathname); return; }
   if (!fromPop && history.state && history.state.story) history.back();
 }
 
@@ -6303,6 +6614,9 @@ function storyShow(i, keepTime){
   el.querySelector('[data-st="all"]').style.display = isLast ? "" : "none";
   el.querySelector('[data-st="share"]').style.display = slide.kind === "loading" ? "none" : "";
   el.querySelector('.st-hint').textContent = story.i === 0 ? "הקישו כדי להמשיך" : "";
+  const ownLink = !story.shared && !!cloudUser;
+  el.querySelector('[data-st="link"]').style.display = ownLink ? "" : "none";
+  el.querySelector('.st-ui').classList.toggle('has-link', ownLink);
   storyBars();
   storyCountUp(el.querySelector('.st-frame'));
   // Prepare the share image in the background, so a tap on "share" can open the share sheet right away.
@@ -6384,7 +6698,7 @@ function storyRender(slide){
 }
 
 function storyFileName(slide, n){
-  const base = String(story.trip.name || "trip").replace(/[\\/:*?"<>|]/g, "").trim().replace(/\s+/g, "-") || "trip";
+  const base = String(story.data.name || "trip").replace(/[\\/:*?"<>|]/g, "").trim().replace(/\s+/g, "-") || "trip";
   return `${base}-story-${pad2(n)}.png`;
 }
 
@@ -6405,7 +6719,7 @@ async function storyShare(all){
     const files = slides.map(x => new File([s.blobs[x.key]], storyFileName(x, s.slides.indexOf(x) + 1), { type: "image/png" }));
     if (navigator.canShare && navigator.share && navigator.canShare({ files })){
       try{
-        await navigator.share({ files, title: s.trip.name || "TripCost" });
+        await navigator.share({ files, title: s.data.name || "TripCost" });
       }catch(e){
         if (e && e.name === "NotAllowedError" && !ready) toast("התמונה מוכנה — הקישו שוב על שיתוף");
         else if (!(e && e.name === "AbortError")) storyDownload(files);
@@ -6435,6 +6749,10 @@ function storyDownload(files){
 renderAll();
 initFirebaseIfConfigured();
 refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app opens
+(function(){
+  const id = new URLSearchParams(location.search).get('story');
+  if (id) openSharedStory(id);
+})();
 
 })();
 
