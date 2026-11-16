@@ -1044,6 +1044,9 @@
   @keyframes stZoom{from{transform:scale(1.1);}to{transform:scale(1);}}
   .st-credit{position:absolute;bottom:50px;left:24px;right:24px;text-align:center;font-size:9.5px;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;}
   .st-slide.has-photo .st-title, .st-slide.has-photo .st-big{text-shadow:0 2px 14px rgba(0,0,0,.35);}
+  .st-frame > .st-slide{height:100%;padding-top:calc(58px + var(--st-it, 0px));padding-bottom:calc(70px + var(--st-ib, 0px));}
+  .st-frame .st-brand{bottom:calc(22px + var(--st-ib, 0px));}
+  .st-frame .st-credit{bottom:calc(50px + var(--st-ib, 0px));}
   .st-export{position:fixed;left:-20000px;top:0;width:360px;height:640px;pointer-events:none;}
 
   .st-slide{position:relative;width:360px;height:640px;overflow:hidden;font-family:'Heebo',system-ui,-apple-system,Arial,sans-serif;direction:rtl;
@@ -1199,7 +1202,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:31</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:37</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -5796,8 +5799,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 22:31';
-const BUILD_EPOCH = 1794861079312; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 22:37';
+const BUILD_EPOCH = 1794861444070; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -6519,20 +6522,40 @@ function storyEl(){
   return el;
 }
 
+// The phone's notch / home-bar insets, measured (a custom property holding env() can't be read as a number).
+function storySafeInsets(){
+  const p = document.createElement('div');
+  p.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);";
+  document.body.appendChild(p);
+  const cs = getComputedStyle(p), r = { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 };
+  p.remove();
+  return r;
+}
+
 function storyLayout(){
   const el = storyEl();
-  const W = window.innerWidth, H = window.innerHeight;
-  const wide = W >= 600;
-  const k = Math.min(W / STORY_W, (wide ? H * 0.94 : H) / STORY_H);
-  const w = STORY_W * k, h = STORY_H * k;
-  const left = (W - w) / 2, top = (H - h) / 2;
+  const W = el.clientWidth || window.innerWidth, H = el.clientHeight || window.innerHeight;
+  const safe = storySafeInsets();
   const frame = el.querySelector('.st-frame');
+  let k, w, h, slideH;
+  if (W < 600 && H / W >= STORY_H / STORY_W * 0.98){
+    // Phone in portrait: the slide fills the whole screen — same width, taller than 9:16 as needed.
+    k = W / STORY_W; w = W; h = H; slideH = H / k;
+  } else {
+    k = Math.min(W / STORY_W, (W >= 600 ? H * 0.94 : H) / STORY_H);
+    w = STORY_W * k; h = STORY_H * k; slideH = STORY_H;
+  }
+  const left = (W - w) / 2, top = (H - h) / 2;
+  // Insets that fall on the slide, in slide pixels: content and controls stay clear of them.
+  const insT = Math.max(0, safe.t - top) / k, insB = Math.max(0, safe.b - top) / k;
+  frame.style.height = slideH + "px";
+  frame.style.setProperty('--st-it', insT + "px");
+  frame.style.setProperty('--st-ib', insB + "px");
   frame.style.transform = `translate(${left}px, ${top}px) scale(${k})`;
   frame.style.left = "0"; frame.style.top = "0";
   const ui = el.querySelector('.st-ui');
-  // The controls follow the slide, but never sit under the phone's notch/home bar.
-  const safeT = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-t')) || 0;
-  Object.assign(ui.style, { left: left + "px", width: w + "px", top: Math.max(top, safeT) + "px", height: (h - Math.max(0, safeT - top)) + "px" });
+  const uiTop = Math.max(top, safe.t), uiBottom = Math.min(top + h, H - safe.b);
+  Object.assign(ui.style, { left: left + "px", width: w + "px", top: uiTop + "px", height: (uiBottom - uiTop) + "px" });
 }
 
 function openTripStory(tripId){
