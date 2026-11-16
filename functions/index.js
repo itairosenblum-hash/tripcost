@@ -728,12 +728,16 @@ Accuracy rules:
 - Every number must follow from the data. Prefer the precomputed totals; when you add up items, do it carefully. Never invent places, people or facts that are not in the data. Item names may be in Hebrew or English; you may group obvious variants (e.g. "קפה", "coffee", "Starbucks") but say what you grouped only if needed.
 - Round amounts to whole shekels. Use Hebrew, natural spoken style, no English words unless they are item names.
 
+Also give each insight a "photoQuery": an English search term for a real photo that fits that insight, to be looked up on Wikipedia/Wikimedia Commons — a specific landmark, dish, drink, vehicle or object of the destination (e.g. "Pastel de nata", "Lisbon tram 28", "Belém Tower"). Prefer things that appear in the expenses. Use a different subject for each insight. Use an empty string when nothing fits.
+Also write "destination": the trip's main destination in English as "City, Country" (or "Country" for a multi-city trip), inferred from the trip name and the expenses; empty string if unclear.
+
 Also write "tagline": one short, playful Hebrew sentence (max 70 characters) that sums up the trip's spending personality, for the closing slide (e.g. "טיול של אוכל טוב ומוניות בלילה").`;
 
 const INSIGHTS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     tagline: { type: Type.STRING },
+    destination: { type: Type.STRING },
     insights: {
       type: Type.ARRAY,
       items: {
@@ -742,9 +746,10 @@ const INSIGHTS_SCHEMA = {
           emoji: { type: Type.STRING },
           title: { type: Type.STRING },
           highlight: { type: Type.STRING },
-          text: { type: Type.STRING }
+          text: { type: Type.STRING },
+          photoQuery: { type: Type.STRING }
         },
-        required: ["emoji", "title", "highlight", "text"]
+        required: ["emoji", "title", "highlight", "text", "photoQuery"]
       }
     }
   },
@@ -771,8 +776,50 @@ export const tripInsights = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 
     emoji: cleanStr(i?.emoji, 8) || "✨",
     title: cleanStr(i?.title, 40),
     highlight: cleanStr(i?.highlight, 18),
-    text: cleanStr(i?.text, 200)
+    text: cleanStr(i?.text, 200),
+    photoQuery: cleanStr(i?.photoQuery, 60) || ""
   })).filter((i) => i.title && i.text).slice(0, 6);
   if (!insights.length) throw new HttpsError("internal", "לא נוצרו תובנות");
-  return { model: r.__model, tagline: cleanStr(r.tagline, 90), insights };
+  return { model: r.__model, tagline: cleanStr(r.tagline, 90), destination: cleanStr(r.destination, 60) || "", insights };
+});
+
+/* ---------- trip story: shareable link ---------- */
+// הסטורי נשמר כ"תמונת מצב" של הנתונים המסוכמים בלבד (בלי רשימת ההוצאות המלאה) ב-sharedStories/{id}.
+// כתיבה רק למורשים; קריאה פתוחה לכל מי שיש לו את הקישור (מזהה אקראי שאי אפשר לנחש). הלקוחות לא ניגשים לאוסף ישירות.
+const SHARED_STORIES = db.collection("sharedStories");
+const validStoryId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{20,40}$/.test(id);
+
+export const saveStoryLink = onCall(async (request) => {
+  const { email } = await requireAllowed(request);
+  const { id, tripId, snapshot } = request.data || {};
+  if (!snapshot || typeof snapshot !== "object") throw new HttpsError("invalid-argument", "חסרים נתוני הסטורי");
+  const json = JSON.stringify(snapshot);
+  if (json.length > 300000) throw new HttpsError("invalid-argument", "הסטורי גדול מדי");
+  const storyId = validStoryId(id) ? id : crypto.randomBytes(18).toString("base64url");
+  const ref = SHARED_STORIES.doc(storyId);
+  const prev = await ref.get();
+  await ref.set({
+    snapshot: json,
+    tripId: cleanStr(tripId, 80),
+    updatedBy: email,
+    updatedAt: FieldValue.serverTimestamp(),
+    ...(prev.exists ? {} : { createdBy: email, createdAt: FieldValue.serverTimestamp() })
+  }, { merge: true });
+  return { id: storyId };
+});
+
+export const getSharedStory = onCall(async (request) => {
+  const id = request.data?.id;
+  if (!validStoryId(id)) throw new HttpsError("not-found", "הקישור לא תקין");
+  const snap = await SHARED_STORIES.doc(id).get();
+  if (!snap.exists) throw new HttpsError("not-found", "הסטורי לא נמצא או שהקישור בוטל");
+  return { snapshot: JSON.parse(snap.data().snapshot) };
+});
+
+export const deleteStoryLink = onCall(async (request) => {
+  await requireAllowed(request);
+  const id = request.data?.id;
+  if (!validStoryId(id)) throw new HttpsError("invalid-argument", "מזהה לא תקין");
+  await SHARED_STORIES.doc(id).delete();
+  return { ok: true };
 });
