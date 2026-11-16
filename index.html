@@ -3566,8 +3566,11 @@ function daysUntil(dateTimeStr){
   if (!dateTimeStr) return null;
   const target = new Date(dateTimeStr);
   if (isNaN(target)) return null;
+  // Calendar days (local time), not hours: a flight at 15:40 today is "today", not "tomorrow".
   const now = new Date();
-  return Math.ceil((target - now) / 86400000);
+  const t0 = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const n0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((t0 - n0) / 86400000);
 }
 
 function renderTripInfoStrip(){
@@ -3613,6 +3616,7 @@ function renderTripInfoStrip(){
     if (toDepart !== null && toDepart > 0) countdown = toDepart === 1 ? "✈️ הטיסה מחר!" : `✈️ עוד ${toDepart} ימים לטיסה`;
     else if (toDepart !== null && toDepart === 0) countdown = "✈️ הטיסה היום!";
     else if (toReturn !== null && toReturn > 0) countdown = toReturn === 1 ? "🏠 החזרה מחר" : `🏠 עוד ${toReturn} ימים לחזרה`;
+    else if (toReturn !== null && toReturn === 0) countdown = "🏠 החזרה היום";
     if (countdown) rows.push(`<div class="trip-info-row trip-countdown">${countdown}</div>`);
   }
 
