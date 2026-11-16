@@ -271,7 +271,7 @@
   .exp-row:has(+ .day-sep){border-bottom:none;}
   .day-sep{display:flex;align-items:center;gap:10px;margin:14px 0 2px;}
   .day-sep:first-child{margin-top:4px;}
-  .day-sep::before,.day-sep::after{content:"";flex:1;height:1px;background:var(--border);}
+  .day-sep::after{content:"";flex:1;height:1px;background:var(--border);}
   .day-sep span{min-width:0;overflow:hidden;text-overflow:ellipsis;background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);padding:5px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;}
   .exp-row-head{
     all:unset;display:flex;align-items:center;justify-content:space-between;
