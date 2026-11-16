@@ -318,7 +318,7 @@ Rules:
 - paid: true if the document shows the amount was paid (a receipt, a charge slip, "paid", "שולם"). false for a quote, a reservation without payment, or "pay at property". null if unclear.
 - chargedAmountILS: if the document also shows the amount charged in Israeli shekels (an Israeli card slip, a dynamic currency conversion line, "סכום חיוב בש\"ח"), that ILS number, else null.
 - exchangeRate: ONLY a conversion rate to ILS explicitly printed on the document (שער / exchange rate / Kurs), else null. Never use your own knowledge of exchange rates.
-- categoryId: exactly one of the category ids given, by what was bought. Flights and car rentals share one category. Taxis, trains, fuel, parking and public transport go under transport. Restaurants, cafes and supermarkets go under food.
+- categoryId: exactly one of the category ids given, by what was bought. Flights and car rentals share one category. Taxis, trains, fuel, parking and public transport go under transport. Restaurants, cafes and supermarkets go under food. Clothing, shoes, cosmetics, perfume and toiletries go under the clothing and cosmetics category.
 - notes: one short Hebrew line with details worth keeping (number of nights, number of people, reservation or order number), or null.
 - Use null for anything not on the document. Never invent dates or amounts.
 - confidence: 0 to 1 per field, honest. Use below 0.7 when the text is blurry, cut off, handwritten or ambiguous.`;
