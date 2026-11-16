@@ -257,7 +257,7 @@ export const removeAttachment = onCall({ secrets: SECRETS }, async (request) => 
 
 /* ---------- Gemini call with retries (shared by receipt and ticket scanning) ---------- */
 // עומס זמני אצל Gemini (503/429) — מנסים שוב, ואז עוברים למודל הגיבוי. מכסה שנגמרה — אין טעם לנסות שוב
-async function askGemini({ parts, instructions, schema, what }) {
+async function askGemini({ parts, instructions, schema, what, temperature = 0, thinking = ThinkingLevel.LOW }) {
   const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.value(), httpOptions: { timeout: 120000 } });
   const ask = (model) => ai.models.generateContent({
     model,
@@ -266,9 +266,9 @@ async function askGemini({ parts, instructions, schema, what }) {
       systemInstruction: instructions,
       responseMimeType: "application/json",
       responseSchema: schema,
-      temperature: 0,
+      temperature,
       // קריאת מסמך לא דורשת חשיבה ארוכה; ברירת המחדל של המודל איטית מדי
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+      thinkingConfig: { thinkingLevel: thinking }
     }
   });
   const quota = (e) => /exceeded your current quota|billing/i.test(String(e?.message || ""));
@@ -700,4 +700,79 @@ export const scanTickets = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
     passengers: Number.isInteger(r.passengers) && r.passengers > 0 && r.passengers < 20 ? r.passengers : null,
     confidence: r.confidence && typeof r.confidence === "object" ? r.confidence : {}
   };
+});
+
+/* ---------- trip story: smart insights (Gemini) ---------- */
+// מקבל סיכום מחושב של הטיול ורשימת הוצאות מקוצרת, ומחזיר תובנות בעברית לסטורי הטיול.
+// כל המספרים הבסיסיים מחושבים באפליקציה; ה-AI מוצא דפוסים והשוואות מעניינות. לא נשמר כלום בשרת.
+
+const INSIGHTS_INSTRUCTIONS = `You write the "smart insights" slides of a Spotify-Wrapped-style story that summarizes a family trip's expenses, for an Israeli user of a Hebrew trip-expense app.
+
+You get JSON: trip name, dates, number of days, precomputed totals (in ILS, ₪), totals per category, per day and per payment method, per-currency totals, and a list of expenses (date, item name, category, amount in ₪, original currency and amount, payment method, short note, how many people shared it). Amounts in ₪ are net (after refunds and shares paid back); negative amounts are credits.
+
+Write 5 insights (4 if the data is thin, at least 3). Each insight is one story slide:
+- emoji: one fitting emoji.
+- title: 2-5 Hebrew words, a catchy headline.
+- highlight: the hero figure of the slide, very short (max 14 characters), e.g. "₪1,240", "17 פעמים", "38%", "פי 3". Use the ₪ sign before amounts and thousands separators.
+- text: one or two short Hebrew sentences (max 150 characters) that explain the highlight in a fun, warm, personal tone, addressing the travellers in plural ("אתם", "הוצאתם").
+
+What makes a good insight — look for real patterns in THIS data:
+- Recurring items (e.g. how many times they bought coffee, ice cream, taxis) and what they cost together.
+- Fun equivalences built only from their own data ("על אוכל הוצאתם כמו 3 לילות במלון").
+- Rhythm of the trip: first half vs second half, the quietest day, weekend vs weekdays, spending streaks.
+- Cash vs card, shared expenses, credits/refunds that saved money, currency mix.
+- Surprising small categories, the single cheapest or most frequent purchase, the most expensive meal.
+Do NOT repeat what other slides already show: the overall total, the daily average, the top category share, and the single biggest expense.
+
+Accuracy rules:
+- Every number must follow from the data. Prefer the precomputed totals; when you add up items, do it carefully. Never invent places, people or facts that are not in the data. Item names may be in Hebrew or English; you may group obvious variants (e.g. "קפה", "coffee", "Starbucks") but say what you grouped only if needed.
+- Round amounts to whole shekels. Use Hebrew, natural spoken style, no English words unless they are item names.
+
+Also write "tagline": one short, playful Hebrew sentence (max 70 characters) that sums up the trip's spending personality, for the closing slide (e.g. "טיול של אוכל טוב ומוניות בלילה").`;
+
+const INSIGHTS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    tagline: { type: Type.STRING },
+    insights: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          emoji: { type: Type.STRING },
+          title: { type: Type.STRING },
+          highlight: { type: Type.STRING },
+          text: { type: Type.STRING }
+        },
+        required: ["emoji", "title", "highlight", "text"]
+      }
+    }
+  },
+  required: ["tagline", "insights"]
+};
+
+export const tripInsights = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 180, memory: "512MiB" }, async (request) => {
+  await requireAllowed(request);
+  const summary = request.data?.summary;
+  if (!summary || typeof summary !== "object") throw new HttpsError("invalid-argument", "חסרים נתוני הטיול");
+  const json = JSON.stringify(summary);
+  if (json.length > 200000) throw new HttpsError("invalid-argument", "יותר מדי נתונים");
+  if (!Array.isArray(summary.expenses) || !summary.expenses.length) throw new HttpsError("invalid-argument", "אין הוצאות בטיול");
+
+  const r = await askGemini({
+    parts: [{ text: json }],
+    instructions: INSIGHTS_INSTRUCTIONS,
+    schema: INSIGHTS_SCHEMA,
+    what: "insights",
+    temperature: 0.8,
+    thinking: ThinkingLevel.MEDIUM
+  });
+  const insights = (Array.isArray(r.insights) ? r.insights : []).map((i) => ({
+    emoji: cleanStr(i?.emoji, 8) || "✨",
+    title: cleanStr(i?.title, 40),
+    highlight: cleanStr(i?.highlight, 18),
+    text: cleanStr(i?.text, 200)
+  })).filter((i) => i.title && i.text).slice(0, 6);
+  if (!insights.length) throw new HttpsError("internal", "לא נוצרו תובנות");
+  return { model: r.__model, tagline: cleanStr(r.tagline, 90), insights };
 });
