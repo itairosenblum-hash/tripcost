@@ -1048,6 +1048,28 @@
   .st-frame .st-brand{bottom:calc(22px + var(--st-ib, 0px));}
   .st-frame .st-credit{bottom:calc(50px + var(--st-ib, 0px));}
   html.st-shared-only body > *:not(#storyView):not(.toast):not(.st-export){display:none !important;}
+  .st-quiz{display:flex;flex-direction:column;gap:10px;width:100%;margin-top:22px;}
+  .st-opt{border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:16px;padding:13px 16px;
+    font:inherit;font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;cursor:pointer;transition:background .25s,border-color .25s,opacity .25s,transform .25s;}
+  .st-opt:active{transform:scale(.97);}
+  .st-opt.ok{background:#3D7A52;border-color:#7FC495;}
+  .st-opt.bad{background:#B5533C;border-color:#E28468;}
+  .st-opt.dim{opacity:.45;}
+  .st-quiz-res{margin-top:16px;font-size:18px;font-weight:800;min-height:26px;}
+  .st-week{display:flex;gap:8px;height:170px;margin:24px 0 6px;direction:rtl;}
+  .st-week .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .st-week .bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;}
+  .st-week i{display:block;width:100%;border-radius:6px 6px 3px 3px;background:rgba(140,201,193,.55);transform-origin:bottom center;}
+  .st-week i.top{background:#E3B564;}
+  .st-week span{font-size:13px;font-weight:700;opacity:.75;}
+  .story-prompt{position:fixed;left:50%;bottom:calc(20px + var(--safe-b));transform:translate(-50%, 20px);z-index:61;width:min(92vw, 420px);
+    background:linear-gradient(120deg,#1E4A47,#5B4F9A);color:#fff;border-radius:18px;padding:14px 16px;box-shadow:0 12px 36px rgba(0,0,0,.3);
+    display:flex;align-items:center;gap:12px;opacity:0;pointer-events:none;transition:opacity .3s, transform .3s;}
+  .story-prompt.show{opacity:1;transform:translate(-50%, 0);pointer-events:auto;}
+  .story-prompt .t{flex:1;font-weight:700;font-size:14.5px;line-height:1.35;}
+  .story-prompt button{border:none;border-radius:999px;font:inherit;font-weight:800;cursor:pointer;}
+  .story-prompt .go{background:#fff;color:#1E4A47;padding:9px 14px;font-size:14px;white-space:nowrap;}
+  .story-prompt .later{background:none;color:rgba(255,255,255,.75);font-size:13px;padding:6px;}
   .st-export{position:fixed;left:-20000px;top:0;width:360px;height:640px;pointer-events:none;}
 
   .st-slide{position:relative;width:360px;height:640px;overflow:hidden;font-family:'Heebo',system-ui,-apple-system,Arial,sans-serif;direction:rtl;
@@ -1203,7 +1225,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:41</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 23:25</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -4610,6 +4632,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   const departLandDateTime = joinDateTime(document.getElementById('tfDepartLandDate').value, document.getElementById('tfDepartLandTime').value);
   const returnLandDateTime = joinDateTime(document.getElementById('tfReturnLandDate').value, document.getElementById('tfReturnLandTime').value);
   const finished = document.getElementById('tfFinished').checked;
+  let justFinishedId = null;
   const enabledCurrencies = getCurrencyGridSelection();
   const budget = parseFloat(document.getElementById('tfBudget').value) || 0;
   if (editingTripId){
@@ -4621,7 +4644,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
       t.flightOut = flightOut; t.flightReturn = flightReturn; t.bookingRef = bookingRef;
       t.departDateTime = departDateTime; t.returnDateTime = returnDateTime;
       t.departLandDateTime = departLandDateTime; t.returnLandDateTime = returnLandDateTime;
-      if (finished && !t.finished){ t.finishedAt = todayISO(); if (unlockedTripId === t.id) unlockedTripId = null; }
+      if (finished && !t.finished){ t.finishedAt = todayISO(); if (unlockedTripId === t.id) unlockedTripId = null; justFinishedId = t.id; }
       if (!finished) delete t.finishedAt;
       t.finished = finished; t.enabledCurrencies = enabledCurrencies; t.budget = budget;
     }
@@ -4642,6 +4665,7 @@ document.getElementById('btnSaveTrip').addEventListener('click', () => {
   closeOverlay('overlayTripForm');
   renderAll();
   toast("הטיול נשמר ✓");
+  if (justFinishedId){ const id = justFinishedId; setTimeout(() => offerTripStory(id), 900); }
 });
 
 document.getElementById('btnDeleteTrip').addEventListener('click', () => {
@@ -5800,8 +5824,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 22:41';
-const BUILD_EPOCH = 1794861675806; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 23:25';
+const BUILD_EPOCH = 1794864358913; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -5921,10 +5945,30 @@ function storyData(trip){
   const creditsBack = list.filter(e => e.credit).reduce((s, e) => s - expenseTotalILS(e), 0)
     + list.reduce((s, e) => s + (e.credit ? 0 : expenseRefundsILS(e) + splitPaidBackILS(e)), 0);
 
+  // Quiz: "how much did you spend on <top on-the-ground category>?" with 3 rounded choices.
+  let quiz = null;
+  const qc = cats.find(([c]) => !STORY_PREPAID.includes(c)) || cats[0];
+  if (qc && qc[1] >= 50){
+    const nice = (v) => { const st = v < 300 ? 10 : v < 3000 ? 50 : v < 20000 ? 100 : 500; return Math.max(st, Math.round(v / st) * st); };
+    const patterns = [[.55, .8, 1], [.7, 1, 1.4], [1, 1.35, 1.8]];
+    const pat = patterns[parseInt(storyHash(String(trip.id || trip.name || "")), 36) % 3];
+    const answer = nice(qc[1]);
+    const options = [...new Set(pat.map(f => f === 1 ? answer : nice(qc[1] * f)))].sort((a, b) => a - b);
+    if (options.length === 3) quiz = { cat: qc[0], value: qc[1], answer, options };
+  }
+  // Weekdays: average on-the-ground spend per day of the week, over the trip's days.
+  let weekdays = null;
+  if (dayList.length >= 5){
+    const sum = [0,0,0,0,0,0,0], n = [0,0,0,0,0,0,0];
+    dayList.forEach(([day, v]) => { const w = new Date(day + "T00:00:00").getDay(); if (!isNaN(w)){ sum[w] += v; n[w]++; } });
+    const wd = [0,1,2,3,4,5,6].filter(w => n[w]).map(w => ({ w, avg: sum[w] / n[w], n: n[w] }));
+    if (wd.length >= 4 && wd.some(x => x.avg > 0)) weekdays = wd;
+  }
+
   // Everything except list/byPay/byCat/creditsBack is plain data that a shared link can carry (see storySnapshot).
   return {
     name: trip.name || "", budget: trip.budget > 0 ? trip.budget : 0, tripId: trip.id,
-    list, total, days, cats, byCat, byPay, byCur, curs, groundTotal, dayList, topDay, biggest, creditsBack,
+    list, total, days, cats, byCat, byPay, byCur, curs, groundTotal, dayList, topDay, biggest, creditsBack, quiz, weekdays,
     topDayItems: topDayItems.map(e => e.item || "הוצאה"),
     count: list.length,
     foreign: Object.keys(byCur).filter(c => c !== "שקל" && Math.abs(byCur[c]) > 0.004),
@@ -6032,7 +6076,10 @@ function storyBuildSlides(){
   const d = story.data, out = [];
   out.push({ key: "intro", dur: 5000 });
   out.push({ key: "total", dur: 6500 });
+  // The quiz waits for an answer (or a tap to skip), then moves on by itself.
+  if (d.quiz) out.push({ key: "quiz", dur: story.quizAnswer != null ? 4500 : 0 });
   if (d.days > 0) out.push({ key: "daily", dur: 8000 });
+  if (d.weekdays) out.push({ key: "weekdays", dur: 7000 });
   if (d.cats.length >= 2) out.push({ key: "cats", dur: 8000 });
   if (d.biggest) out.push({ key: "biggest", dur: 6500 });
   if (story.insights) story.insights.forEach((ins, i) => out.push({ key: "ins" + i, kind: "insight", ins, idx: i, dur: 8000 }));
@@ -6110,6 +6157,44 @@ function storySlideHtml(slide, isStatic){
         ${d.groundTotal > 0 && Math.round(groundAvg) !== Math.round(avg) ? `<div class="st-note st-in" style="--d:.35s">בשטח (בלי טיסות, מלונות וביטוח): ${storyIls(groundAvg)} ליום</div>` : ""}
         ${barsHtml}
         ${top}
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "quiz"){
+    const q = d.quiz, ans = isStatic ? null : story.quizAnswer;
+    const what = q.cat === "מזון" ? "אוכל" : q.cat;
+    const opt = (o, i) => {
+      let st = "";
+      if (ans != null){ if (o === q.answer) st = " ok"; else if (o === ans) st = " bad"; else st = " dim"; }
+      return `<button type="button" class="st-opt st-in${st}" data-quiz="${o}" style="--d:${(0.55 + i * 0.12).toFixed(2)}s">${storyIls(o)}</button>`;
+    };
+    const res = ans == null ? (isStatic ? "מה הניחוש שלכם? 🤔" : "בחרו תשובה 👇")
+      : ans === q.answer ? `🎯 בול! ${storyIls(q.value)}` : `כמעט! התשובה: ${storyIls(q.value)}`;
+    return { bg: "#3E3770", html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,#2E2856 0%,#5B4F9A 60%,#7A6FB0 100%);">
+      ${blob("top:-120px;right:-100px", "rgba(242,196,107,.35)")}${blob("bottom:-150px;left:-120px", "rgba(199,125,160,.4)")}
+      <div class="st-body st-center">
+        <div class="st-in" style="--d:.05s"><span class="st-tag">🤔 חידון</span></div>
+        <div class="st-emoji-xl st-pop" style="--d:.15s;margin-top:18px;">${CATEGORY_ICON[q.cat] || "💸"}</div>
+        <div class="st-title st-in" style="--d:.3s;font-size:27px;">כמה לדעתכם הוצאתם על ${escapeHtml(what)}?</div>
+        <div class="st-quiz">${q.options.map(opt).join("")}</div>
+        <div class="st-quiz-res st-in" style="--d:.9s">${res}</div>
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "weekdays"){
+    const names = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"], short = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+    const wd = d.weekdays, max = Math.max(1, ...wd.map(x => x.avg));
+    const top = wd.reduce((m, x) => x.avg > m.avg ? x : m, wd[0]);
+    const low = wd.reduce((m, x) => x.avg < m.avg ? x : m, wd[0]);
+    const bars = wd.map((x, i) => `<div class="col"><div class="bar-wrap"><i class="st-grow${x === top ? " top" : ""}" style="height:${Math.max(3, x.avg / max * 100)}%;--d:${(0.5 + i * 0.08).toFixed(2)}s"></i></div><span>${short[x.w]}</span></div>`).join("");
+    return { bg: "#1F3B57", html: `<div class="st-slide${cls}" style="background:linear-gradient(170deg,#173049 0%,#1F3B57 55%,#2E6F86 100%);">
+      ${blob("top:-130px;left:-110px", "rgba(76,143,163,.45)")}
+      <div class="st-body">
+        <div class="st-kicker st-in" style="--d:.05s">היום הכי יקר בשבוע</div>
+        <div class="st-title st-pop" style="--d:.15s;font-size:40px;">יום ${names[top.w]}</div>
+        <div class="st-sub st-in" style="--d:.3s">בממוצע ${storyIls(top.avg)} ביום${top.n > 1 ? ` (${top.n} ימי ${names[top.w]} בטיול)` : ""}</div>
+        <div class="st-week">${bars}</div>
+        ${low !== top ? `<div class="st-callout st-in" style="--d:1.2s">🧘 הכי רגוע: <b>יום ${names[low.w]}</b> · <b>${storyIls(low.avg)}</b> בממוצע</div>` : ""}
       </div>${brand}</div>` };
   }
 
@@ -6365,7 +6450,7 @@ function storySnapshot(){
   return {
     v: 1, name: d.name, budget: d.budget, total: d.total, days: d.days, cats: d.cats, byCur: d.byCur, curs: d.curs,
     groundTotal: d.groundTotal, dayList: d.dayList, topDay: d.topDay, topDayItems: d.topDayItems, biggest: d.biggest,
-    count: d.count, foreign: d.foreign, start: d.start, end: d.end,
+    count: d.count, foreign: d.foreign, start: d.start, end: d.end, quiz: d.quiz || null, weekdays: d.weekdays || null,
     insights: (story.insights || []).map(i => ({ emoji: i.emoji, title: i.title, highlight: i.highlight, text: i.text })),
     tagline: story.tagline || "", photos
   };
@@ -6462,7 +6547,7 @@ async function openSharedStory(id){
     if (!snap || typeof snap !== "object" || !Array.isArray(snap.cats)) throw new Error("הסטורי לא נמצא");
     el.querySelector('.st-actions').style.visibility = "";
     el.querySelector('.st-x').style.visibility = "";
-    story = { shared: true, trip: null, data: snap, i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
+    story = { shared: true, trip: null, data: snap, quizAnswer: null, i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
               insights: Array.isArray(snap.insights) ? snap.insights : [], tagline: snap.tagline || "", ai: true,
               photos: {}, blobs: {}, renders: {}, raf: 0, token: Symbol() };
     story.slides = storyBuildSlides();
@@ -6478,6 +6563,27 @@ async function openSharedStory(id){
     console.warn("tripcost: shared story failed", e);
     msg("לא הצלחנו לפתוח את הסטורי", escapeHtml(e && e.code ? fnError(e) : (e && e.message) || "נסו שוב מאוחר יותר"), false);
   }
+}
+
+// Right after a trip is marked as finished: offer its story.
+let storyPromptTimer = null;
+function offerTripStory(tripId){
+  const trip = state.trips.find(t => t.id === tripId);
+  if (!storyAvailable(trip)) return;
+  let el = document.getElementById('storyPrompt');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'storyPrompt'; el.className = 'story-prompt'; el.setAttribute('role', 'status');
+    el.innerHTML = `<div class="t"></div><button type="button" class="go">✨ לצפייה</button><button type="button" class="later">אחר כך</button>`;
+    document.body.appendChild(el);
+  }
+  el.querySelector('.t').textContent = `🎉 ${trip.name || "הטיול"} הסתיים — הסטורי של הטיול מוכן!`;
+  const hide = () => { clearTimeout(storyPromptTimer); el.classList.remove('show'); };
+  el.querySelector('.go').onclick = () => { hide(); openTripStory(tripId); };
+  el.querySelector('.later').onclick = hide;
+  el.classList.add('show');
+  clearTimeout(storyPromptTimer);
+  storyPromptTimer = setTimeout(hide, 12000);
 }
 
 /* ---------- viewer ---------- */
@@ -6506,6 +6612,8 @@ function storyEl(){
   const up = (e) => {
     clearTimeout(holdTimer);
     if (!story || !down) return;
+    const qb = e.target.closest && e.target.closest('[data-quiz]');
+    if (qb){ down = null; story.held = false; storyAnswerQuiz(parseFloat(qb.dataset.quiz)); return; }
     const dx = e.clientX - down.x, dy = e.clientY - down.y, wasHeld = story.held;
     story.held = false;
     const start = down; down = null;
@@ -6574,7 +6682,7 @@ function openTripStory(tripId){
   const trip = state.trips.find(t => t.id === tripId) || activeTrip();
   if (!storyAvailable(trip)){ toast("צריך לפחות 3 הוצאות ששולמו כדי ליצור סטורי"); return; }
   const el = storyEl();
-  story = { trip, data: storyData(trip), i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
+  story = { trip, data: storyData(trip), quizAnswer: null, i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
             insights: null, tagline: "", ai: false, photos: {}, blobs: {}, renders: {}, raf: 0, token: Symbol() };
   story.slides = storyBuildSlides();
   el.classList.remove('shared');
@@ -6694,6 +6802,23 @@ function storyTick(now){
     if (story.i < story.slides.length - 1) storyShow(story.i + 1);
   }
   story.raf = requestAnimationFrame(storyTick);
+}
+
+function storyAnswerQuiz(v){
+  if (!story || story.quizAnswer != null) return;
+  const slide = story.slides[story.i];
+  if (!slide || slide.key !== "quiz") return;
+  story.quizAnswer = v;
+  const q = story.data.quiz;
+  const frame = storyEl().querySelector('.st-frame');
+  frame.querySelectorAll('[data-quiz]').forEach(b => {
+    const o = parseFloat(b.dataset.quiz);
+    b.classList.add(o === q.answer ? "ok" : o === v ? "bad" : "dim");
+  });
+  const res = frame.querySelector('.st-quiz-res');
+  if (res) res.textContent = v === q.answer ? `🎯 בול! ${storyIls(q.value)}` : `כמעט! התשובה: ${storyIls(q.value)}`;
+  // Give the answer a moment on screen, then carry on.
+  slide.dur = 4500; story.elapsed = 0; story.last = performance.now();
 }
 
 function storyNext(){ if (story && story.i < story.slides.length - 1) storyShow(story.i + 1); }
