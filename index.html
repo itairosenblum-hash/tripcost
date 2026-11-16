@@ -1600,14 +1600,14 @@ function tripCurrencies(trip){
   }
   return ["שקל", ...CURRENCY_POOL.map(c=>c.name).filter(n => set.has(n))];
 }
-const CATEGORIES = ["טיסות והשכרת רכב","מלונות","ביטוח","תחבורה","מזון","בגדים","מתנות ומזכרות","אטרקציות","שונות"];
+const CATEGORIES = ["טיסות והשכרת רכב","מלונות","ביטוח","תחבורה","מזון","ביגוד וקוסמטיקה","מתנות ומזכרות","אטרקציות","שונות"];
 const CATEGORY_ICON = {
   "טיסות והשכרת רכב":"✈️", "מלונות":"🏨", "ביטוח":"🛡️", "תחבורה":"🚕", "מזון":"🍽️",
-  "בגדים":"👕", "מתנות ומזכרות":"🎁", "אטרקציות":"🎡", "שונות":"🧾"
+  "ביגוד וקוסמטיקה":"👕", "מתנות ומזכרות":"🎁", "אטרקציות":"🎡", "שונות":"🧾"
 };
 const CATEGORY_COLOR = {
   "טיסות והשכרת רכב":"#2F6F6B", "מלונות":"#D9A441", "ביטוח":"#7A6FB0", "תחבורה":"#3D7A52",
-  "מזון":"#B5533C", "בגדים":"#4C8FA3", "מתנות ומזכרות":"#C77DA0", "אטרקציות":"#C98A2E", "שונות":"#8A8578"
+  "מזון":"#B5533C", "ביגוד וקוסמטיקה":"#4C8FA3", "מתנות ומזכרות":"#C77DA0", "אטרקציות":"#C98A2E", "שונות":"#8A8578"
 };
 
 function uid(){
@@ -5009,7 +5009,7 @@ function getCurrencyGridSelection(){
   return [...document.getElementById('tfCurrencyGrid').querySelectorAll('.cur-chip.active')].map(b => b.dataset.val);
 }
 // Older expenses were saved under the previous category names — map them forward.
-const LEGACY_CATEGORY = { "טיסה": "טיסות והשכרת רכב" };
+const LEGACY_CATEGORY = { "טיסה": "טיסות והשכרת רכב", "בגדים": "ביגוד וקוסמטיקה" };
 function expCategory(exp){
   if (!exp) return "שונות";
   const c = LEGACY_CATEGORY[exp.category] || exp.category;
