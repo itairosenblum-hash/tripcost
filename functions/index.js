@@ -310,20 +310,21 @@ Documents may be in any language (Hebrew, English, German, Italian, Thai, Japane
 Rules:
 - vendor: the business / company name as printed (hotel, airline, restaurant, shop, car rental). Drop legal suffixes like GmbH, Ltd, בע"מ, S.p.A. unless part of the brand.
 - description: 2-5 Hebrew words saying what was bought, only if it adds something beyond the vendor (for example "3 לילות", "השכרת רכב", "ארוחת ערב", "כרטיסי כניסה"). null otherwise.
-- amount: the total actually paid / charged including tax and tip, in the document's own currency, as a number. Ignore subtotals and VAT lines.
+- isCredit: true when the document is a refund or credit — money returned to the customer (credit note, refund receipt, זיכוי, החזר, cancellation refund, Gutschrift, Erstattung, rimborso, nota di credito, a minus / credit line on a card statement). false for a normal purchase or charge.
+- amount: the total actually paid / charged including tax and tip, in the document's own currency, as a number. Ignore subtotals and VAT lines. For a credit, the size of the refund as a POSITIVE number.
 - currency: ISO 4217 code of that amount. € = EUR, $ = USD (unless the country makes it clearly CAD/AUD), £ = GBP, ₪ / ש"ח / NIS = ILS, ¥ = JPY, ฿ = THB, ₺ = TRY, CHF / Fr = CHF, zł / PLN = PLN.
 - date: the purchase / transaction date, YYYY-MM-DD. For a hotel use the stay's check-in date. Many countries print day first (DD/MM/YY, DD.MM.YYYY); US documents print month first.
 - chargeDate: YYYY-MM-DD of the actual card charge (מועד חיוב / תאריך חיוב / charge date / debit date) ONLY if printed separately from the purchase date, else null.
 - paymentMethod: "card" for a credit/debit card or Apple/Google Pay, "cash" for cash, "other" for bank transfer, Bit, PayPal and the like, null if not shown.
 - paid: true if the document shows the amount was paid (a receipt, a charge slip, "paid", "שולם"). false for a quote, a reservation without payment, or "pay at property". null if unclear.
-- chargedAmountILS: if the document also shows the amount charged in Israeli shekels (an Israeli card slip, a dynamic currency conversion line, "סכום חיוב בש\"ח"), that ILS number, else null.
+- chargedAmountILS: if the document also shows the amount charged in Israeli shekels (an Israeli card slip, a dynamic currency conversion line, "סכום חיוב בש\"ח"), that ILS number, else null. Positive for credits too.
 - exchangeRate: ONLY a conversion rate to ILS explicitly printed on the document (שער / exchange rate / Kurs), else null. Never use your own knowledge of exchange rates.
 - categoryId: exactly one of the category ids given, by what was bought. Flights and car rentals share one category. Taxis, trains, fuel, parking and public transport go under transport. Restaurants, cafes and supermarkets go under food. Clothing, shoes, cosmetics, perfume and toiletries go under the clothing and cosmetics category.
 - notes: one short Hebrew line with details worth keeping (number of nights, number of people, reservation or order number), or null.
 - Use null for anything not on the document. Never invent dates or amounts.
 - confidence: 0 to 1 per field, honest. Use below 0.7 when the text is blurry, cut off, handwritten or ambiguous.`;
 
-const SCAN_FIELDS = ["vendor", "description", "amount", "currency", "date", "chargeDate", "paymentMethod", "paid",
+const SCAN_FIELDS = ["vendor", "description", "isCredit", "amount", "currency", "date", "chargeDate", "paymentMethod", "paid",
   "chargedAmountILS", "exchangeRate", "categoryId", "notes"];
 
 const SCAN_SCHEMA = {
@@ -331,6 +332,7 @@ const SCAN_SCHEMA = {
   properties: {
     vendor: { type: Type.STRING, nullable: true },
     description: { type: Type.STRING, nullable: true },
+    isCredit: { type: Type.BOOLEAN },
     amount: { type: Type.NUMBER, nullable: true },
     currency: { type: Type.STRING, nullable: true },
     date: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
@@ -357,6 +359,9 @@ const validDate = (v) => {
   return Number.isFinite(t) ? s : null;
 };
 const posNum = (v, max = 1e8) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < max ? v : null);
+// סכומים של זיכוי מגיעים לפעמים במינוס — שומרים את הגודל, והסימן עובר ב-isCredit
+const absNum = (v, max) => posNum(typeof v === "number" ? Math.abs(v) : v, max);
+const creditOf = (r) => r?.isCredit === true || (typeof r?.amount === "number" && r.amount < 0);
 const cleanStr = (v, max = 120) => {
   if (v == null) return null;
   const s = String(v).replace(/\s+/g, " ").trim();
@@ -370,12 +375,13 @@ const MULTI_SCAN_INSTRUCTIONS = `${SCAN_INSTRUCTIONS}
 SEVERAL FILES: you got more than one file, all to be saved as ONE expense.
 - First decide which files describe the SAME payment (an invoice and its card slip, a booking confirmation and its receipt, two photos or pages of the same receipt). Such duplicates are ONE charge — never count them twice.
 - Different payments (two installments, a deposit and the balance, two separate receipts) are separate charges.
-- charges: one entry per distinct payment, in date order. amount / currency / date / chargeDate / chargedAmountILS / exchangeRate follow the same rules as above, per charge. label: 1-4 Hebrew words telling the charges apart ("מקדמה", "יתרה", "לילה ראשון"), or null.
+- A refund or credit for an earlier payment is its own entry with isCredit true (its amount positive). Do not drop it and do not subtract it yourself.
+- charges: one entry per distinct payment, in date order. isCredit / amount / currency / date / chargeDate / chargedAmountILS / exchangeRate follow the same rules as above, per charge. label: 1-4 Hebrew words telling the charges apart ("מקדמה", "יתרה", "לילה ראשון"), or null.
 - A deposit that is already included in a final invoice total is NOT a separate charge: list the final total once.
 - vendor / description / categoryId / paymentMethod / paid / notes describe the expense as a whole. paid is true only if every charge was paid.
 - notes: do not repeat the per-charge amounts; they are listed separately.`;
 
-const CHARGE_FIELDS = ["label", "amount", "currency", "date", "chargeDate", "chargedAmountILS", "exchangeRate"];
+const CHARGE_FIELDS = ["label", "isCredit", "amount", "currency", "date", "chargeDate", "chargedAmountILS", "exchangeRate"];
 const MULTI_FIELDS = ["vendor", "description", "charges", "paymentMethod", "paid", "categoryId", "notes"];
 const MULTI_SCAN_SCHEMA = {
   type: Type.OBJECT,
@@ -388,6 +394,7 @@ const MULTI_SCAN_SCHEMA = {
         type: Type.OBJECT,
         properties: {
           label: { type: Type.STRING, nullable: true },
+          isCredit: { type: Type.BOOLEAN },
           amount: { type: Type.NUMBER, nullable: true },
           currency: { type: Type.STRING, nullable: true },
           date: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
@@ -417,8 +424,8 @@ const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 // חיוב אחד אחרי ניקוי: שער שלא הודפס מחושב מהסכום בש"ח אם יש
 function cleanCharge(c) {
   const currency = cleanCurrency(c?.currency);
-  const amount = posNum(c?.amount);
-  const chargedAmountILS = posNum(c?.chargedAmountILS);
+  const amount = absNum(c?.amount);
+  const chargedAmountILS = absNum(c?.chargedAmountILS);
   let exchangeRate = posNum(c?.exchangeRate, 1000);
   let rateSource = exchangeRate ? "printed" : null;
   if (!exchangeRate && currency && currency !== "ILS" && amount && chargedAmountILS) {
@@ -428,6 +435,7 @@ function cleanCharge(c) {
   if (currency === "ILS") { exchangeRate = null; rateSource = null; }
   return {
     label: cleanStr(c?.label, 30),
+    isCredit: creditOf(c),
     amount, currency,
     date: validDate(c?.date),
     chargeDate: validDate(c?.chargeDate),
@@ -446,7 +454,15 @@ function combineCharges(charges) {
     amount: null, currency: null, chargedAmountILS: null, exchangeRate: null, rateSource: null,
     date: dates[0] || null,                        // תחילת העסקה
     chargeDate: chargeDates[chargeDates.length - 1] || null, // החיוב האחרון
+    isCredit: false,
     mixed: false
+  };
+  // זיכויים יורדים מהסכום; אם בסוף יצא במינוס — זו עסקת זיכוי
+  const sg = (c) => (c.isCredit ? -1 : 1);
+  const net = (vals) => {
+    const v = round(vals.reduce((s, x) => s + x, 0));
+    if (v < 0) out.isCredit = true;
+    return Math.abs(v);
   };
   if (!list.length) return out;
   if (list.length === 1) return { ...out, ...list[0], label: undefined, mixed: false };
@@ -455,10 +471,10 @@ function combineCharges(charges) {
   const allILS = ils.every((v) => v);
   if (currencies.length === 1 && currencies[0] !== "?") {
     out.currency = currencies[0];
-    out.amount = round(list.reduce((s, c) => s + c.amount, 0));
-    if (out.currency !== "ILS") {
+    out.amount = net(list.map((c) => sg(c) * c.amount));
+    if (out.currency !== "ILS" && out.amount) {
       if (list.every((c) => c.chargedAmountILS)) {
-        out.chargedAmountILS = round(list.reduce((s, c) => s + c.chargedAmountILS, 0));
+        out.chargedAmountILS = Math.abs(round(list.reduce((s, c) => s + sg(c) * c.chargedAmountILS, 0)));
         out.exchangeRate = round(out.chargedAmountILS / out.amount, 4); // שער משוקלל
         out.rateSource = "computed";
       } else if (list.every((c) => c.exchangeRate) && new Set(list.map((c) => c.exchangeRate)).size === 1) {
@@ -469,7 +485,7 @@ function combineCharges(charges) {
   } else if (allILS) {
     // מטבעות שונים, אבל לכל חיוב ידוע הסכום בש"ח — מסכמים בשקלים
     out.currency = "ILS";
-    out.amount = round(ils.reduce((s, v) => s + v, 0));
+    out.amount = net(ils.map((v, i) => sg(list[i]) * v));
   } else {
     out.mixed = true; // האפליקציה תמיר לפי שער היום של כל חיוב
   }
@@ -540,8 +556,8 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
 
   // ניקוי ובדיקות סבירות
   const currency = typeof r.currency === "string" && /^[A-Z]{3}$/.test(r.currency.trim().toUpperCase()) ? r.currency.trim().toUpperCase() : null;
-  const amount = posNum(r.amount);
-  const chargedAmountILS = posNum(r.chargedAmountILS);
+  const amount = absNum(r.amount);
+  const chargedAmountILS = absNum(r.chargedAmountILS);
   let exchangeRate = posNum(r.exchangeRate, 1000);
   // שער שלא הודפס אבל אפשר לחשב: סכום בש"ח חלקי הסכום במטבע המקורי
   let rateSource = exchangeRate ? "printed" : null;
@@ -553,6 +569,7 @@ export const scanReceipt = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 3
 
   return {
     ...common,
+    isCredit: creditOf(r),
     amount,
     currency,
     date: validDate(r.date),
