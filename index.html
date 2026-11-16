@@ -268,6 +268,11 @@
   /* ---- Expandable expense rows ---- */
   .exp-row{border-bottom:1px solid var(--border);}
   .exp-row:last-child{border-bottom:none;}
+  .exp-row:has(+ .day-sep){border-bottom:none;}
+  .day-sep{display:flex;align-items:center;gap:10px;margin:14px 0 2px;}
+  .day-sep:first-child{margin-top:4px;}
+  .day-sep::before,.day-sep::after{content:"";flex:1;height:1px;background:var(--border);}
+  .day-sep span{background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);padding:5px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;}
   .exp-row-head{
     all:unset;display:flex;align-items:center;justify-content:space-between;
     width:100%;box-sizing:border-box;padding:13px 2px;cursor:pointer;
@@ -2834,6 +2839,12 @@ function joinDateTime(date, time){
   if (!date) return "";
   return date + "T" + (time && /^\d{2}:\d{2}$/.test(time) ? time : "00:00");
 }
+function daySepLabel(d){
+  if (!d) return "ללא תאריך";
+  const dt = new Date(d + "T00:00:00");
+  if (isNaN(dt)) return d;
+  return `יום ${["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"][dt.getDay()]}, ${pad2(dt.getDate())}/${pad2(dt.getMonth()+1)}`;
+}
 function fmtDate(d){
   if (!d) return "—";
   try{
@@ -3474,7 +3485,19 @@ function renderExpenses(){
   if (DESK_MQ.matches){ renderDeskTable(list, items, trip); return; }
 
   const locked = tripLocked(trip);
+  const groupByDay = sortMode !== 'amount_desc';
+  const dayTotals = {};
+  if (groupByDay) items.forEach(e => { if (inTotal(e)) dayTotals[e.date||""] = (dayTotals[e.date||""] || 0) + expenseTotalILS(e); });
+  let prevDay = null;
   list.innerHTML = items.map(exp => {
+    let sep = "";
+    if (groupByDay && (exp.date||"") !== prevDay){
+      prevDay = exp.date||"";
+      sep = `<div class="day-sep" role="separator"><span>${daySepLabel(prevDay)} · <b class="tnum">₪${fmtMoney(dayTotals[prevDay] || 0)}</b></span></div>`;
+    }
+    return sep + expenseRowHtml(exp);
+  }).join("");
+  function expenseRowHtml(exp){
     const totalIls = expenseTotalILS(exp);
     const showOrig = exp.currency !== "שקל";
     const cat = expCategory(exp);
@@ -3515,7 +3538,7 @@ function renderExpenses(){
         </div>`}
       </div>` : ""}
     </div>`;
-  }).join("");
+  }
 
   list.querySelectorAll('[data-action="toggle"]').forEach(b => b.addEventListener('click', () => {
     expandedExpenseId = (expandedExpenseId === b.dataset.id) ? null : b.dataset.id;
