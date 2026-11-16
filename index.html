@@ -1005,6 +1005,101 @@
   #ptr.ready svg{transform:rotate(180deg);}
   #ptr.loading svg{animation:ptrSpin .8s linear infinite;}
   @keyframes ptrSpin{to{transform:rotate(360deg);}}
+
+  /* ---- Trip story (Wrapped-style summary) ----
+     Every slide is laid out at a fixed 360×640 and scaled to the screen, so the on-screen slide
+     and the shared 1080×1920 image are the same picture. */
+  html.st-open, html.st-open body{overflow:hidden;}
+  .story{position:fixed;inset:0;z-index:58;display:none;background:#0f1514;touch-action:none;user-select:none;-webkit-user-select:none;}
+  .story.show{display:block;}
+  .st-stage{position:absolute;inset:0;transition:background .35s;}
+  .st-frame{position:absolute;width:360px;height:640px;transform-origin:0 0;overflow:hidden;border-radius:0;}
+  @media (min-width: 600px){ .st-frame{border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);} }
+  .st-ui{position:absolute;pointer-events:none;}
+  .st-bars{position:absolute;top:10px;right:10px;left:52px;display:flex;gap:4px;pointer-events:none;}
+  .st-bar{flex:1;height:3px;border-radius:3px;background:rgba(255,255,255,.35);overflow:hidden;}
+  .st-bar i{display:block;height:100%;background:#fff;transform-origin:right center;transform:scaleX(0);}
+  .st-ui.light .st-bar{background:rgba(32,48,46,.18);} .st-ui.light .st-bar i{background:#20302E;}
+  .st-x{position:absolute;top:2px;left:8px;width:38px;height:38px;border:none;background:none;color:#fff;font-size:26px;line-height:1;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center;}
+  .st-ui.light .st-x{color:#20302E;}
+  .st-actions{position:absolute;bottom:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;}
+  .st-btn{pointer-events:auto;border:none;border-radius:999px;padding:9px 15px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;
+    background:rgba(255,255,255,.92);color:#20302E;box-shadow:0 2px 10px rgba(0,0,0,.18);display:inline-flex;align-items:center;gap:6px;}
+  .st-btn:active{transform:scale(.96);}
+  .st-btn[disabled]{opacity:.7;}
+  .st-btn.ghost{background:rgba(32,48,46,.75);color:#fff;}
+  .st-hint{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.75);pointer-events:none;}
+  .st-ui.light .st-hint{color:rgba(32,48,46,.6);}
+
+  .st-export{position:fixed;left:-20000px;top:0;width:360px;height:640px;pointer-events:none;}
+
+  .st-slide{position:relative;width:360px;height:640px;overflow:hidden;font-family:'Heebo',system-ui,-apple-system,Arial,sans-serif;direction:rtl;
+    color:#fff;padding:58px 26px 70px;display:flex;flex-direction:column;}
+  .st-slide.light{color:#20302E;}
+  .st-blob{position:absolute;width:300px;height:300px;border-radius:50%;pointer-events:none;}
+  .st-body{position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;}
+  .st-center{align-items:center;text-align:center;}
+  .st-kicker{font-size:15px;font-weight:700;letter-spacing:.3px;opacity:.85;}
+  .st-title{font-size:38px;font-weight:900;line-height:1.08;margin:6px 0 4px;overflow-wrap:anywhere;}
+  .st-sub{font-size:15px;opacity:.85;font-weight:500;}
+  .st-emoji-xl{font-size:74px;line-height:1;margin:6px 0 14px;}
+  .st-emoji-l{font-size:54px;line-height:1;margin-bottom:12px;}
+  .st-big{font-size:62px;font-weight:900;line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;margin:10px 0 8px;direction:ltr;unicode-bidi:isolate;}
+  .st-big.m{font-size:50px;}
+  .st-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:20px;}
+  .st-chips span{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 12px;font-size:14px;font-weight:700;}
+  .st-slide.light .st-chips span{background:rgba(32,48,46,.07);border-color:rgba(32,48,46,.12);}
+  .st-text{font-size:17px;line-height:1.45;font-weight:500;}
+  .st-note{font-size:13.5px;opacity:.8;line-height:1.4;}
+  .st-brand{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:900;font-size:15px;letter-spacing:.4px;opacity:.75;}
+  .st-tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;letter-spacing:.4px;background:rgba(255,255,255,.18);border-radius:999px;padding:5px 12px;}
+  .st-slide.light .st-tag{background:rgba(32,48,46,.08);}
+
+  .st-budget{width:100%;margin-top:26px;}
+  .st-budget .track{height:12px;border-radius:12px;background:rgba(32,48,46,.15);overflow:hidden;}
+  .st-budget .fill{height:100%;border-radius:12px;background:#20302E;transform-origin:right center;}
+  .st-budget .lbl{display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-top:7px;}
+
+  .st-days{display:flex;align-items:flex-end;gap:3px;height:150px;margin:22px 0 10px;direction:rtl;}
+  .st-days i{flex:1;min-width:2px;border-radius:4px 4px 2px 2px;background:rgba(95,167,159,.55);transform-origin:bottom center;}
+  .st-days i.top{background:#E3B564;}
+  .st-days-axis{display:flex;justify-content:space-between;font-size:11.5px;opacity:.6;direction:rtl;}
+  .st-callout{margin-top:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px 14px;}
+  .st-callout b{color:#E3B564;}
+
+  .st-donut{position:relative;width:200px;height:200px;margin:4px auto 16px;}
+  .st-donut svg{width:200px;height:200px;transform:rotate(-90deg);}
+  .st-donut .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .st-donut .mid .e{font-size:34px;line-height:1;}
+  .st-donut .mid .p{font-size:26px;font-weight:900;margin-top:4px;}
+  .st-legend{display:flex;flex-direction:column;gap:7px;}
+  .st-legend div{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;}
+  .st-legend .dot{width:10px;height:10px;border-radius:50%;flex:none;}
+  .st-legend .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .st-legend .v{font-weight:800;font-variant-numeric:tabular-nums;}
+  .st-legend .pc{width:42px;text-align:left;opacity:.6;font-size:13.5px;font-variant-numeric:tabular-nums;}
+
+  .st-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%;margin-top:16px;}
+  .st-grid > div{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:11px 12px;text-align:right;}
+  .st-grid .k{font-size:12.5px;opacity:.75;font-weight:600;}
+  .st-grid .v{font-size:21px;font-weight:900;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+  .st-quote{font-size:21px;font-weight:800;line-height:1.3;margin-top:20px;text-align:center;}
+
+  .st-spin{width:46px;height:46px;border-radius:50%;border:4px solid rgba(255,255,255,.25);border-top-color:#fff;animation:stSpin 0.9s linear infinite;margin:18px auto 0;}
+  @keyframes stSpin{to{transform:rotate(360deg);}}
+
+  .st-in{animation:stUp .6s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0s);}
+  .st-pop{animation:stPop .7s cubic-bezier(.2,.9,.3,1.2) both;animation-delay:var(--d,0s);}
+  .st-grow{animation:stGrowY .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0s);}
+  .st-growx{animation:stGrowX 1.1s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0s);}
+  @keyframes stUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;}}
+  @keyframes stPop{from{opacity:0;transform:scale(.6) rotate(-8deg);}to{opacity:1;transform:none;}}
+  @keyframes stGrowY{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+  @keyframes stGrowX{from{transform:scaleX(0);}to{transform:scaleX(var(--to,1));}}
+  .st-static *, .st-static{animation:none !important;transition:none !important;}
+  .st-static .st-spin{display:none;}
+  @media (prefers-reduced-motion: reduce){ .st-slide *{animation:none !important;} }
+  .mini-btn.story-btn{background:linear-gradient(120deg,#2F6F6B,#5B4F9A);color:#fff;border-color:transparent;}
 </style>
 </head>
 <body>
@@ -1091,7 +1186,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 13:39</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 22:16</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -3696,6 +3791,7 @@ function renderFinishedSummary(){
       <div class="fin-grid">${stats.join("")}</div>
       ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+expenseTotalILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
       <div class="fin-actions">
+        ${storyAvailable(trip) ? `<button type="button" class="mini-btn story-btn" id="btnFinStory" style="flex-basis:100%;">✨ סטורי הטיול</button>` : ""}
         <button type="button" class="mini-btn" id="btnFinLock">${locked ? "🔓 פתח לעריכה" : "🔒 נעל שוב"}</button>
         ${trip.expenses.length ? `<button type="button" class="mini-btn" id="btnFinExport">📊 ייצוא לאקסל</button><button type="button" class="mini-btn" id="btnFinPdf">📄 דו״ח PDF</button>` : ""}
       </div>
@@ -3711,6 +3807,8 @@ function renderFinishedSummary(){
   if (exp) exp.addEventListener('click', () => exportTripXlsx(trip));
   const pdfBtn = document.getElementById('btnFinPdf');
   if (pdfBtn) pdfBtn.addEventListener('click', () => printTripReport(trip));
+  const sb = document.getElementById('btnFinStory');
+  if (sb) sb.addEventListener('click', () => openTripStory(trip.id));
   const pb = document.getElementById('btnFinPending');
   if (pb) pb.addEventListener('click', () => {
     expenseFilter = { type: 'pending' };
@@ -4203,7 +4301,7 @@ document.getElementById('deskScan').addEventListener('click', () => {
 });
 // Keyboard: N = new expense, Ctrl/⌘+K or / = search (desktop only, never while typing or with a window open)
 document.addEventListener('keydown', (e) => {
-  if (!DESK_MQ.matches || document.querySelector('.overlay.show')) return;
+  if (!DESK_MQ.matches || document.querySelector('.overlay.show, #storyView.show')) return;
   const typing = e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]');
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK'){ e.preventDefault(); document.getElementById('expenseSearchInput').focus(); return; }
   if (e.key === 'Escape' && deskChecked.size && !typing){ deskChecked.clear(); renderExpenses(); return; }
@@ -4237,6 +4335,7 @@ function openTripsList(){
         <div style="font-size:13.5px;color:var(--ink-soft);">${t.finished ? `₪${fmtMoney(tripTotal(t))} · ` : ""}${t.expenses.length} הוצאות${t.startDate ? " · " + fmtDate(t.startDate) : ""}</div>
       </div>
       <div style="display:flex;gap:6px;flex:none;">
+        ${storyAvailable(t) ? `<button class="mini-btn" data-story-trip="${t.id}" title="סטורי הטיול" aria-label="סטורי הטיול">✨</button>` : ""}
         ${t.id !== state.activeTripId ? `<button class="mini-btn" data-open-trip="${t.id}">פתיחה</button>` : ""}
         <button class="mini-btn" data-id="${t.id}">עריכה</button>
       </div>
@@ -4258,6 +4357,10 @@ function openTripsList(){
   wrap.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', () => {
     closeOverlay('overlayTrips');
     openEditTripForm(b.dataset.id);
+  }));
+  wrap.querySelectorAll('button[data-story-trip]').forEach(b => b.addEventListener('click', () => {
+    closeOverlay('overlayTrips');
+    openTripStory(b.dataset.storyTrip);
   }));
   renderRates();
   showOverlay('overlayTrips');
@@ -5677,8 +5780,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 13:39';
-const BUILD_EPOCH = 1794829188477; // ms — when this exact file was pushed
+const BUILD_STAMP = '16/11/2026 22:16';
+const BUILD_EPOCH = 1794860186399; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -5726,6 +5829,608 @@ if ('serviceWorker' in navigator){
   });
 }
 
+/* ========================= Trip story (Wrapped-style summary) =========================
+   A full-screen, Instagram-like story that sums up a trip: totals, daily rhythm, categories,
+   the biggest expense, and "smart" insights written by Gemini (tripInsights Cloud Function),
+   with rule-based insights as a fallback when offline / not signed in.
+   Each slide is drawn at a fixed 360×640 and scaled to the screen; sharing renders the same
+   markup (without animations) to a 1080×1920 PNG with modern-screenshot. */
+const STORY_LIB = "https://cdn.jsdelivr.net/npm/modern-screenshot@4.7.0/dist/index.js";
+const STORY_W = 360, STORY_H = 640;
+// Booked-ahead categories: left out of the "on the ground" day-by-day view.
+const STORY_PREPAID = ["טיסות והשכרת רכב","מלונות","ביטוח"];
+const STORY_INSIGHT_BG = [
+  ["#5B4F9A","#7A6FB0"], ["#2E6F86","#4C8FA3"], ["#2F6446","#3D7A52"], ["#9A4F75","#C77DA0"], ["#1E4A47","#2F6F6B"], ["#8A5A1C","#C98A2E"]
+];
+let story = null;
+let storyLibPromise = null;
+
+function storyNum(n){ return Math.round(n || 0).toLocaleString('he-IL'); }
+function storyIls(n){ return (n < 0 ? "−" : "") + "₪" + storyNum(Math.abs(n)); }
+function storyDayLabel(d){
+  const dt = new Date(d + "T00:00:00");
+  if (isNaN(dt)) return d;
+  return `יום ${["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"][dt.getDay()]}, ${pad2(dt.getDate())}/${pad2(dt.getMonth()+1)}`;
+}
+function storyHash(s){
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+// Expenses a story counts: in the overall total and paid (same as the trip summary card).
+function storyExpenses(trip){ return (trip.expenses || []).filter(e => inTotal(e) && e.paid); }
+function storyAvailable(trip){ return !!trip && storyExpenses(trip).length >= 3; }
+
+function storyData(trip){
+  const list = storyExpenses(trip);
+  const total = list.reduce((s, e) => s + expenseTotalILS(e), 0);
+
+  let days = 0;
+  if (trip.startDate && trip.endDate) days = daysBetween(trip.startDate, trip.endDate) + 1;
+  const allDates = list.map(e => e.date).filter(Boolean).sort();
+  if (!(days > 0) && allDates.length) days = daysBetween(allDates[0], allDates[allDates.length-1]) + 1;
+
+  const byCat = {}, byPay = {}, byCur = {};
+  list.forEach(e => {
+    const c = expCategory(e), v = expenseTotalILS(e);
+    byCat[c] = (byCat[c] || 0) + v;
+    const p = e.paymentMethod || "אחר";
+    byPay[p] = (byPay[p] || 0) + v;
+    byCur[e.currency || "שקל"] = (byCur[e.currency || "שקל"] || 0) + signedAmount(e);
+  });
+  const cats = Object.entries(byCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+
+  // Day by day "on the ground": everything except the booked-ahead categories,
+  // inside the trip dates when they're set.
+  const start = trip.startDate || allDates[0] || "", end = trip.endDate || allDates[allDates.length-1] || "";
+  const ground = list.filter(e => !STORY_PREPAID.includes(expCategory(e)));
+  const groundTotal = ground.reduce((s, e) => s + expenseTotalILS(e), 0);
+  const byDay = {};
+  ground.forEach(e => { if (e.date && (!start || e.date >= start) && (!end || e.date <= end)) byDay[e.date] = (byDay[e.date] || 0) + expenseTotalILS(e); });
+  let dayList = [];
+  if (start && end && daysBetween(start, end) >= 0 && daysBetween(start, end) < 120){
+    for (let i = 0; i <= daysBetween(start, end); i++){ const d = addDaysISO(start, i); dayList.push([d, byDay[d] || 0]); }
+  } else dayList = Object.entries(byDay).sort((a, b) => a[0].localeCompare(b[0]));
+  const topDay = dayList.reduce((m, x) => (!m || x[1] > m[1]) ? x : m, null);
+  const topDayItems = topDay && topDay[1] > 0 ? ground.filter(e => e.date === topDay[0]).sort((a, b) => expenseTotalILS(b) - expenseTotalILS(a)).slice(0, 2) : [];
+
+  const biggest = list.filter(e => !e.credit).sort((a, b) => expenseTotalILS(b) - expenseTotalILS(a))[0] || null;
+  const creditsBack = list.filter(e => e.credit).reduce((s, e) => s - expenseTotalILS(e), 0)
+    + list.reduce((s, e) => s + (e.credit ? 0 : expenseRefundsILS(e) + splitPaidBackILS(e)), 0);
+
+  return {
+    trip, list, total, days, cats, byCat, byPay, byCur, groundTotal, dayList, topDay, topDayItems, biggest, creditsBack,
+    count: list.length,
+    foreign: Object.keys(byCur).filter(c => c !== "שקל" && Math.abs(byCur[c]) > 0.004),
+    start, end
+  };
+}
+
+/* ---------- smart insights ---------- */
+
+function storyAiPayload(d){
+  const r = (n) => Math.round(n);
+  let ex = d.list.map(e => {
+    const o = { date: e.date || "", item: String(e.item || "").slice(0, 40), category: expCategory(e), ils: r(expenseTotalILS(e)), pay: e.paymentMethod || "" };
+    if (e.currency && e.currency !== "שקל"){ o.currency = CURRENCY_CODE[e.currency] || e.currency; o.amount = Math.round((e.amount || 0) * 100) / 100; }
+    if (e.notes) o.note = String(e.notes).replace(/\s+/g, " ").slice(0, 60);
+    if (expenseSplit(e) > 1) o.sharedBy = expenseSplit(e);
+    if (e.credit) o.credit = true;
+    return o;
+  });
+  if (ex.length > 400) ex = ex.sort((a, b) => Math.abs(b.ils) - Math.abs(a.ils)).slice(0, 400);
+  ex.sort((a, b) => a.date.localeCompare(b.date));
+  const obj = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, r(v)]));
+  return {
+    trip: d.trip.name || "", startDate: d.start, endDate: d.end, days: d.days,
+    expensesCount: d.count, totalIls: r(d.total), onTheGroundIls: r(d.groundTotal),
+    budgetIls: d.trip.budget > 0 ? r(d.trip.budget) : null,
+    byCategoryIls: obj(d.byCat), byPaymentIls: obj(d.byPay),
+    byCurrencyOriginal: Object.fromEntries(Object.entries(d.byCur).map(([k, v]) => [CURRENCY_CODE[k] || k, Math.round(v * 100) / 100])),
+    onTheGroundByDayIls: Object.fromEntries(d.dayList.map(([k, v]) => [k, r(v)])),
+    creditsAndRefundsIls: r(d.creditsBack),
+    expenses: ex
+  };
+}
+
+// Rule-based insights: used when the AI isn't reachable.
+function storyLocalInsights(d){
+  const out = [];
+  const groups = {};
+  d.list.filter(e => !e.credit).forEach(e => {
+    const k = String(e.item || "").trim().toLowerCase();
+    if (!k) return;
+    (groups[k] = groups[k] || { name: String(e.item).trim(), n: 0, v: 0 }).n++;
+    groups[k].v += expenseTotalILS(e);
+  });
+  const fav = Object.values(groups).filter(g => g.n >= 3).sort((a, b) => b.n - a.n || b.v - a.v)[0];
+  if (fav) out.push({ emoji: "🔁", title: "הלהיט של הטיול", highlight: `${fav.n} פעמים`, text: `"${fav.name}" חזר ${fav.n} פעמים ברשימה, ובסך הכול ${storyIls(fav.v)}.` });
+
+  const cash = d.byPay["מזומן"] || 0;
+  const pc = d.total > 0 ? Math.round(cash / d.total * 100) : 0;
+  if (pc >= 5 && pc <= 95) out.push({ emoji: "💵", title: "מזומן או כרטיס?", highlight: `${pc}%`, text: `${pc}% מהכסף יצא במזומן (${storyIls(cash)}), והשאר בתשלומים אחרים.` });
+
+  const food = d.byCat["מזון"] || 0, hotels = d.byCat["מלונות"] || 0;
+  const nights = Math.max(1, d.days - 1);
+  if (food > 0 && hotels > 0 && d.days > 1){
+    const x = food / (hotels / nights);
+    if (x >= 0.5) out.push({ emoji: "🍽️", title: "אוכל מול לינה", highlight: `${x.toFixed(1).replace(/\.0$/, "")} לילות`, text: `על אוכל הוצאתם ${storyIls(food)} — כמו ${x.toFixed(1).replace(/\.0$/, "")} לילות במלון של הטיול הזה.` });
+  }
+
+  const dl = d.dayList.filter(x => x[1] > 0);
+  if (d.dayList.length >= 4){
+    const half = Math.floor(d.dayList.length / 2);
+    const a = d.dayList.slice(0, half).reduce((s, x) => s + x[1], 0), b = d.dayList.slice(d.dayList.length - half).reduce((s, x) => s + x[1], 0);
+    if (a > 0 && b > 0){
+      const more = a > b ? "הראשון" : "השני", ratio = Math.max(a, b) / Math.min(a, b);
+      if (ratio >= 1.2) out.push({ emoji: "📈", title: "קצב ההוצאות", highlight: `פי ${ratio.toFixed(1).replace(/\.0$/, "")}`, text: `בחצי ${more} של הטיול הוצאתם בשטח פי ${ratio.toFixed(1).replace(/\.0$/, "")} מאשר בחצי השני.` });
+    }
+    const quiet = dl.sort((x, y) => x[1] - y[1])[0];
+    if (quiet && out.length < 4) out.push({ emoji: "🧘", title: "היום הכי רגוע", highlight: storyIls(quiet[1]), text: `ב${storyDayLabel(quiet[0])} כמעט לא נגעתם בארנק.` });
+  }
+
+  if (d.creditsBack > 0) out.push({ emoji: "↩️", title: "כסף שחזר אליכם", highlight: storyIls(d.creditsBack), text: `זיכויים והחזרים הורידו ${storyIls(d.creditsBack)} מהעלות של הטיול.` });
+
+  const cheapest = d.list.filter(e => !e.credit && expenseTotalILS(e) > 0).sort((a, b) => expenseTotalILS(a) - expenseTotalILS(b))[0];
+  if (cheapest && out.length < 5) out.push({ emoji: "🪙", title: "הקנייה הכי קטנה", highlight: storyIls(expenseTotalILS(cheapest)), text: `"${cheapest.item || "הוצאה"}" — ההוצאה הכי צנועה בטיול.` });
+
+  return out.slice(0, 5);
+}
+
+async function storyLoadInsights(force){
+  const s = story;
+  const trip = s.trip;
+  const payload = storyAiPayload(s.data);
+  const fp = storyHash(JSON.stringify(payload));
+  const cached = trip.storyInsights;
+  if (!force && cached && cached.fp === fp && Array.isArray(cached.insights) && cached.insights.length){
+    return { insights: cached.insights, tagline: cached.tagline || "", ai: true };
+  }
+  if (!fbFunctions || !cloudUser || !navigator.onLine) return { insights: storyLocalInsights(s.data), tagline: "", ai: false };
+  try{
+    const res = await callFn("tripInsights", 150000)({ summary: payload });
+    const r = res.data || {};
+    if (!Array.isArray(r.insights) || !r.insights.length) throw new Error("empty");
+    const t = state.trips.find(x => x.id === trip.id);
+    if (t){ t.storyInsights = { fp, tagline: r.tagline || "", insights: r.insights, at: new Date().toISOString() }; saveState(); }
+    return { insights: r.insights, tagline: r.tagline || "", ai: true };
+  }catch(e){
+    console.warn("tripcost: insights failed", e);
+    return { insights: storyLocalInsights(s.data), tagline: "", ai: false };
+  }
+}
+
+/* ---------- slides ---------- */
+
+function storyBuildSlides(){
+  const d = story.data, out = [];
+  out.push({ key: "intro", dur: 5000 });
+  out.push({ key: "total", dur: 6500 });
+  if (d.days > 0) out.push({ key: "daily", dur: 8000 });
+  if (d.cats.length >= 2) out.push({ key: "cats", dur: 8000 });
+  if (d.biggest) out.push({ key: "biggest", dur: 6500 });
+  if (story.insights) story.insights.forEach((ins, i) => out.push({ key: "ins" + i, kind: "insight", ins, idx: i, dur: 8000 }));
+  else out.push({ key: "insload", kind: "loading", dur: 0 });
+  out.push({ key: "outro", dur: 0 });
+  return out;
+}
+
+function storySlideHtml(slide, isStatic){
+  const d = story.data, trip = d.trip;
+  const cls = isStatic ? " st-static" : "";
+  const blob = (pos, color) => `<div class="st-blob" style="${pos};background:radial-gradient(circle, ${color} 0%, transparent 68%);"></div>`;
+  const brand = `<div class="st-brand">TripCost</div>`;
+  const count = (n, fmt) => `<span data-count="${n}" data-fmt="${fmt}">${fmt === "ils" ? storyIls(n) : storyNum(n)}</span>`;
+  const name = escapeHtml(trip.name || "הטיול");
+  const range = (d.start && d.end) ? (d.start === d.end ? fmtDate(d.start) : `${fmtDate(d.start)} – ${fmtDate(d.end)}`) : "";
+
+  if (slide.key === "intro"){
+    const chips = [];
+    if (d.days > 0) chips.push(`🗓️ ${d.days} ימים`);
+    chips.push(`🧾 ${d.count} הוצאות`);
+    if (d.foreign.length) chips.push(`💱 ${d.foreign.length + (d.byCur["שקל"] ? 1 : 0)} מטבעות`);
+    return { bg: "#1E4A47", html: `<div class="st-slide${cls}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 62%,#3E8B84 100%);">
+      ${blob("top:-110px;left:-90px", "rgba(217,164,65,.55)")}${blob("bottom:-140px;right:-120px", "rgba(140,201,193,.35)")}
+      <div class="st-body st-center">
+        <div class="st-kicker st-in" style="--d:.05s">הסיפור של הטיול</div>
+        <div class="st-emoji-xl st-pop" style="--d:.15s">✈️</div>
+        <div class="st-title st-in" style="--d:.3s">${name}</div>
+        ${range ? `<div class="st-sub st-in" style="--d:.45s" dir="ltr">${range}</div>` : ""}
+        <div class="st-chips st-in" style="--d:.65s">${chips.map(c => `<span>${c}</span>`).join("")}</div>
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "total"){
+    const curs = Object.entries(d.byCur).filter(([c, v]) => Math.abs(v) > 0.004).sort((a, b) => Math.abs(b[1] * rateFor(b[0])) - Math.abs(a[1] * rateFor(a[0])));
+    let budget = "";
+    if (trip.budget > 0){
+      const r = d.total / trip.budget, pct = Math.round(r * 100);
+      const to = Math.min(1, Math.max(0, r));
+      budget = `<div class="st-budget st-in" style="--d:.8s">
+        <div class="track"><div class="fill st-growx" style="--d:1s;--to:${to};transform:scaleX(${to});${r > 1 ? "background:#8E2F1B;" : ""}"></div></div>
+        <div class="lbl"><span>${pct}% מהתקציב</span><span>${r <= 1 ? `נשארו ${storyIls(trip.budget - d.total)} 🎉` : `חריגה של ${storyIls(d.total - trip.budget)}`}</span></div>
+      </div>`;
+    }
+    return { bg: "#D9A441", light: true, html: `<div class="st-slide light${cls}" style="background:linear-gradient(160deg,#F2C46B 0%,#D9A441 55%,#C98A2E 100%);">
+      ${blob("top:-120px;right:-100px", "rgba(255,255,255,.45)")}${blob("bottom:-150px;left:-110px", "rgba(181,83,60,.35)")}
+      <div class="st-body st-center">
+        <div class="st-kicker st-in" style="--d:.05s">בסך הכול, הטיול עלה</div>
+        <div class="st-big st-pop" style="--d:.2s">${count(d.total, "ils")}</div>
+        <div class="st-sub st-in" style="--d:.45s">על ${d.count} הוצאות${d.days > 0 ? ` ב-${d.days} ימים` : ""}</div>
+        ${curs.length > 1 || (curs[0] && curs[0][0] !== "שקל") ? `<div class="st-chips st-in" style="--d:.6s">${curs.slice(0, 5).map(([c, v]) => `<span dir="ltr">${CUR_SYMBOL[c] || ""}${storyNum(v)}</span>`).join("")}</div>` : ""}
+        ${budget}
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "daily"){
+    const avg = d.total / d.days, groundAvg = d.groundTotal / d.days;
+    const bars = d.dayList.length >= 2 && d.dayList.length <= 60 ? d.dayList : [];
+    const max = Math.max(1, ...bars.map(x => x[1]));
+    const n = bars.length;
+    const barsHtml = n ? `<div class="st-days">${bars.map(([day, v], i) =>
+      `<i class="st-grow${d.topDay && day === d.topDay[0] ? " top" : ""}" style="height:${Math.max(2, v / max * 100)}%;--d:${(0.5 + i * Math.min(0.06, 0.9 / n)).toFixed(2)}s"></i>`).join("")}</div>
+      <div class="st-days-axis"><span dir="ltr">${fmtDate(bars[0][0]).slice(0, 5)}</span><span dir="ltr">${fmtDate(bars[n-1][0]).slice(0, 5)}</span></div>` : "";
+    const top = d.topDay && d.topDay[1] > 0 ? `<div class="st-callout st-in" style="--d:1.2s">🔥 היום הכי יקר: <b>${storyDayLabel(d.topDay[0])}</b> · <b>${storyIls(d.topDay[1])}</b>${d.topDayItems.length ? `<div class="st-note" style="margin-top:4px;">בעיקר: ${d.topDayItems.map(e => escapeHtml(e.item || "הוצאה")).join(", ")}</div>` : ""}</div>` : "";
+    return { bg: "#1A2725", html: `<div class="st-slide${cls}" style="background:linear-gradient(170deg,#132020 0%,#20302E 100%);">
+      ${blob("top:-130px;left:-110px", "rgba(95,167,159,.35)")}
+      <div class="st-body">
+        <div class="st-kicker st-in" style="--d:.05s">ממוצע ליום</div>
+        <div class="st-big m st-pop" style="--d:.15s;text-align:right;">${count(avg, "ils")}</div>
+        ${d.groundTotal > 0 && Math.round(groundAvg) !== Math.round(avg) ? `<div class="st-note st-in" style="--d:.35s">בשטח (בלי טיסות, מלונות וביטוח): ${storyIls(groundAvg)} ליום</div>` : ""}
+        ${barsHtml}
+        ${top}
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "cats"){
+    const tot = d.cats.reduce((s, x) => s + x[1], 0);
+    const R = 80, C = 2 * Math.PI * R;
+    let acc = 0;
+    const segs = d.cats.map(([c, v]) => {
+      const len = v / tot * C, gap = d.cats.length > 1 ? Math.min(3, len * 0.3) : 0;
+      const seg = `<circle cx="100" cy="100" r="${R}" fill="none" stroke="${CATEGORY_COLOR[c]}" stroke-width="30" stroke-dasharray="${Math.max(0.1, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"/>`;
+      acc += len; return seg;
+    }).join("");
+    const top = d.cats[0];
+    const legend = d.cats.slice(0, 5).map(([c, v], i) => `<div class="st-in" style="--d:${(0.6 + i * 0.12).toFixed(2)}s"><span class="dot" style="background:${CATEGORY_COLOR[c]}"></span><span class="n">${CATEGORY_ICON[c]} ${escapeHtml(c)}</span><span class="v">${storyIls(v)}</span><span class="pc">${Math.round(v / tot * 100)}%</span></div>`).join("");
+    return { bg: "#FAF6EF", light: true, html: `<div class="st-slide light${cls}" style="background:linear-gradient(170deg,#FFFDF8 0%,#F3ECDC 100%);">
+      ${blob("top:-120px;left:-120px", "rgba(47,111,107,.16)")}
+      <div class="st-body">
+        <div class="st-kicker st-in" style="--d:.05s;text-align:center;">לאן הלך הכסף?</div>
+        <div class="st-donut st-pop" style="--d:.15s"><svg viewBox="0 0 200 200">${segs}</svg>
+          <div class="mid"><div class="e">${CATEGORY_ICON[top[0]]}</div><div class="p">${Math.round(top[1] / tot * 100)}%</div></div></div>
+        <div class="st-legend">${legend}</div>
+      </div>${brand}</div>` };
+  }
+
+  if (slide.key === "biggest"){
+    const e = d.biggest, c = expCategory(e), v = expenseTotalILS(e);
+    const pct = d.total > 0 ? Math.round(v / d.total * 100) : 0;
+    return { bg: "#9A4330", html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,#8E3B28 0%,#B5533C 60%,#C9694F 100%);">
+      ${blob("top:-120px;right:-110px", "rgba(242,196,107,.45)")}
+      <div class="st-body st-center">
+        <div class="st-kicker st-in" style="--d:.05s">ההוצאה הכי גדולה</div>
+        <div class="st-emoji-xl st-pop" style="--d:.15s">${CATEGORY_ICON[c]}</div>
+        <div class="st-title st-in" style="--d:.3s;font-size:30px;">${escapeHtml(e.item || "הוצאה")}</div>
+        <div class="st-big m st-in" style="--d:.45s">${count(v, "ils")}</div>
+        <div class="st-chips st-in" style="--d:.65s"><span>${escapeHtml(c)}</span>${e.date ? `<span dir="ltr">${fmtDate(e.date)}</span>` : ""}${pct > 0 ? `<span>${pct}% מהטיול</span>` : ""}</div>
+      </div>${brand}</div>` };
+  }
+
+  if (slide.kind === "loading"){
+    return { bg: "#3E3770", html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,#2E2856 0%,#5B4F9A 100%);">
+      ${blob("top:-120px;left:-100px", "rgba(199,125,160,.45)")}
+      <div class="st-body st-center">
+        <div class="st-emoji-xl st-pop">✨</div>
+        <div class="st-title" style="font-size:28px;">מחפשים תובנות…</div>
+        <div class="st-sub">עוברים על כל ההוצאות שלכם</div>
+        <div class="st-spin"></div>
+      </div>${brand}</div>` };
+  }
+
+  if (slide.kind === "insight"){
+    const ins = slide.ins, [c1, c2] = STORY_INSIGHT_BG[slide.idx % STORY_INSIGHT_BG.length];
+    const n = story.insights.length;
+    return { bg: c1, html: `<div class="st-slide${cls}" style="background:linear-gradient(160deg,${c1} 0%,${c2} 100%);">
+      ${blob("top:-120px;left:-110px", "rgba(255,255,255,.22)")}${blob("bottom:-150px;right:-120px", "rgba(0,0,0,.18)")}
+      <div class="st-body st-center">
+        <div class="st-in" style="--d:.05s"><span class="st-tag">✨ תובנה ${slide.idx + 1}/${n}</span></div>
+        <div class="st-emoji-xl st-pop" style="--d:.15s;margin-top:22px;">${escapeHtml(ins.emoji || "✨")}</div>
+        <div class="st-title st-in" style="--d:.3s;font-size:30px;">${escapeHtml(ins.title || "")}</div>
+        ${ins.highlight ? `<div class="st-big m st-pop" style="--d:.45s">${escapeHtml(ins.highlight)}</div>` : ""}
+        <div class="st-text st-in" style="--d:.65s;margin-top:6px;">${escapeHtml(ins.text || "")}</div>
+      </div>${brand}</div>` };
+  }
+
+  // outro
+  const top = d.cats[0];
+  const stats = [
+    ["סה״כ", storyIls(d.total)],
+    d.days > 0 ? ["ימים", String(d.days)] : ["הוצאות", String(d.count)],
+    d.days > 0 ? ["ממוצע ליום", storyIls(d.total / d.days)] : null,
+    top ? ["הכי הרבה על", `${CATEGORY_ICON[top[0]]} ${Math.round(top[1] / d.cats.reduce((s, x) => s + x[1], 0) * 100)}%`] : null
+  ].filter(Boolean);
+  const tagline = story.tagline || storyLocalTagline(d);
+  return { bg: "#1E4A47", html: `<div class="st-slide${cls}" style="background:linear-gradient(165deg,#173B39 0%,#2F6F6B 70%,#3E8B84 100%);">
+    ${blob("top:-110px;right:-100px", "rgba(217,164,65,.5)")}${blob("bottom:-140px;left:-120px", "rgba(140,201,193,.3)")}
+    <div class="st-body st-center">
+      <div class="st-kicker st-in" style="--d:.05s">${name} · במספרים</div>
+      <div class="st-emoji-l st-pop" style="--d:.15s;margin-top:10px;">🏁</div>
+      <div class="st-grid">${stats.map((x, i) => `<div class="st-in" style="--d:${(0.3 + i * 0.12).toFixed(2)}s"><div class="k">${x[0]}</div><div class="v">${escapeHtml(x[1])}</div></div>`).join("")}</div>
+      ${tagline ? `<div class="st-quote st-in" style="--d:.9s">״${escapeHtml(tagline)}״</div>` : ""}
+      ${range ? `<div class="st-sub st-in" style="--d:1s;margin-top:12px;" dir="ltr">${range}</div>` : ""}
+    </div>${brand}</div>` };
+}
+
+// Closing line when the AI didn't write one: by where the money went on the ground.
+function storyLocalTagline(d){
+  const lines = { "מזון": "טיול של אוכל טוב", "אטרקציות": "טיול של חוויות", "תחבורה": "טיול על גלגלים",
+    "ביגוד וקוסמטיקה": "טיול של שופינג", "מתנות ומזכרות": "טיול של מזכרות לכולם" };
+  const top = d.cats.find(([c]) => lines[c]);
+  return top ? lines[top[0]] : "";
+}
+
+/* ---------- viewer ---------- */
+
+function storyEl(){
+  let el = document.getElementById('storyView');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'storyView';
+  el.className = 'story';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'סטורי הטיול');
+  el.innerHTML = `<div class="st-stage"><div class="st-frame"></div></div>
+    <div class="st-ui"><div class="st-bars"></div><button type="button" class="st-x" aria-label="סגירה">✕</button>
+      <div class="st-hint"></div>
+      <div class="st-actions"><button type="button" class="st-btn" data-st="share">שיתוף ↗</button><button type="button" class="st-btn ghost" data-st="all" style="display:none;">שיתוף הכול</button></div></div>`;
+  document.body.appendChild(el);
+
+  const stage = el.querySelector('.st-stage');
+  let down = null, holdTimer = null;
+  stage.addEventListener('pointerdown', (e) => {
+    if (!story) return;
+    down = { x: e.clientX, y: e.clientY, t: Date.now() };
+    holdTimer = setTimeout(() => { if (story) story.held = true; }, 220);
+  });
+  const up = (e) => {
+    clearTimeout(holdTimer);
+    if (!story || !down) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y, wasHeld = story.held;
+    story.held = false;
+    const start = down; down = null;
+    if (dy > 90 && Math.abs(dy) > Math.abs(dx)){ storyClose(); return; }
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)){ dx < 0 ? storyNext() : storyPrev(); return; }
+    if (wasHeld || Date.now() - start.t > 450 || Math.hypot(dx, dy) > 12) return;
+    // RTL: the story moves leftward, so the right edge goes back.
+    const r = stage.getBoundingClientRect();
+    if (e.clientX > r.left + r.width * 0.7) storyPrev(); else storyNext();
+  };
+  stage.addEventListener('pointerup', up);
+  stage.addEventListener('pointercancel', () => { clearTimeout(holdTimer); down = null; if (story) story.held = false; });
+  el.querySelector('.st-x').addEventListener('click', () => storyClose());
+  el.querySelector('[data-st="share"]').addEventListener('click', () => storyShare(false));
+  el.querySelector('[data-st="all"]').addEventListener('click', () => storyShare(true));
+  window.addEventListener('resize', () => { if (story) storyLayout(); });
+  window.addEventListener('popstate', () => { if (story) storyClose(true); });
+  document.addEventListener('visibilitychange', () => { if (story) story.last = performance.now(); });
+  document.addEventListener('keydown', (e) => {
+    if (!story) return;
+    if (e.key === 'Escape'){ e.preventDefault(); storyClose(); }
+    else if (e.key === 'ArrowLeft' || e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); storyNext(); }
+    else if (e.key === 'ArrowRight'){ e.preventDefault(); storyPrev(); }
+  }, true);
+  return el;
+}
+
+function storyLayout(){
+  const el = storyEl();
+  const W = window.innerWidth, H = window.innerHeight;
+  const wide = W >= 600;
+  const k = Math.min(W / STORY_W, (wide ? H * 0.94 : H) / STORY_H);
+  const w = STORY_W * k, h = STORY_H * k;
+  const left = (W - w) / 2, top = (H - h) / 2;
+  const frame = el.querySelector('.st-frame');
+  frame.style.transform = `translate(${left}px, ${top}px) scale(${k})`;
+  frame.style.left = "0"; frame.style.top = "0";
+  const ui = el.querySelector('.st-ui');
+  // The controls follow the slide, but never sit under the phone's notch/home bar.
+  const safeT = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-t')) || 0;
+  Object.assign(ui.style, { left: left + "px", width: w + "px", top: Math.max(top, safeT) + "px", height: (h - Math.max(0, safeT - top)) + "px" });
+}
+
+function openTripStory(tripId){
+  const trip = state.trips.find(t => t.id === tripId) || activeTrip();
+  if (!storyAvailable(trip)){ toast("צריך לפחות 3 הוצאות ששולמו כדי ליצור סטורי"); return; }
+  const el = storyEl();
+  story = { trip, data: storyData(trip), i: 0, elapsed: 0, last: performance.now(), held: false, busy: false,
+            insights: null, tagline: "", ai: false, blobs: {}, renders: {}, raf: 0, token: Symbol() };
+  story.slides = storyBuildSlides();
+  document.documentElement.classList.add('st-open');
+  el.classList.add('show');
+  history.pushState({ story: true }, "");
+  storyLayout();
+  storyShow(0);
+  story.raf = requestAnimationFrame(storyTick);
+  storyLibLoad().catch(() => {});
+
+  const token = story.token;
+  storyLoadInsights(false).then(r => {
+    if (!story || story.token !== token) return;
+    story.insights = r.insights; story.tagline = r.tagline; story.ai = r.ai;
+    const cur = story.slides[story.i];
+    story.slides = storyBuildSlides();
+    delete story.renders.outro; delete story.blobs.outro;
+    if (cur.kind === "loading") storyShow(story.slides.findIndex(s => s.kind === "insight"));
+    else {
+      story.i = story.slides.findIndex(s => s.key === cur.key);
+      if (cur.key === "outro") storyShow(story.i, true); else storyBars();
+    }
+  });
+}
+
+function storyClose(fromPop){
+  if (!story) return;
+  cancelAnimationFrame(story.raf);
+  story = null;
+  const el = storyEl();
+  el.classList.remove('show');
+  el.querySelector('.st-frame').innerHTML = "";
+  document.documentElement.classList.remove('st-open');
+  if (!fromPop && history.state && history.state.story) history.back();
+}
+
+function storyBars(){
+  const el = storyEl();
+  const bars = el.querySelector('.st-bars');
+  bars.innerHTML = story.slides.map((s, i) => `<div class="st-bar"><i style="transform:scaleX(${i < story.i ? 1 : 0})"></i></div>`).join("");
+}
+
+function storyShow(i, keepTime){
+  if (!story) return;
+  story.i = Math.max(0, Math.min(story.slides.length - 1, i));
+  if (!keepTime) story.elapsed = 0;
+  story.last = performance.now();
+  const el = storyEl();
+  const slide = story.slides[story.i];
+  const r = storySlideHtml(slide, false);
+  const m = r.html.match(/background:(linear-gradient\([^;]*\));/);
+  el.querySelector('.st-stage').style.background = m ? m[1] : r.bg;
+  el.querySelector('.st-frame').innerHTML = r.html;
+  el.querySelector('.st-ui').classList.toggle('light', !!r.light);
+  const isLast = slide.key === "outro";
+  el.querySelector('[data-st="all"]').style.display = isLast ? "" : "none";
+  el.querySelector('[data-st="share"]').style.display = slide.kind === "loading" ? "none" : "";
+  el.querySelector('.st-hint').textContent = story.i === 0 ? "הקישו כדי להמשיך" : "";
+  storyBars();
+  storyCountUp(el.querySelector('.st-frame'));
+  // Prepare the share image in the background, so a tap on "share" can open the share sheet right away.
+  const token = story.token;
+  setTimeout(() => {
+    if (!story || story.token !== token) return;
+    if (slide.kind !== "loading") storyRender(slide).catch(() => {});
+    if (isLast) story.slides.forEach(s => { if (s.kind !== "loading") storyRender(s).catch(() => {}); });
+  }, 900);
+}
+
+function storyCountUp(root){
+  root.querySelectorAll('[data-count]').forEach(n => {
+    const to = parseFloat(n.dataset.count) || 0, fmt = n.dataset.fmt;
+    const t0 = performance.now(), dur = 1100;
+    const step = (now) => {
+      if (!n.isConnected) return;
+      const p = Math.min(1, (now - t0) / dur), v = to * (1 - Math.pow(1 - p, 3));
+      n.textContent = fmt === "ils" ? storyIls(v) : storyNum(v);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(step);
+  });
+}
+
+function storyTick(now){
+  if (!story) return;
+  const s = story.slides[story.i];
+  if (!story.held && !story.busy && !document.hidden && s.dur) story.elapsed += now - story.last;
+  story.last = now;
+  const fill = storyEl().querySelectorAll('.st-bar i')[story.i];
+  const p = s.dur ? Math.min(1, story.elapsed / s.dur) : (s.key === "outro" ? 1 : 0);
+  if (fill) fill.style.transform = `scaleX(${p})`;
+  if (s.dur && p >= 1){
+    if (story.i < story.slides.length - 1) storyShow(story.i + 1);
+  }
+  story.raf = requestAnimationFrame(storyTick);
+}
+
+function storyNext(){ if (story && story.i < story.slides.length - 1) storyShow(story.i + 1); }
+function storyPrev(){ if (story) storyShow(story.i > 0 ? story.i - 1 : 0); }
+
+/* ---------- share as images ---------- */
+
+function storyLibLoad(){
+  if (window.modernScreenshot) return Promise.resolve(window.modernScreenshot);
+  if (!storyLibPromise){
+    storyLibPromise = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = STORY_LIB; sc.async = true;
+      sc.onload = () => window.modernScreenshot ? resolve(window.modernScreenshot) : reject(new Error("lib"));
+      sc.onerror = () => { storyLibPromise = null; reject(new Error("lib")); };
+      document.head.appendChild(sc);
+    });
+  }
+  return storyLibPromise;
+}
+
+function storyRender(slide){
+  const s = story;
+  if (s.renders[slide.key]) return s.renders[slide.key];
+  const p = (async () => {
+    const lib = await storyLibLoad();
+    const host = document.createElement('div');
+    host.className = 'st-export';
+    host.innerHTML = storySlideHtml(slide, true).html;
+    document.body.appendChild(host);
+    try{
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const blob = await lib.domToBlob(host.firstElementChild, { scale: 3, type: "image/png", width: STORY_W, height: STORY_H });
+      if (!blob) throw new Error("render");
+      s.blobs[slide.key] = blob;
+      return blob;
+    } finally { host.remove(); }
+  })();
+  s.renders[slide.key] = p;
+  p.catch(() => { delete s.renders[slide.key]; });
+  return p;
+}
+
+function storyFileName(slide, n){
+  const base = String(story.trip.name || "trip").replace(/[\\/:*?"<>|]/g, "").trim().replace(/\s+/g, "-") || "trip";
+  return `${base}-story-${pad2(n)}.png`;
+}
+
+async function storyShare(all){
+  if (!story || story.busy) return;
+  const s = story;
+  const slides = all ? s.slides.filter(x => x.kind !== "loading") : [s.slides[s.i]];
+  if (slides[0].kind === "loading") return;
+  const btn = storyEl().querySelector(all ? '[data-st="all"]' : '[data-st="share"]');
+  const label = btn.textContent;
+  const ready = slides.every(x => s.blobs[x.key]);
+  s.busy = true;
+  try{
+    if (!ready){
+      btn.disabled = true; btn.textContent = "מכין תמונה…";
+      await Promise.all(slides.map(storyRender));
+    }
+    const files = slides.map(x => new File([s.blobs[x.key]], storyFileName(x, s.slides.indexOf(x) + 1), { type: "image/png" }));
+    if (navigator.canShare && navigator.share && navigator.canShare({ files })){
+      try{
+        await navigator.share({ files, title: s.trip.name || "TripCost" });
+      }catch(e){
+        if (e && e.name === "NotAllowedError" && !ready) toast("התמונה מוכנה — הקישו שוב על שיתוף");
+        else if (!(e && e.name === "AbortError")) storyDownload(files);
+      }
+    } else storyDownload(files);
+  }catch(e){
+    console.warn("tripcost: story share failed", e);
+    toast(navigator.onLine ? "יצירת התמונה נכשלה" : "צריך חיבור לאינטרנט בפעם הראשונה כדי לשתף");
+  }finally{
+    if (story === s){ s.busy = false; s.last = performance.now(); }
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+
+function storyDownload(files){
+  files.forEach((f, i) => setTimeout(() => {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement('a');
+    a.href = url; a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, i * 350));
+  toast(files.length > 1 ? `${files.length} תמונות ירדו למכשיר` : "התמונה ירדה למכשיר");
+}
+
 /* ========================= Init ========================= */
 renderAll();
 initFirebaseIfConfigured();
@@ -5753,7 +6458,7 @@ refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app o
   };
   document.addEventListener('touchstart', (e) => {
     startY = null; pull = 0;
-    if (e.touches.length !== 1 || document.querySelector('.overlay.show')) return;
+    if (e.touches.length !== 1 || document.querySelector('.overlay.show, #storyView.show')) return;
     scroller = WIDE.matches ? e.target.closest('#mainCol, #sidebarCol') : null;
     if (!atTop(scroller)) return;
     startY = e.touches[0].clientY;
