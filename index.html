@@ -272,7 +272,7 @@
   .day-sep{display:flex;align-items:center;gap:10px;margin:14px 0 2px;}
   .day-sep:first-child{margin-top:4px;}
   .day-sep::before,.day-sep::after{content:"";flex:1;height:1px;background:var(--border);}
-  .day-sep span{background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);padding:5px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;}
+  .day-sep span{min-width:0;overflow:hidden;text-overflow:ellipsis;background:var(--teal-tint);color:var(--teal-dark);border-radius:var(--radius-pill);padding:5px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;}
   .exp-row-head{
     all:unset;display:flex;align-items:center;justify-content:space-between;
     width:100%;box-sizing:border-box;padding:13px 2px;cursor:pointer;
@@ -665,7 +665,7 @@
       padding:8px 36px 48px;
       display:grid;
       --side-w:420px;
-      grid-template-columns:var(--side-w) 14px 1fr;
+      grid-template-columns:var(--side-w) 14px minmax(0,1fr);
       gap:0 6px;
       align-items:start;
     }
@@ -698,7 +698,7 @@
        96px bottom padding (room for the + button) would otherwise cut the lists short. */
     #versionFooter{ grid-column:1 / -1; padding:6px 10px 12px; }
     #sidebarCol, #mainCol{
-      min-height:0; overflow-y:auto; overscroll-behavior:contain;
+      min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain;
       scrollbar-width:thin; padding-top:8px; padding-bottom:28px;
     }
     #sidebarCol{ padding-inline:2px; }
