@@ -1139,6 +1139,40 @@
   .st-static .st-spin{display:none;}
   @media (prefers-reduced-motion: reduce){ .st-slide *{animation:none !important;} }
   .mini-btn.story-btn{background:linear-gradient(120deg,#2F6F6B,#5B4F9A);color:#fff;border-color:transparent;}
+  /* ---- Receipt straightening (scanner-style corner editor before scanning) ---- */
+  #cropOverlay{position:fixed;inset:0;z-index:90;background:#0d1312;color:#fff;display:none;flex-direction:column;
+    padding:calc(var(--safe-t) + 8px) 0 calc(var(--safe-b) + 10px);font-family:'Heebo',system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;}
+  #cropOverlay.show{display:flex;}
+  .crop-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 16px 8px;}
+  .crop-top b{font-size:17px;}
+  .crop-top small{display:block;font-size:12.5px;color:#a9bbb6;}
+  .crop-count{font-size:13px;font-weight:700;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:var(--radius-pill);direction:ltr;}
+  .crop-stage{position:relative;flex:1;min-height:0;margin:0 14px;}
+  .crop-stage canvas{position:absolute;display:block;border-radius:4px;}
+  .crop-stage svg{position:absolute;overflow:visible;pointer-events:none;}
+  .crop-handle{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;touch-action:none;cursor:grab;}
+  .crop-handle::after{content:"";position:absolute;inset:12px;border-radius:50%;background:rgba(47,111,107,.35);border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .crop-handle.drag::after{background:rgba(217,164,65,.55);}
+  .crop-loupe{position:absolute;width:110px;height:110px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.6);
+    overflow:hidden;pointer-events:none;display:none;background:#000;}
+  .crop-loupe canvas{position:static;border-radius:0;}
+  .crop-loupe::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border:2px solid #D9A441;border-radius:50%;}
+  .crop-preview{position:absolute;inset:0;display:none;align-items:center;justify-content:center;}
+  .crop-preview img{max-width:100%;max-height:100%;border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,.5);background:#fff;}
+  #cropOverlay.previewing .crop-preview{display:flex;}
+  #cropOverlay.previewing .crop-edit{display:none;}
+  .crop-tools{display:flex;justify-content:center;gap:8px;padding:12px 14px 6px;flex-wrap:wrap;}
+  .crop-tools[hidden]{display:none;}
+  .crop-tool{font:inherit;font-size:13.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
+    padding:8px 13px;border-radius:var(--radius-pill);cursor:pointer;white-space:nowrap;}
+  .crop-tool.on{background:#fff;color:var(--teal-dark);border-color:#fff;}
+  .crop-tool:active,.crop-main:active{transform:scale(.97);}
+  .crop-bar{display:flex;gap:10px;padding:8px 14px 0;}
+  .crop-main{flex:1;font:inherit;font-size:15.5px;font-weight:700;padding:13px;border-radius:var(--radius-pill);cursor:pointer;border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;}
+  .crop-main.primary{flex:1.6;background:var(--teal);border-color:var(--teal);}
+  .crop-busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:15px;color:#cfdcd8;}
+  #cropOverlay.working .crop-busy{display:flex;}
+  #cropOverlay.working .crop-edit,#cropOverlay.working .crop-preview{visibility:hidden;}
 </style>
 </head>
 <body>
@@ -1225,7 +1259,7 @@
       </section>
     </div>
 
-    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">16/11/2026 23:25</span><span id="versionUpdateHint"></span></div>
+    <div id="versionFooter">TripCost · עודכן <span id="versionStamp" dir="ltr">18/11/2026 21:53</span><span id="versionUpdateHint"></span></div>
   </main>
 
   <div class="fab">
@@ -5314,6 +5348,387 @@ function openEditExpense(id){
   showOverlay('overlayExpense');
 }
 
+/* -- receipt straightening: a scanner-style corner editor shown after a photo is taken or picked --
+   The receipt's 4 corners are found automatically (bright paper on a darker background), the user can
+   drag them, and the photo is then cropped and squared with a perspective transform — all on the phone. */
+const CROP_SRC_MAX = 2600;   // working resolution of the photo (long side)
+const CROP_OUT_MAX = 2000;   // long side of the straightened receipt
+const cropEl = id => document.getElementById(id);
+
+function cropCanStraighten(file){
+  const t = (file && file.type) || "";
+  return t.startsWith("image/") && t !== "image/gif" && t !== "image/svg+xml";
+}
+async function cropLoadCanvas(file){
+  let src;
+  try{ src = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch(e){
+    src = await new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); res(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("image decode failed")); };
+      img.src = url;
+    });
+  }
+  const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+  if (!w0 || !h0) throw new Error("empty image");
+  const s = Math.min(1, CROP_SRC_MAX / Math.max(w0, h0));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w0 * s)); c.height = Math.max(1, Math.round(h0 * s));
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  if (src.close) src.close();
+  return c;
+}
+
+// Corners in screen order: top-left, top-right, bottom-right, bottom-left.
+function cropOrder(pts){
+  const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length, cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+  const s = pts.slice().sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+  let k = 0;
+  s.forEach((p, i) => { if (p.x + p.y < s[k].x + s[k].y) k = i; });
+  return s.slice(k).concat(s.slice(0, k));
+}
+function cropArea(q){
+  let a = 0;
+  for (let i = 0; i < q.length; i++){ const p = q[i], n = q[(i + 1) % q.length]; a += p.x * n.y - n.x * p.y; }
+  return Math.abs(a) / 2;
+}
+function cropInset(w, h, f = 0.04){
+  return [{ x: w * f, y: h * f }, { x: w * (1 - f), y: h * f }, { x: w * (1 - f), y: h * (1 - f) }, { x: w * f, y: h * (1 - f) }];
+}
+function cropFull(w, h){ return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }]; }
+
+// Find the receipt: the largest bright region (Otsu threshold), then the biggest 4-corner shape on its outline.
+function cropDetect(src){
+  const S = Math.min(1, 360 / Math.max(src.width, src.height));
+  const w = Math.max(8, Math.round(src.width * S)), h = Math.max(8, Math.round(src.height * S));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(src, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data, n = w * h;
+  let g = new Float32Array(n);
+  for (let i = 0; i < n; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+  // soften text and texture: box blur (r=2) twice
+  const tmp = new Float32Array(n);
+  for (let pass = 0; pass < 2; pass++){
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+      let s = 0, k = 0;
+      for (let j = -2; j <= 2; j++){ const xx = x + j; if (xx >= 0 && xx < w){ s += g[y * w + xx]; k++; } }
+      tmp[y * w + x] = s / k;
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+      let s = 0, k = 0;
+      for (let j = -2; j <= 2; j++){ const yy = y + j; if (yy >= 0 && yy < h){ s += tmp[yy * w + x]; k++; } }
+      g[y * w + x] = s / k;
+    }
+  }
+  // Otsu
+  const hist = new Array(256).fill(0);
+  for (let i = 0; i < n; i++) hist[g[i] | 0]++;
+  let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sB = 0, wB = 0, best = -1, t = 128;
+  for (let i = 0; i < 256; i++){
+    wB += hist[i]; if (!wB) continue;
+    const wF = n - wB; if (!wF) break;
+    sB += i * hist[i];
+    const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
+    if (v > best){ best = v; t = i; }
+  }
+  // connected bright regions
+  const lab = new Int32Array(n).fill(-1), stack = new Int32Array(n);
+  let bestLab = -1, bestArea = 0;
+  for (let i = 0, L = 0; i < n; i++){
+    if (lab[i] !== -1 || g[i] <= t) continue;
+    let sp = 0, area = 0; stack[sp++] = i; lab[i] = L;
+    while (sp){
+      const p = stack[--sp]; area++;
+      const x = p % w, y = (p - x) / w;
+      if (x > 0 && lab[p - 1] === -1 && g[p - 1] > t){ lab[p - 1] = L; stack[sp++] = p - 1; }
+      if (x < w - 1 && lab[p + 1] === -1 && g[p + 1] > t){ lab[p + 1] = L; stack[sp++] = p + 1; }
+      if (y > 0 && lab[p - w] === -1 && g[p - w] > t){ lab[p - w] = L; stack[sp++] = p - w; }
+      if (y < h - 1 && lab[p + w] === -1 && g[p + w] > t){ lab[p + w] = L; stack[sp++] = p + w; }
+    }
+    if (area > bestArea && area < n * 0.93){ bestArea = area; bestLab = L; }
+    L++;
+  }
+  if (bestLab < 0 || bestArea < n * 0.04) return null;
+  // outline points → convex hull
+  const pts = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const p = y * w + x;
+    if (lab[p] !== bestLab) continue;
+    if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || lab[p - 1] !== bestLab || lab[p + 1] !== bestLab || lab[p - w] !== bestLab || lab[p + w] !== bestLab) pts.push({ x, y });
+  }
+  pts.sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [], upper = [];
+  for (const p of pts){ while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--){ const p = pts[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  if (hull.length < 4) return null;
+  // start from the extreme corners, then swap in any hull point that makes the 4-corner shape bigger
+  const ext = f => hull.reduce((a, p) => f(p) > f(a) ? p : a, hull[0]);
+  let q = cropOrder([ext(p => -p.x - p.y), ext(p => p.x - p.y), ext(p => p.x + p.y), ext(p => -p.x + p.y)]);
+  let area = cropArea(q);
+  for (let round = 0; round < 4; round++){
+    let improved = false;
+    for (let k = 0; k < 4; k++) for (const p of hull){
+      const cand = q.slice(); cand[k] = p;
+      const a = cropArea(cand);
+      if (a > area + 0.5 && cropArea(cropOrder(cand)) === a){ q = cand; area = a; improved = true; }
+    }
+    if (!improved) break;
+  }
+  if (area < n * 0.05) return null;
+  return cropOrder(q).map(p => ({ x: Math.min(src.width, Math.max(0, (p.x + 0.5) / S)), y: Math.min(src.height, Math.max(0, (p.y + 0.5) / S)) }));
+}
+
+// Homography taking the output rectangle (0,0)-(W,H) to the 4 corners on the photo.
+function cropHomography(q, W, H){
+  const dst = [[0, 0], [W, 0], [W, H], [0, H]], A = [], B = [];
+  for (let i = 0; i < 4; i++){
+    const [x, y] = dst[i], u = q[i].x, v = q[i].y;
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); B.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); B.push(v);
+  }
+  for (let c = 0; c < 8; c++){
+    let piv = c;
+    for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+    [A[c], A[piv]] = [A[piv], A[c]]; [B[c], B[piv]] = [B[piv], B[c]];
+    for (let r = 0; r < 8; r++){
+      if (r === c) continue;
+      const f = A[r][c] / A[c][c];
+      for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+      B[r] -= f * B[c];
+    }
+  }
+  return B.map((b, i) => b / A[i][i]);
+}
+function cropWarp(src, q){
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  let W = Math.max(dist(q[0], q[1]), dist(q[3], q[2])), H = Math.max(dist(q[0], q[3]), dist(q[1], q[2]));
+  const s = Math.min(1, CROP_OUT_MAX / Math.max(W, H));
+  W = Math.max(16, Math.round(W * s)); H = Math.max(16, Math.round(H * s));
+  const h = cropHomography(q, W, H);
+  const sw = src.width, sh = src.height;
+  const sd = src.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, sw, sh).data;
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const octx = out.getContext("2d");
+  const img = octx.createImageData(W, H), od = img.data;
+  for (let y = 0; y < H; y++){
+    const yy = y + 0.5;
+    for (let x = 0; x < W; x++){
+      const xx = x + 0.5, z = h[6] * xx + h[7] * yy + 1;
+      let u = (h[0] * xx + h[1] * yy + h[2]) / z - 0.5, v = (h[3] * xx + h[4] * yy + h[5]) / z - 0.5;
+      if (u < 0) u = 0; else if (u > sw - 1.001) u = sw - 1.001;
+      if (v < 0) v = 0; else if (v > sh - 1.001) v = sh - 1.001;
+      const x0 = u | 0, y0 = v | 0, fx = u - x0, fy = v - y0;
+      const i00 = (y0 * sw + x0) * 4, i10 = i00 + 4, i01 = i00 + sw * 4, i11 = i01 + 4, o = (y * W + x) * 4;
+      for (let ch = 0; ch < 3; ch++){
+        const top = sd[i00 + ch] + (sd[i10 + ch] - sd[i00 + ch]) * fx;
+        const bot = sd[i01 + ch] + (sd[i11 + ch] - sd[i01 + ch]) * fx;
+        od[o + ch] = top + (bot - top) * fy;
+      }
+      od[o + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  return out;
+}
+// "Scan" look: even out the lighting (divide by the blurred page) and darken the ink — grey levels kept, not hard black/white.
+function cropScanFilter(canvas){
+  const W = canvas.width, H = canvas.height, ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, n = W * H;
+  const g = new Float32Array(n);
+  for (let i = 0; i < n; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+  const I = new Float64Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++){
+    let row = 0;
+    for (let x = 0; x < W; x++){ row += g[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row; }
+  }
+  const r = Math.max(8, Math.round(Math.min(W, H) / 22));
+  const out = new Uint8ClampedArray(n * 4);
+  for (let y = 0; y < H; y++){
+    const y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
+    for (let x = 0; x < W; x++){
+      const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1);
+      const bg = (I[y1 * (W + 1) + x1] - I[y0 * (W + 1) + x1] - I[y1 * (W + 1) + x0] + I[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+      let v = g[y * W + x] / Math.max(bg, 1);           // ~1 on paper, lower on ink
+      v = (v - 0.5) / 0.4; v = v < 0 ? 0 : v > 1 ? 1 : v;
+      v = Math.pow(v, 1.6) * 255;
+      const o = (y * W + x) * 4;
+      out[o] = out[o + 1] = out[o + 2] = v; out[o + 3] = 255;
+    }
+  }
+  const res = document.createElement("canvas"); res.width = W; res.height = H;
+  const rctx = res.getContext("2d"); const ri = rctx.createImageData(W, H); ri.data.set(out); rctx.putImageData(ri, 0, 0);
+  return res;
+}
+function cropRotate(src){
+  const c = document.createElement("canvas"); c.width = src.height; c.height = src.width;
+  const ctx = c.getContext("2d");
+  ctx.translate(c.width, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(src, 0, 0);
+  return c;
+}
+
+// Opens the editor for one photo. Resolves with the straightened File, the original File
+// (if the photo can't be opened here), or null when the user cancels.
+async function straightenReceipt(file, index, total){
+  let src;
+  try{ src = await cropLoadCanvas(file); }
+  catch(e){ console.warn("tripcost: straightening skipped", e); return file; }
+
+  const ov = cropEl('cropOverlay'), stage = cropEl('cropStage'), canvas = cropEl('cropCanvas'), svg = cropEl('cropSvg');
+  const handles = [...ov.querySelectorAll('.crop-handle')], loupe = cropEl('cropLoupe'), lc = cropEl('cropLoupeCanvas');
+  const back = cropEl('cropBack'), next = cropEl('cropNext');
+  let q = cropDetect(src), detected = !!q;
+  if (!q) q = cropInset(src.width, src.height);
+  let view = { s: 1, ox: 0, oy: 0 }, step = 'edit', result = null, previewUrl = null;
+  let mode = 'color';
+  try{ if (localStorage.getItem('tc-crop-mode') === 'scan') mode = 'scan'; }catch(e){}
+
+  cropEl('cropCount').hidden = total < 2;
+  cropEl('cropCount').textContent = `${index + 1}/${total}`;
+
+  const layout = () => {
+    const r = stage.getBoundingClientRect();
+    const s = Math.min(r.width / src.width, r.height / src.height);
+    view = { s, ox: (r.width - src.width * s) / 2, oy: (r.height - src.height * s) / 2 };
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.max(1, Math.round(src.width * s * dpr)); canvas.height = Math.max(1, Math.round(src.height * s * dpr));
+    canvas.style.width = src.width * s + "px"; canvas.style.height = src.height * s + "px";
+    canvas.style.left = view.ox + "px"; canvas.style.top = view.oy + "px";
+    const ctx = canvas.getContext("2d"); ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+    svg.setAttribute("width", r.width); svg.setAttribute("height", r.height);
+    svg.style.left = "0px"; svg.style.top = "0px";
+    draw();
+  };
+  const toScreen = p => ({ x: view.ox + p.x * view.s, y: view.oy + p.y * view.s });
+  const draw = () => {
+    const sp = q.map(toScreen);
+    handles.forEach((hd, i) => { hd.style.left = sp[i].x + "px"; hd.style.top = sp[i].y + "px"; });
+    const poly = sp.map(p => `${p.x},${p.y}`).join(" ");
+    cropEl('cropPoly').setAttribute("points", poly);
+    const x0 = view.ox, y0 = view.oy, x1 = x0 + src.width * view.s, y1 = y0 + src.height * view.s;
+    cropEl('cropShade').setAttribute("d", `M${x0},${y0}H${x1}V${y1}H${x0}Z M${sp.map(p => `${p.x},${p.y}`).join(" L")}Z`);
+  };
+  const drawLoupe = (i) => {
+    const p = q[i], span = 110 / (view.s * 2.6);   // the loupe shows the photo ≈2.6× bigger than the editor
+    const ctx = lc.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 220, 220);
+    ctx.drawImage(src, p.x - span / 2, p.y - span / 2, span, span, 0, 0, 220, 220);
+    const k = 220 / span, L = pt => [(pt.x - p.x) * k + 110, (pt.y - p.y) * k + 110];
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath();
+    const a = L(q[(i + 3) % 4]), c = L(q[(i + 1) % 4]);
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(110, 110); ctx.lineTo(c[0], c[1]); ctx.stroke();
+    // keep the loupe away from the finger: the top corner on the other side
+    const r = stage.getBoundingClientRect(), sp = toScreen(p);
+    const left = sp.x < r.width / 2 ? r.width - 122 : 12;
+    loupe.style.left = left + "px"; loupe.style.top = (sp.y < 150 ? r.height - 122 : 6) + "px";
+  };
+
+  return new Promise(resolve => {
+    const cleanups = [];
+    const on = (el, ev, fn, opt) => { el.addEventListener(ev, fn, opt); cleanups.push(() => el.removeEventListener(ev, fn, opt)); };
+    const finish = (val) => {
+      cleanups.forEach(f => f());
+      ov.classList.remove('show', 'previewing', 'working');
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      document.body.style.overflow = "";
+      resolve(val);
+    };
+    const setStep = (s) => {
+      step = s;
+      ov.classList.toggle('previewing', s === 'preview');
+      cropEl('cropToolsEdit').hidden = s !== 'edit';
+      cropEl('cropToolsPreview').hidden = s !== 'preview';
+      cropEl('cropSub').textContent = s === 'edit'
+        ? (detected ? "הפינות זוהו — אפשר לגרור כדי לדייק" : "גררו את הפינות לקצוות הקבלה")
+        : "כך תישמר הקבלה";
+      back.textContent = s === 'edit' ? "ביטול" : "‹ חזרה";
+      next.textContent = s === 'edit' ? "המשך" : (index + 1 < total ? "הקבלה הבאה ›" : "✓ סריקה");
+      cropEl('cropModeColor').classList.toggle('on', mode === 'color');
+      cropEl('cropModeScan').classList.toggle('on', mode === 'scan');
+    };
+    const render = async () => {
+      ov.classList.add('working');
+      await new Promise(r => setTimeout(r, 30));   // let "מיישר…" paint first
+      try{
+        let out = cropWarp(src, q);
+        if (mode === 'scan') out = cropScanFilter(out);
+        const blob = await new Promise(r => out.toBlob(r, "image/jpeg", 0.9));
+        if (!blob) throw new Error("encode failed");
+        result = new File([blob], (file.name || "קבלה").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(blob);
+        cropEl('cropPreviewImg').src = previewUrl;
+        setStep('preview');
+      }catch(e){
+        console.warn("tripcost: straightening failed, using the original photo", e);
+        finish(file);
+        return;
+      }
+      ov.classList.remove('working');
+    };
+
+    // dragging the corners
+    handles.forEach((hd, i) => {
+      on(hd, 'pointerdown', (e) => {
+        e.preventDefault();
+        hd.setPointerCapture(e.pointerId); hd.classList.add('drag');
+        const r = stage.getBoundingClientRect(), sp = toScreen(q[i]);
+        const offX = e.clientX - r.left - sp.x, offY = e.clientY - r.top - sp.y;
+        loupe.style.display = "block"; drawLoupe(i);
+        const move = (ev) => {
+          q[i] = {
+            x: Math.min(src.width, Math.max(0, (ev.clientX - r.left - offX - view.ox) / view.s)),
+            y: Math.min(src.height, Math.max(0, (ev.clientY - r.top - offY - view.oy) / view.s))
+          };
+          draw(); drawLoupe(i);
+        };
+        const up = () => {
+          hd.classList.remove('drag'); loupe.style.display = "none";
+          hd.removeEventListener('pointermove', move); hd.removeEventListener('pointerup', up); hd.removeEventListener('pointercancel', up);
+          // corners dragged past each other: put them back in order
+          const ordered = cropOrder(q);
+          if (cropArea(ordered) > 4) q = ordered;
+          draw();
+        };
+        hd.addEventListener('pointermove', move); hd.addEventListener('pointerup', up); hd.addEventListener('pointercancel', up);
+      });
+    });
+    on(cropEl('cropRotate'), 'click', () => {
+      const H0 = src.height;
+      src = cropRotate(src);
+      q = cropOrder(q.map(p => ({ x: H0 - p.y, y: p.x })));
+      layout();
+    });
+    on(cropEl('cropAuto'), 'click', () => {
+      const found = cropDetect(src);
+      if (found){ q = found; detected = true; draw(); setStep('edit'); }
+      else toast("לא זוהו קצוות — גררו את הפינות ידנית");
+    });
+    on(cropEl('cropFull'), 'click', () => { q = cropFull(src.width, src.height); draw(); });
+    const setMode = (m) => {
+      if (mode === m) return;
+      mode = m;
+      try{ localStorage.setItem('tc-crop-mode', m); }catch(e){}
+      render();
+    };
+    on(cropEl('cropModeColor'), 'click', () => setMode('color'));
+    on(cropEl('cropModeScan'), 'click', () => setMode('scan'));
+    on(back, 'click', () => { if (step === 'preview'){ setStep('edit'); layout(); } else finish(null); });
+    on(next, 'click', () => { if (step === 'edit') render(); else finish(result || file); });
+    on(window, 'resize', () => { if (step === 'edit') layout(); });
+
+    document.body.style.overflow = "hidden";
+    ov.classList.add('show');
+    setStep('edit');
+    requestAnimationFrame(layout);
+  });
+}
+
 /* -- receipt scanning (Gemini through the scanReceipt Cloud Function, like the shopping & crane apps) -- */
 let scanSeq = 0;          // bumps on every scan and whenever the sheet reopens, so stale results are dropped
 let scanAttachIds = [];   // the attachments the last scan added (replaced on rescan, not duplicated)
@@ -5360,6 +5775,13 @@ async function onScanPicked(e){
   if (picked.length > MAX_SCAN_FILES){ toast(`אפשר עד ${MAX_SCAN_FILES} קבצים בכל פעם — נלקחו הראשונים`); picked.length = MAX_SCAN_FILES; }
   const trip = activeTrip();
   if (!trip) return;
+  // Photos first go through the straightening screen (crop + square the corners); PDFs go straight on.
+  for (let i = 0; i < picked.length; i++){
+    if (!cropCanStraighten(picked[i])) continue;
+    const straight = await straightenReceipt(picked[i], i, picked.length);
+    if (!straight){ toast("הסריקה בוטלה"); return; }
+    picked[i] = straight;
+  }
   const many = picked.length > 1;
   const seq = ++scanSeq;
   const btn = document.getElementById('btnScanReceipt');
@@ -5824,8 +6246,8 @@ document.getElementById('mainCol').addEventListener('scroll', (e) => {
 /* ---- Version check (same as matlam) ----
    BUILD_STAMP / BUILD_EPOCH are updated on every push that changes this page. If GitHub has a
    newer commit of index.html than the one loaded, the footer offers a refresh. */
-const BUILD_STAMP = '16/11/2026 23:25';
-const BUILD_EPOCH = 1794864358913; // ms — when this exact file was pushed
+const BUILD_STAMP = '18/11/2026 21:53';
+const BUILD_EPOCH = 1795031592748; // ms — when this exact file was pushed
 async function reloadFresh(){
   try{
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -6984,5 +7406,36 @@ refreshRatesFromWeb(true); // quietly refresh USD/EUR rates every time the app o
   align();
 })();
 </script>
+<!-- Receipt straightening: drag the 4 corners, then the photo is cropped and squared like a scanner -->
+<div id="cropOverlay" role="dialog" aria-modal="true" aria-labelledby="cropTitle">
+  <div class="crop-top">
+    <div><b id="cropTitle">יישור הקבלה</b><small id="cropSub">גררו את הפינות לקצוות הקבלה</small></div>
+    <span class="crop-count" id="cropCount" hidden></span>
+  </div>
+  <div class="crop-stage" id="cropStage">
+    <div class="crop-edit" id="cropEdit">
+      <canvas id="cropCanvas"></canvas>
+      <svg id="cropSvg"><path id="cropShade" fill="rgba(0,0,0,.55)" fill-rule="evenodd"/><polygon id="cropPoly" fill="rgba(47,111,107,.12)" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+      <div class="crop-handle" data-i="0"></div><div class="crop-handle" data-i="1"></div>
+      <div class="crop-handle" data-i="2"></div><div class="crop-handle" data-i="3"></div>
+      <div class="crop-loupe" id="cropLoupe"><canvas id="cropLoupeCanvas" width="220" height="220" style="width:110px;height:110px"></canvas></div>
+    </div>
+    <div class="crop-preview"><img id="cropPreviewImg" alt="הקבלה אחרי יישור"></div>
+    <div class="crop-busy">מיישר…</div>
+  </div>
+  <div class="crop-tools crop-edit-tools" id="cropToolsEdit">
+    <button type="button" class="crop-tool" id="cropRotate">↻ סיבוב</button>
+    <button type="button" class="crop-tool" id="cropAuto">✨ זיהוי אוטומטי</button>
+    <button type="button" class="crop-tool" id="cropFull">⬜ כל התמונה</button>
+  </div>
+  <div class="crop-tools" id="cropToolsPreview" hidden>
+    <button type="button" class="crop-tool on" id="cropModeColor">🎨 צבע</button>
+    <button type="button" class="crop-tool" id="cropModeScan">📄 סריקה (שחור-לבן)</button>
+  </div>
+  <div class="crop-bar">
+    <button type="button" class="crop-main" id="cropBack">ביטול</button>
+    <button type="button" class="crop-main primary" id="cropNext">המשך</button>
+  </div>
+</div>
 </body>
 </html>
