@@ -252,6 +252,15 @@
   .trip-list-group{font-size:13px;font-weight:800;color:var(--ink-soft);margin:16px 4px 2px;}
   .trip-list-group:first-child{margin-top:4px;}
 
+  /* ---- Header rows: [sync | trip tabs] and [cash | search] ---- */
+  .hdr-row{display:flex;align-items:center;gap:8px;margin-top:10px;min-width:0;}
+  .hdr-row-trips #syncStatusLine{margin-top:0;flex:none;white-space:nowrap;}
+  .hdr-row-trips .trip-tabs{flex:1 1 auto;min-width:0;padding:2px;margin:0;}
+  .hdr-row-tools #cashCompactRow{flex:0 1 auto;min-width:0;max-width:55%;}
+  .hdr-row-tools #cashCompactRow:empty{display:none;}
+  .hdr-row-tools .cash-compact{margin-top:0;width:auto;max-width:100%;white-space:nowrap;overflow:hidden;padding:9px 12px;}
+  .hdr-row-tools .cash-compact .val{overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .hdr-row-tools .search-field{flex:1 1 140px;min-width:0;}
   /* ---- Column resizer (wide layout only) ---- */
   #colResizer{display:none;}
   /* ---- Compact cash row (header) ---- */
@@ -662,6 +671,7 @@
     header.topbar{ padding:26px 36px 14px; }
     .brand .mark{ font-size:26px; }
     .trip-tabs{ padding:16px 2px 6px; }
+    .hdr-row-trips .trip-tabs{ padding:2px; }
 
     main{
       padding:8px 36px 48px;
@@ -798,8 +808,9 @@
     header.topbar .brand-row{grid-column:1;grid-row:2;min-width:0;}
     header.topbar .trip-info{flex-direction:row;flex-wrap:wrap;gap:4px 14px;align-items:center;}
     header.topbar .trip-info-row{font-size:13px;}
-    header.topbar > .field{grid-column:2;grid-row:1 / span 2;margin:0 !important;}
-    header.topbar > .field input{height:42px;}
+    header.topbar .hdr-row{display:contents;}
+    header.topbar .search-field{grid-column:2;grid-row:1 / span 2;margin:0 !important;}
+    header.topbar .search-field input{height:42px;}
     #deskActions{display:flex;gap:10px;grid-column:3;grid-row:1 / span 2;}
     .da-btn{
       display:flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-radius:var(--radius-sm);
@@ -1208,11 +1219,15 @@
         </button>
       </div>
     </div>
-    <div id="syncStatusLine"></div>
-    <div class="trip-tabs" id="tripTabs"></div>
-    <div id="cashCompactRow"></div>
-    <div class="field" style="margin:10px 0 0;">
-      <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש בהוצאות (שם או הערה)..." style="padding:9px 12px;">
+    <div class="hdr-row hdr-row-trips">
+      <div id="syncStatusLine"></div>
+      <div class="trip-tabs" id="tripTabs"></div>
+    </div>
+    <div class="hdr-row hdr-row-tools">
+      <div id="cashCompactRow"></div>
+      <div class="field search-field" style="margin:0;">
+        <input type="text" id="expenseSearchInput" placeholder="🔍 חיפוש (שם או הערה)..." style="padding:9px 12px;">
+      </div>
     </div>
     <div id="deskActions">
       <button type="button" class="da-btn" id="deskScan" title="סריקת קבלות — הפרטים ימולאו אוטומטית">
