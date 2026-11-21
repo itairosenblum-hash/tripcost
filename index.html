@@ -1566,11 +1566,29 @@
       <label>סטטוס</label>
       <div class="check-row">
         <div class="check-pill" id="efPaidPill">✓ שולם</div>
+        <div class="check-pill" id="efPartialPill">שולם חלקית</div>
       </div>
     </div>
 
+    <div class="field" id="efPartialField" style="display:none;">
+      <label id="efDepLabel">כמה שולם עד עכשיו?</label>
+      <input type="number" id="efDepAmount" inputmode="decimal" step="0.01" placeholder="0">
+      <label style="margin-top:10px;" id="efDepDateLabel">באיזה יום?</label>
+      <div class="seg" id="efDepDateSeg">
+        <button type="button" data-val="today">היום</button>
+        <button type="button" data-val="other">תאריך אחר</button>
+      </div>
+      <input type="date" id="efDepDateInput" style="margin-top:8px;display:none;">
+      <div id="efDepRateRow" style="display:none;margin-top:10px;">
+        <label>שער ההמרה של החלק הזה</label>
+        <input type="number" id="efDepRate" inputmode="decimal" step="0.0001">
+        <div class="hint" id="efDepRateHint" style="margin-top:6px;display:none;"></div>
+      </div>
+      <div class="per-head tnum" id="efDepHint"></div>
+    </div>
+
     <div class="field" id="efPaidDateField" style="display:none;">
-      <label>באיזה יום שולם?</label>
+      <label id="efPaidDateLabel">באיזה יום שולם?</label>
       <div class="seg" id="efPaidDateSeg">
         <button type="button" data-val="today">היום</button>
         <button type="button" data-val="other">תאריך אחר</button>
@@ -3103,8 +3121,37 @@ function expSign(exp){ return exp.credit ? -1 : 1; }
 function signedAmount(exp){ return expSign(exp) * (exp.amount || 0); }
 function fmtILS(n){ return (n < 0 ? "−" : "") + "₪" + fmtMoney(Math.abs(n)); }
 function expenseGrossILS(exp){
-  const rate = (exp.currency === "שקל") ? 1 : (exp.rate || 1);
-  return signedAmount(exp) * rate;
+  if (exp.currency === "שקל") return signedAmount(exp);
+  const dep = depositAmt(exp);
+  if (dep) return dep * depositRate(exp) + remainderAmt(exp) * (exp.rate || 1);
+  return signedAmount(exp) * (exp.rate || 1);
+}
+// Partial payment (שולם חלקית): exp.deposit = {amount, date, rate} — the part paid up front, in the
+// expense currency, at the rate of its own payment day. The rest (amount − deposit) uses exp.rate.
+// paid:false + deposit = partly paid (the rest is still pending); paid:true + deposit = paid in two parts.
+function depositAmt(exp){ const d = exp.deposit; return (!exp.credit && d && d.amount > 0) ? Math.min(d.amount, exp.amount || 0) : 0; }
+function depositRate(exp){ return exp.currency === "שקל" ? 1 : ((exp.deposit && exp.deposit.rate) || exp.rate || 1); }
+function remainderAmt(exp){ return Math.max(0, (exp.amount || 0) - depositAmt(exp)); }
+function isPartial(exp){ return !exp.paid && depositAmt(exp) > 0; }
+// What is still to be paid (₪) and what already was — paid + pending = expenseTotalILS.
+function pendingILS(exp){
+  if (exp.paid) return 0;
+  if (!isPartial(exp)) return expenseTotalILS(exp);
+  return remainderAmt(exp) * (exp.currency === "שקל" ? 1 : (exp.rate || 1));
+}
+function paidILS(exp){ return expenseTotalILS(exp) - pendingILS(exp); }
+// Amount actually handed over so far, in the expense currency (for cash and per-currency totals).
+function paidAmountCur(exp){ return exp.paid ? signedAmount(exp) : depositAmt(exp); }
+function payShort(exp){ return exp.paid ? (exp.credit ? "זוכה" : "שולם") : isPartial(exp) ? "שולם חלקית" : "טרם שולם"; }
+function statusText(exp){
+  const sym = CUR_SYMBOL[exp.currency] || "";
+  if (exp.paid){
+    let t = (exp.credit ? "✓ זוכה" : "✓ שולם") + (exp.paidDate ? " · " + fmtDate(exp.paidDate) : "");
+    if (depositAmt(exp)) t += ` (${sym}${fmtMoney(depositAmt(exp))} מראש${exp.deposit.date ? " · " + fmtDate(exp.deposit.date) : ""})`;
+    return t;
+  }
+  if (isPartial(exp)) return `שולם חלקית ${sym}${fmtMoney(depositAmt(exp))} מתוך ${sym}${fmtMoney(exp.amount)}${exp.deposit.date ? " · " + fmtDate(exp.deposit.date) : ""} · יתרה ${sym}${fmtMoney(remainderAmt(exp))}`;
+  return "הוזמן · טרם שולם";
 }
 // Refunds: money someone paid back toward an expense — who, how much, in which currency
 // (with its own rate). Every total uses the net amount, so they come off budget, donut and exports.
@@ -3187,22 +3234,22 @@ function renderBalanceBar(){
 
   const counted = trip.expenses.filter(inTotal);
   const excludedCount = trip.expenses.length - counted.length;
-  const paidExpenses = counted.filter(e => e.paid);
+  const paidExpenses = counted.filter(e => e.paid || isPartial(e));
   const pendingExpenses = counted.filter(e => !e.paid);
 
-  const totalPaid = paidExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
-  const totalPending = pendingExpenses.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const totalPaid = counted.reduce((s,e)=> s + paidILS(e), 0);
+  const totalPending = counted.reduce((s,e)=> s + pendingILS(e), 0);
 
   const byCurrency = {};
   tripCurrencies(trip).forEach(c => byCurrency[c] = 0);
   paidExpenses.forEach(e => {
-    byCurrency[e.currency] = (byCurrency[e.currency]||0) + signedAmount(e);
+    byCurrency[e.currency] = (byCurrency[e.currency]||0) + paidAmountCur(e);
     (e.refunds || []).forEach(r => { byCurrency[r.currency] = (byCurrency[r.currency]||0) - (r.amount||0); });
     if (splitPaidBack(e)) byCurrency[paidBackCur(e)] = (byCurrency[paidBackCur(e)]||0) - perHeadInPaidBackCur(e) * splitPaidBack(e);
   });
 
   const byPayment = {};
-  paidExpenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + expenseTotalILS(e); });
+  paidExpenses.forEach(e => { byPayment[e.paymentMethod] = (byPayment[e.paymentMethod]||0) + paidILS(e); });
   const paymentEntries = Object.entries(byPayment).sort((a,b)=>b[1]-a[1]);
 
   const hasBudget = trip.budget && trip.budget > 0;
@@ -3256,7 +3303,7 @@ function renderCashCompact(){
   const spentByCurrency = {};
   currencies.forEach(c => spentByCurrency[c] = 0);
   trip.expenses.forEach(e => {
-    if (e.paymentMethod === "מזומן" && e.paid) spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + signedAmount(e);
+    if (e.paymentMethod === "מזומן") spentByCurrency[e.currency] = (spentByCurrency[e.currency] || 0) + paidAmountCur(e);
   });
   const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
 
@@ -3694,7 +3741,7 @@ function renderExpenses(){
           <div class="exp-row-bar" style="background:${CATEGORY_COLOR[cat]};"></div>
           <div style="min-width:0;">
             <div style="display:flex;align-items:center;min-width:0;"><div class="exp-row-name">${CATEGORY_ICON[cat]} ${escapeHtml(exp.item || "הוצאה")}</div>${attCount ? `<span class="exp-row-clip" title="${attCount} קבצים מצורפים" aria-label="${attCount} קבצים מצורפים">📎${attCount > 1 ? attCount : ""}</span>` : ""}</div>
-            <div class="exp-row-sub">${exp.credit ? "↩️ זיכוי · " : ""}${escapeHtml(cat)} · ${fmtDate(exp.date)}${expenseSplit(exp) > 1 ? ` · 👥 ${expenseSplit(exp)} אנשים${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}` : ""}${inTotal(exp) ? "" : " · מחוץ לתזרים"}</div>
+            <div class="exp-row-sub">${exp.credit ? "↩️ זיכוי · " : ""}${escapeHtml(cat)} · ${fmtDate(exp.date)}${expenseSplit(exp) > 1 ? ` · 👥 ${expenseSplit(exp)} אנשים${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}` : ""}${inTotal(exp) ? "" : " · מחוץ לתזרים"}${isPartial(exp) ? " · שולם חלקית" : ""}</div>
           </div>
         </div>
         <div style="text-align:left;">
@@ -3709,7 +3756,7 @@ function renderExpenses(){
         <div class="exp-row-tags">
           ${exp.credit ? `<span class="tag on">↩️ זיכוי</span>` : ""}
           <span class="tag">${escapeHtml(exp.paymentMethod || "")}</span>
-          <span class="tag ${exp.paid ? 'on' : 'off'}">${exp.paid ? ((exp.credit ? '✓ זוכה' : '✓ שולם') + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '')) : 'הוזמן · טרם שולם'}</span>
+          <span class="tag ${exp.paid ? 'on' : 'off'}">${escapeHtml(statusText(exp))}</span>
           ${inTotal(exp) ? "" : `<span class="tag">🚫 לא נכלל בתזרים</span>`}
           ${(exp.refunds || []).map(r => `<span class="tag on">↩️ ${escapeHtml(refundText(r))}</span>`).join("")}
         </div>
@@ -3822,9 +3869,9 @@ function renderFinishedSummary(){
   if (!trip || !trip.finished){ el.innerHTML = ""; return; }
 
   const counted = trip.expenses.filter(inTotal);
-  const paid = counted.filter(e => e.paid);
+  const paid = counted.filter(e => e.paid || isPartial(e));
   const pending = counted.filter(e => !e.paid);
-  const total = paid.reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const total = counted.reduce((s,e)=> s + paidILS(e), 0);
 
   let days = 0;
   if (trip.startDate && trip.endDate) days = daysBetween(trip.startDate, trip.endDate) + 1;
@@ -3835,7 +3882,7 @@ function renderFinishedSummary(){
   }
 
   const byCat = {};
-  paid.forEach(e => { const c = expCategory(e); byCat[c] = (byCat[c]||0) + expenseTotalILS(e); });
+  paid.forEach(e => { const c = expCategory(e); byCat[c] = (byCat[c]||0) + paidILS(e); });
   const topCat = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
 
   const stats = [];
@@ -3862,7 +3909,7 @@ function renderFinishedSummary(){
         <span class="fin-lock${locked ? "" : " open"}">${locked ? "🔒 נעול" : "🔓 פתוח לעריכה"}</span>
       </div>
       <div class="fin-grid">${stats.join("")}</div>
-      ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+expenseTotalILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
+      ${pending.length ? `<div class="fin-warn">⚠️ ${pending.length} הוצאות (₪${fmtMoney(pending.reduce((s,e)=>s+pendingILS(e),0))}) עדיין לא סומנו כשולמו ולא נכללות בסיכום. <button type="button" id="btnFinPending">הצג</button></div>` : ""}
       <div class="fin-actions">
         ${storyAvailable(trip) ? `<button type="button" class="mini-btn story-btn" id="btnFinStory" style="flex-basis:100%;">✨ סטורי הטיול</button>` : ""}
         ${trip.storyShareId ? `<button type="button" class="mini-btn" id="btnFinStoryRevoke">🔗 ביטול הקישור לסטורי</button>` : ""}
@@ -4008,7 +4055,8 @@ function renderDeskKpis(){
   const sum = (list) => list.reduce((s, e) => s + expenseTotalILS(e), 0);
   const total = sum(counted);
   const pending = counted.filter(e => !e.paid);
-  const paid = total - sum(pending);
+  const pendSum = counted.reduce((s, e) => s + pendingILS(e), 0);
+  const paid = total - pendSum;
   const catCount = new Set(counted.map(expCategory)).size;
 
   const cards = [];
@@ -4028,7 +4076,7 @@ function renderDeskKpis(){
   }
 
   if (pending.length){
-    cards.push(`<div class="dk-card amber"><span class="l">טרם שולם</span><span class="v">₪${fmtMoney(sum(pending))}</span>
+    cards.push(`<div class="dk-card amber"><span class="l">טרם שולם</span><span class="v">₪${fmtMoney(pendSum)}</span>
       <button type="button" class="s" id="dkPending">${pending.length} הוצאות · ${expenseFilter.type === 'pending' ? 'הצג הכול' : 'הצג רק אותן'}</button></div>`);
   } else {
     cards.push(`<div class="dk-card"><span class="l">טרם שולם</span><span class="v">₪0</span><span class="s">הכול שולם</span></div>`);
@@ -4037,7 +4085,7 @@ function renderDeskKpis(){
   const currencies = tripCurrencies(trip);
   const cashInitial = trip.cashInitial || {};
   const spent = {};
-  trip.expenses.forEach(e => { if (e.paymentMethod === "מזומן" && e.paid) spent[e.currency] = (spent[e.currency] || 0) + signedAmount(e); });
+  trip.expenses.forEach(e => { if (e.paymentMethod === "מזומן") spent[e.currency] = (spent[e.currency] || 0) + paidAmountCur(e); });
   const active = currencies.filter(c => (cashInitial[c] || 0) > 0);
   cards.push(`<button type="button" class="dk-card click" id="dkCash" style="font:inherit;color:inherit;text-align:right;">
     <span class="l">מזומן שנשאר</span>
@@ -4118,8 +4166,8 @@ function renderDeskTable(list, items, trip){
         <span class="dt-num dt-orig" role="cell">${exp.currency !== "שקל" ? `${exp.credit ? "−" : ""}${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}` : ""}</span>
         <span class="dt-num dt-ils${exp.credit ? ' credit' : ''}" role="cell">${fmtILS(expenseTotalILS(exp))}${exp.currency !== "שקל" ? `<small class="dt-orig-sub">${CUR_SYMBOL[exp.currency] || ""}${fmtMoney(exp.amount)}</small>` : ""}${(exp.refunds || []).length ? `<small class="exp-refund" style="display:block;">↩️ הוחזר ₪${fmtMoney(expenseRefundsILS(exp))}</small>` : ""}${expenseSplit(exp) > 1 ? `<small class="exp-refund" style="display:block;">👥 ₪${fmtMoney(perHeadILS(exp))} לראש · ${expenseSplit(exp)}${splitPaidBack(exp) ? ` · ${splitPaidBack(exp)} החזירו` : ""}</small>` : ""}</span>
         <span role="cell">${locked
-          ? `<span class="dt-pill${exp.paid ? '' : ' pend'}">${exp.paid ? 'שולם' : 'טרם שולם'}</span>`
-          : `<button type="button" class="dt-pill${exp.paid ? '' : ' pend'}" data-paid="${exp.id}" title="${exp.paid ? 'לחצו לסימון כטרם שולם' : 'לחצו לסימון כשולם היום'}">${exp.paid ? 'שולם' : 'טרם שולם'}</button>`}</span>
+          ? `<span class="dt-pill${exp.paid ? '' : ' pend'}">${payShort(exp)}</span>`
+          : `<button type="button" class="dt-pill${exp.paid ? '' : ' pend'}" data-paid="${exp.id}" title="${exp.paid ? 'לחצו לסימון כטרם שולם' : isPartial(exp) ? 'לחצו לסימון היתרה כשולמה היום' : 'לחצו לסימון כשולם היום'}">${payShort(exp)}</button>`}</span>
       </div>`;
     }).join("")}
     <div class="dt-r dt-foot" role="row"><span></span><span role="cell">סה״כ${items.length !== trip.expenses.length ? ` (${items.length} מוצגות)` : ""}</span><span></span><span></span><span class="dt-orig"></span><span class="dt-num" role="cell">₪${fmtMoney(shownTotal)}</span><span></span></div>
@@ -4207,7 +4255,7 @@ function renderDeskInspector(){
   const rows = [
     ['תאריך', fmtDate(exp.date)],
     ['תשלום', escapeHtml(exp.paymentMethod || "—")],
-    ['סטטוס', exp.paid ? 'שולם' + (exp.paidDate ? ' · ' + fmtDate(exp.paidDate) : '') : 'הוזמן · טרם שולם']
+    ['סטטוס', escapeHtml(statusText(exp).replace(/^✓ /, ''))]
   ];
   if (expenseSplit(exp) > 1) rows.push(['משותפת', escapeHtml(sharedText(exp))]);
   if (!inTotal(exp)) rows.push(['תזרים', 'לא נכלל בסה״כ']);
@@ -4294,7 +4342,8 @@ function printTripReport(trip){
   const sum = (l) => l.reduce((s, e) => s + expenseTotalILS(e), 0);
   const total = sum(counted);
   const pending = counted.filter(e => !e.paid);
-  const paid = total - sum(pending);
+  const pendSum = counted.reduce((s, e) => s + pendingILS(e), 0);
+  const paid = total - pendSum;
   let days = 0;
   if (trip.startDate && trip.endDate) days = daysBetween(trip.startDate, trip.endDate) + 1;
   if (!(days > 0)){
@@ -4307,7 +4356,7 @@ function printTripReport(trip){
 
   const kpis = [
     ["סה״כ הוצאות", `₪${fmtMoney(total)}`, `${counted.length} הוצאות${counted.length !== trip.expenses.length ? ` · +${trip.expenses.length - counted.length} מחוץ לתזרים` : ""}`],
-    ["שולם", `₪${fmtMoney(paid)}`, pending.length ? `טרם שולם: ₪${fmtMoney(sum(pending))} (${pending.length})` : "הכול שולם"]
+    ["שולם", `₪${fmtMoney(paid)}`, pending.length ? `טרם שולם: ₪${fmtMoney(pendSum)} (${pending.length})` : "הכול שולם"]
   ];
   if (trip.budget > 0){
     const left = trip.budget - total;
@@ -4346,7 +4395,7 @@ function printTripReport(trip){
           <td class="num">${e.credit ? "−" : ""}${CUR_SYMBOL[e.currency] || ""}${fmtMoney(e.amount)}</td>
           <td class="num">${e.currency === "שקל" ? "" : e.rate}</td>
           <td class="num ils">${fmtILS(expenseTotalILS(e))}</td>
-          <td><span class="pr-pill${e.paid ? "" : " pend"}">${e.paid ? "שולם" + (e.paidDate ? " " + fmtDate(e.paidDate) : "") : "טרם שולם"}</span></td>
+          <td><span class="pr-pill${e.paid ? "" : " pend"}">${isPartial(e) ? esc(statusText(e)) : e.paid ? "שולם" + (e.paidDate ? " " + fmtDate(e.paidDate) : "") : "טרם שולם"}</span></td>
         </tr>`;
       }).join("")}</tbody>
       <tfoot><tr><td colspan="6">סה״כ (בלי הוצאות מחוץ לתזרים)</td><td class="num">₪${fmtMoney(total)}</td><td></td></tr></tfoot>
@@ -4403,7 +4452,7 @@ let editingTripId = null;
 
 function openTripsList(){
   const wrap = document.getElementById('tripListWrap');
-  const tripTotal = t => t.expenses.filter(e => inTotal(e) && e.paid).reduce((s,e)=> s + expenseTotalILS(e), 0);
+  const tripTotal = t => t.expenses.filter(inTotal).reduce((s,e)=> s + paidILS(e), 0);
   const item = t => `
     <div class="trip-list-item">
       <div style="min-width:0;">
@@ -4899,7 +4948,10 @@ function updateTotalHint(){
   const cur = document.getElementById('efCurrency').value;
   const rate = cur === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1);
   syncRefundRates();
-  const gross = amount * rate;
+  updatePartialUI();
+  const dep = formDepositAmt(amount);
+  const depRate = cur === "שקל" ? 1 : (parseFloat(document.getElementById('efDepRate').value) || rate);
+  const gross = dep * depRate + (amount - dep) * rate;
   if (creditOn()){
     document.getElementById('efTotalHint').textContent = "סה״כ זיכוי: ₪" + fmtMoney(gross) + " (יורד מהסה״כ)";
     return;
@@ -4920,6 +4972,7 @@ function setKindUI(credit){
   document.getElementById('efRefundsField').style.display = credit ? "none" : "";
   document.getElementById('efSplitField').style.display = credit ? "none" : "";
   document.getElementById('efPaidPill').textContent = credit ? "✓ זוכה" : "✓ שולם";
+  if (credit) document.getElementById('efPartialPill').classList.remove('on');
   document.getElementById('expFormTitle').textContent = editingExpenseId
     ? (credit ? "עריכת זיכוי" : "עריכת הוצאה")
     : (credit ? "זיכוי חדש" : "הוצאה חדשה");
@@ -5133,9 +5186,110 @@ document.getElementById('efPaidPill').addEventListener('click', function(){
     document.getElementById('efPaidDateInput').style.display = "none";
     document.getElementById('efPaidRateHint').style.display = "none";
     if (!pendingPaidDate) pendingPaidDate = todayISO();
+    document.getElementById('efPartialPill').classList.remove('on');
   } else {
     dateField.style.display = "none";
   }
+  updateTotalHint();
+});
+
+/* -- partial payment (שולם חלקית): part paid now, the rest later (e.g. a car rental paid at pickup) -- */
+let pendingDepDate = "";
+function partialOn(){ return document.getElementById('efPartialPill').classList.contains('on'); }
+function paidOn(){ return document.getElementById('efPaidPill').classList.contains('on'); }
+// The up-front part that counts in the form right now: while "partly paid", or kept as the
+// first payment once the expense is marked fully paid.
+function formDepositAmt(amount){
+  if (creditOn() || !(partialOn() || paidOn())) return 0;
+  const dep = parseFloat(document.getElementById('efDepAmount').value) || 0;
+  return Math.max(0, Math.min(dep, amount));
+}
+function updatePartialUI(){
+  const credit = creditOn();
+  document.getElementById('efPartialPill').style.display = credit ? "none" : "";
+  const amount = parseFloat(document.getElementById('efAmount').value) || 0;
+  const typed = parseFloat(document.getElementById('efDepAmount').value) || 0;
+  const partial = partialOn(), paid = paidOn();
+  const show = !credit && (partial || (paid && typed > 0));
+  document.getElementById('efPartialField').style.display = show ? "block" : "none";
+  document.getElementById('efPaidDateLabel').textContent = (!credit && paid && typed > 0) ? "באיזה יום שולמה היתרה?" : "באיזה יום שולם?";
+  if (!show) return;
+  document.getElementById('efDepLabel').textContent = partial ? "כמה שולם עד עכשיו?" : "מתוכו שולם מראש (מקדמה)";
+  const cur = document.getElementById('efCurrency').value;
+  document.getElementById('efDepRateRow').style.display = cur === "שקל" ? "none" : "block";
+  const sym = CUR_SYMBOL[cur] || "";
+  const hint = document.getElementById('efDepHint');
+  if (!typed){ hint.textContent = ""; return; }
+  if (amount && typed >= amount){ hint.textContent = partial ? "הסכום ששולם מכסה את כל ההוצאה — היא תישמר כשולמה" : ""; return; }
+  const rem = amount - typed;
+  const rate = cur === "שקל" ? 1 : (parseFloat(document.getElementById('efRate').value) || 1);
+  const ils = cur === "שקל" ? "" : ` (≈₪${fmtMoney(rem * rate)})`;
+  hint.textContent = partial ? `יתרה לתשלום: ${sym}${fmtMoney(rem)}${ils}` : `היתרה ששולמה: ${sym}${fmtMoney(rem)}${ils}`;
+}
+function setDepDateUI(iso){
+  pendingDepDate = iso || "";
+  const isToday = !iso || iso === todayISO();
+  document.getElementById('efDepDateSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', isToday ? b.dataset.val === 'today' : b.dataset.val === 'other'));
+  const di = document.getElementById('efDepDateInput');
+  di.style.display = isToday ? "none" : "block";
+  di.value = iso || todayISO();
+}
+async function applyDepDate(iso){
+  pendingDepDate = iso;
+  const cur = document.getElementById('efCurrency').value;
+  const hint = document.getElementById('efDepRateHint');
+  if (cur === "שקל"){ hint.style.display = "none"; updateTotalHint(); return; }
+  hint.style.display = "block";
+  hint.textContent = "מחפש את שער " + cur + " ליום " + fmtDate(iso) + "...";
+  const rate = await fetchHistoricalRate(cur, iso);
+  if (document.getElementById('efCurrency').value !== cur || pendingDepDate !== iso) return;
+  if (rate){
+    document.getElementById('efDepRate').value = Math.round(rate * 10000) / 10000;
+    hint.textContent = `שער ${cur}/שקל ליום ${fmtDate(iso)}: ${Math.round(rate*10000)/10000} (אפשר לערוך ידנית)`;
+  } else {
+    hint.textContent = "לא הצלחתי למצוא שער לתאריך הזה — הזן ידנית";
+  }
+  updateTotalHint();
+}
+function resetPartialUI(dep){
+  const pill = document.getElementById('efPartialPill');
+  document.getElementById('efDepAmount').value = dep && dep.amount ? dep.amount : "";
+  document.getElementById('efDepRate').value = dep && dep.rate && dep.rate !== 1 ? dep.rate : "";
+  document.getElementById('efDepRateHint').style.display = "none";
+  setDepDateUI(dep ? dep.date : "");
+  pill.classList.remove('on');
+}
+document.getElementById('efPartialPill').addEventListener('click', function(){
+  const turningOn = !this.classList.contains('on');
+  this.classList.toggle('on', turningOn);
+  if (turningOn){
+    document.getElementById('efPaidPill').classList.remove('on');
+    document.getElementById('efPaidDateField').style.display = "none";
+    if (!pendingDepDate) setDepDateUI(todayISO());
+    if (!document.getElementById('efDepRate').value && document.getElementById('efCurrency').value !== "שקל")
+      document.getElementById('efDepRate').value = document.getElementById('efRate').value;
+    updateTotalHint();
+    setTimeout(() => document.getElementById('efDepAmount').focus(), 50);
+  } else {
+    updateTotalHint();
+  }
+});
+document.getElementById('efDepDateSeg').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.val === 'today'){ setDepDateUI(todayISO()); applyDepDate(todayISO()); }
+    else {
+      document.getElementById('efDepDateSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      const di = document.getElementById('efDepDateInput');
+      di.style.display = "block"; di.value = pendingDepDate || todayISO(); di.focus();
+    }
+  });
+});
+document.getElementById('efDepDateInput').addEventListener('change', (e) => { if (e.target.value) applyDepDate(e.target.value); });
+document.getElementById('efDepAmount').addEventListener('input', updateTotalHint);
+document.getElementById('efDepRate').addEventListener('input', () => { document.getElementById('efDepRateHint').style.display = "none"; updateTotalHint(); });
+document.getElementById('efCurrency').addEventListener('change', () => {
+  document.getElementById('efDepRate').value = "";
+  if (document.getElementById('efPartialField').style.display !== "none" && pendingDepDate) applyDepDate(pendingDepDate);
 });
 
 document.getElementById('efPaidDateSeg').querySelectorAll('button').forEach(btn => {
@@ -5288,6 +5442,7 @@ function openNewExpense(){
   setInTotalUI(true);
   document.getElementById('efPaidDateField').style.display = "none";
   pendingPaidDate = "";
+  resetPartialUI(null);
   document.getElementById('btnDeleteExpense').style.display = "none";
   document.getElementById('deleteExpenseDivider').style.display = "none";
   renderAttachChips();
@@ -5341,6 +5496,8 @@ function openEditExpense(id){
   } else {
     paidDateField.style.display = "none";
   }
+  resetPartialUI(depositAmt(exp) ? exp.deposit : null);
+  document.getElementById('efPartialPill').classList.toggle('on', isPartial(exp));
   document.getElementById('btnDeleteExpense').style.display = "block";
   document.getElementById('deleteExpenseDivider').style.display = "block";
   renderAttachChips();
@@ -5983,6 +6140,7 @@ async function applyScan(d, trip){
   if (paid){
     paidDate = d.chargeDate || d.date || todayISO();
     paidPill.classList.add('on');
+    document.getElementById('efPartialPill').classList.remove('on');
     pendingPaidDate = paidDate;
     document.getElementById('efPaidDateField').style.display = "block";
     const isToday = paidDate === todayISO();
@@ -6097,9 +6255,22 @@ document.getElementById('btnSaveExpense').addEventListener('click', async () => 
     attachments: currentAttachments.map(a => ({id:a.id, name:a.name, type:a.type, size:a.size, driveId:a.driveId||null, driveUrl:a.driveUrl||null}))
   };
 
+  // Partial payment: keep the up-front part (with its own date and rate) while partly paid,
+  // and as the first payment once the expense is marked fully paid.
+  const depAmt = formDepositAmt(data.amount);
+  data.deposit = depAmt > 0 ? {
+    amount: depAmt,
+    date: pendingDepDate || todayISO(),
+    rate: currency === "שקל" ? 1 : (parseFloat(document.getElementById('efDepRate').value) || data.rate)
+  } : null;
+  if (!data.paid && data.deposit && data.amount > 0 && depAmt >= data.amount){
+    // Everything was already paid — it's simply a paid expense.
+    Object.assign(data, { paid: true, paidDate: data.deposit.date, rate: data.deposit.rate, deposit: null });
+  }
+
   if (isCredit){
     // A credit has no refunds or split of its own.
-    Object.assign(data, { split: 1, splitPaidBack: 0, splitPaidBackCurrency: null, splitPaidBackRate: null, refunds: [] });
+    Object.assign(data, { split: 1, splitPaidBack: 0, splitPaidBackCurrency: null, splitPaidBackRate: null, refunds: [], deposit: null });
   }
 
   if (editingExpenseId){
@@ -6179,7 +6350,7 @@ function exportTripXlsx(trip){
   const header = ["פריט","סוג","תאריך","חלוקה","אופן תשלום","סכום","מטבע","שער המרה","סה\"כ עלות (₪)","שולם","נכלל בתזרים","הערות","קבצים מצורפים","החזרים","סה\"כ החזרים (₪)","לראש (₪)","כמה החזירו"];
   const data = [header, ...trip.expenses.map(e => [
     e.item, e.credit ? "זיכוי" : "חיוב", e.date, e.split, e.paymentMethod, signedAmount(e), e.currency, e.rate,
-    Math.round(expenseTotalILS(e)*100)/100, e.paid ? "V" : "", inTotal(e) ? "V" : "", e.notes,
+    Math.round(expenseTotalILS(e)*100)/100, e.paid ? "V" : isPartial(e) ? `חלקי: ${depositAmt(e)} מתוך ${e.amount}` : "", inTotal(e) ? "V" : "", e.notes,
     (e.attachments||[]).map(a=>a.name).join(", "),
     (e.refunds||[]).map(refundText).join(" | "),
     (e.refunds||[]).length ? Math.round(expenseRefundsILS(e)*100)/100 : "",
